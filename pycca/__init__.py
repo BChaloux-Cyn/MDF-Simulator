@@ -1,5 +1,6 @@
 """
-pycca — pycca action language parser and interpreter.
+pycca — MDF action language parser.
 
-Implemented in plan 05-xx (Phase 5).
+grammar.py — lark grammar, GUARD_PARSER, STATEMENT_PARSER (Phase 3)
+interpreter.py — transformer and event runner (Phase 5)
 """
