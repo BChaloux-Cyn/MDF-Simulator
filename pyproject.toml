@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mdf-sim"
+version = "0.1.0"
+description = "MDF simulation engine, schema, and tools"
+requires-python = ">=3.11"
+dependencies = [
+    "defusedxml>=0.7.1",
+    "lxml>=6.0.2",
+    "pydantic>=2.12.5",
+    "pyyaml>=6.0.3",
+    "ruamel-yaml>=0.19.1",
+]
+
+[project.scripts]
+mdf-sim-test = "cli.test_harness:main"
+mdf-sim-gui = "cli.gui:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["schema", "pycca", "tools", "engine", "cli"]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "ruff>=0.15.5",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
