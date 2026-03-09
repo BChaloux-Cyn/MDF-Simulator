@@ -331,6 +331,42 @@ def test_attribute_visibility_scope_defaults():
     assert method.visibility == "private"
 
 
+# ---------------------------------------------------------------------------
+# Test 10: MCP-04 — initial_state field required on StateDiagramFile
+# ---------------------------------------------------------------------------
+
+def test_initial_state_missing_rejected():
+    """MCP-04: StateDiagramFile without initial_state raises ValidationError."""
+    bad = {
+        "schema_version": "1.0.0",
+        "domain": "Hydraulics",
+        "class": "Valve",
+        "states": [{"name": "Idle"}],
+    }
+    with pytest.raises(ValidationError) as exc_info:
+        StateDiagramFile.model_validate(bad)
+    assert "initial_state" in str(exc_info.value)
+
+
+def test_initial_state_accepted():
+    """MCP-04: StateDiagramFile with initial_state is accepted and field is accessible."""
+    data = {
+        "schema_version": "1.0.0",
+        "domain": "Hydraulics",
+        "class": "Valve",
+        "initial_state": "Idle",
+        "states": [{"name": "Idle"}],
+    }
+    result = StateDiagramFile.model_validate(data)
+    assert result.initial_state == "Idle"
+
+
+def test_import_networkx_and_lark():
+    """MCP-04: networkx and lark packages are importable after install."""
+    import networkx  # noqa: F401
+    import lark  # noqa: F401
+
+
 def test_attribute_visibility_scope_explicit():
     """SCHEMA-01: Attribute accepts explicit visibility and scope values."""
     data = {
