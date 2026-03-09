@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: planning
-stopped_at: Completed 03-validation-tool-01-PLAN.md
-last_updated: "2026-03-09T18:14:31.364Z"
-last_activity: 2026-03-09 — Phase 5 simulation scope expanded; roadmap now 8 phases
+stopped_at: Completed 03-validation-tool-02-PLAN.md
+last_updated: "2026-03-09T18:30:00.000Z"
+last_activity: 2026-03-09 — pycca grammar module implemented (GUARD_PARSER + STATEMENT_PARSER)
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 11
-  completed_plans: 8
-  percent: 33
+  completed_plans: 9
+  percent: 36
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 ## Current Position
 
 Phase: 3 of 8 (Validation Tool)
-Plan: 0 of 4 in current phase
-Status: Ready to plan
-Last activity: 2026-03-09 — Phase 5 simulation scope expanded; roadmap now 8 phases
+Plan: 2 of 4 in current phase
+Status: Executing
+Last activity: 2026-03-09 — pycca grammar module implemented (GUARD_PARSER + STATEMENT_PARSER)
 
-Progress: [███░░░░░░░] 33%
+Progress: [████░░░░░░] 36%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 02-mcp-server-model-io P01 | 8 | 2 tasks | 10 files |
 | Phase 02-mcp-server-model-io P02 | 15 | 2 tasks | 2 files |
 | Phase 03-validation-tool P01 | 2 | 2 tasks | 4 files |
+| Phase 03-validation-tool P02 | 5 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,9 @@ Recent decisions affecting current work:
 - [Phase 02-mcp-server-model-io]: write_model validates fully (YAML parse + Pydantic) before mkdir — no partial writes on error
 - [Phase 03-validation-tool]: initial_state uses no default value — absence of default is the enforcement mechanism (consistent with schema_version pattern)
 - [Phase 03-validation-tool]: Semantic validation of initial_state vs states list deferred to Phase 3 graph validator — schema layer only enforces presence
+- [Phase 03-validation-tool]: pycca grammar blocker resolved — grammar derived from MDF CONTEXT.md constructs; lark grammar module lives in pycca/grammar.py (Phase 3 ownership, Phase 5 extends with Transformer)
+- [Phase 03-validation-tool]: simple_compare uses two atom children in grammar — semantic type validation deferred to validator layer; grammar stays syntax-only
+- [Phase 03-validation-tool]: GUARD_PARSER uses Earley (ambiguity-tolerant); STATEMENT_PARSER uses LALR (speed) with Earley fallback on compile failure
 
 ### Pending Todos
 
@@ -94,10 +98,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- pycca grammar scope for lark parser needs derivation from pycca compiler reference before Phase 5 — research-phase recommended at plan time
+None.
 
 ## Session Continuity
 
-Last session: 2026-03-09T18:14:31.358Z
-Stopped at: Completed 03-validation-tool-01-PLAN.md
+Last session: 2026-03-09T18:30:00.000Z
+Stopped at: Completed 03-validation-tool-02-PLAN.md
 Resume file: None
