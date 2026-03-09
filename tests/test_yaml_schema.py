@@ -85,6 +85,7 @@ VALID_STATE_DIAGRAM = {
     "schema_version": "1.0.0",
     "domain": "Hydraulics",
     "class": "Valve",
+    "initial_state": "Idle",
     "events": [
         {"name": "open", "params": [{"name": "target_pos", "type": "Real"}]},
         {"name": "close"},
@@ -280,6 +281,7 @@ def test_guard_all_or_none_violation_rejected():
         "schema_version": "1.0.0",
         "domain": "Hydraulics",
         "class": "Valve",
+        "initial_state": "Idle",
         "states": [
             {"name": "Idle"},
             {"name": "Opening"},
