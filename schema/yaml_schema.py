@@ -256,6 +256,7 @@ class StateDiagramFile(SchemaVersionMixin):
 
     domain: str
     class_name: str = Field(alias="class")
+    initial_state: str  # Required — no default; must match a name in states
     events: list[EventDef] = []
     states: list[StateDef]
     transitions: list[Transition] = []
