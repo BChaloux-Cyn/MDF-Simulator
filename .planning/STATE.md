@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
-status: planning
-stopped_at: Completed 03-validation-tool-02-PLAN.md
-last_updated: "2026-03-09T18:30:00.000Z"
+status: executing
+stopped_at: Completed 03-validation-tool-03-PLAN.md
+last_updated: "2026-03-09T18:25:02.931Z"
 last_activity: 2026-03-09 — pycca grammar module implemented (GUARD_PARSER + STATEMENT_PARSER)
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
   percent: 36
 ---
 
@@ -59,6 +59,7 @@ Progress: [████░░░░░░] 36%
 | Phase 02-mcp-server-model-io P02 | 15 | 2 tasks | 2 files |
 | Phase 03-validation-tool P01 | 2 | 2 tasks | 4 files |
 | Phase 03-validation-tool P02 | 5 | 2 tasks | 3 files |
+| Phase 03-validation-tool P03 | 15 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,9 @@ Recent decisions affecting current work:
 - [Phase 03-validation-tool]: pycca grammar blocker resolved — grammar derived from MDF CONTEXT.md constructs; lark grammar module lives in pycca/grammar.py (Phase 3 ownership, Phase 5 extends with Transformer)
 - [Phase 03-validation-tool]: simple_compare uses two atom children in grammar — semantic type validation deferred to validator layer; grammar stays syntax-only
 - [Phase 03-validation-tool]: GUARD_PARSER uses Earley (ambiguity-tolerant); STATEMENT_PARSER uses LALR (speed) with Earley fallback on compile failure
+- [Phase 03-validation-tool]: validate_domain and validate_class do not load DOMAINS.yaml — bridge referential integrity only fires in validate_model() scope
+- [Phase 03-validation-tool]: Reachability check guarded by initial_state referential integrity — avoids nx.descendants() NetworkXError on missing node
+- [Phase 03-validation-tool]: mcp package installed as blocking Rule 3 deviation — server.py uses FastMCP @mcp.tool() pattern
 
 ### Pending Todos
 
@@ -102,6 +106,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-09T18:30:00.000Z
-Stopped at: Completed 03-validation-tool-02-PLAN.md
+Last session: 2026-03-09T18:25:02.927Z
+Stopped at: Completed 03-validation-tool-03-PLAN.md
 Resume file: None
