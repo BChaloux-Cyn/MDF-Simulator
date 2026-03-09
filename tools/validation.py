@@ -2,16 +2,22 @@
 validation — Model validation tools: validate_model, validate_domain, validate_class.
 
 Implemented in plan 03-03 (Phase 3).
+Guard completeness added in plan 03-04.
 """
+import math
 from pathlib import Path
 
 import networkx as nx
 import yaml
+from lark import UnexpectedInput
 from pydantic import ValidationError
 
+from pycca.grammar import GUARD_PARSER
 from schema.yaml_schema import (
     ClassDiagramFile,
     DomainsFile,
+    EnumType,
+    ScalarType,
     StateDiagramFile,
     TypesFile,
     _SCALAR_PRIMITIVES,
@@ -381,6 +387,323 @@ def _check_reachability(sd: StateDiagramFile, domain: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Guard completeness helpers
+# ---------------------------------------------------------------------------
+
+_INF = math.inf
+
+
+def _load_types_map(domain_path: Path) -> dict | None:
+    """Load types.yaml from domain_path. Returns {type_name: TypeDef} or None if absent/invalid."""
+    types_path = domain_path / "types.yaml"
+    if not types_path.exists():
+        return None
+    data, errs = _load_yaml_file(types_path)
+    if data is None:
+        return None
+    try:
+        tf = TypesFile.model_validate(data)
+        return {t.name: t for t in tf.types}
+    except ValidationError:
+        return None
+
+
+def _normalize_interval(op: str, value: float) -> tuple[float, float]:
+    """
+    Convert a simple_compare (variable OP value) to a half-open interval [lo, hi).
+
+    Uses integer-compatible normalization:
+      <  N  -> (-inf, N)
+      <= N  -> (-inf, N+1)
+      >  N  -> (N+1, +inf)
+      >= N  -> (N, +inf)
+      == N  -> (N, N+1)  (single point, treated as unit interval)
+    """
+    if op == "<":
+        return (-_INF, value)
+    elif op == "<=":
+        return (-_INF, value + 1)
+    elif op == ">":
+        return (value + 1, _INF)
+    elif op == ">=":
+        return (value, _INF)
+    elif op == "==":
+        return (value, value + 1)
+    else:  # != or unrecognized — cannot analyze
+        return None
+
+
+def _intervals_cover_range(intervals: list[tuple[float, float]], lo: float, hi: float) -> list[tuple[float, float]]:
+    """
+    Given sorted (lo, hi) half-open intervals, return list of gaps within [range_lo, range_hi).
+    Returns [] if full coverage, non-empty list of gap intervals otherwise.
+    """
+    gaps = []
+    current = lo
+    for (a, b) in sorted(intervals):
+        if a > current:
+            gaps.append((current, a))
+        if b > current:
+            current = b
+        if current >= hi:
+            break
+    if current < hi:
+        gaps.append((current, hi))
+    return gaps
+
+
+def _check_guard_completeness(
+    sd: "StateDiagramFile", domain: str, types_map: dict | None
+) -> list[dict]:
+    """
+    Check guard completeness for all (from_state, event) groups in the state diagram.
+
+    Rules:
+    - Multiple unguarded transitions on same (from, event) -> error (ambiguous)
+    - AND/OR compound guard -> warning (cannot determine completeness)
+    - String-typed param in guard -> error
+    - Enum-typed param: missing enum values -> error
+    - Integer/Real-typed param with range: gap in interval coverage -> warning
+    - Integer/Real-typed param without range: gap in interval coverage -> warning
+    """
+    issues = []
+    loc_prefix = f"{domain}::state-diagrams/{sd.class_name}.yaml"
+
+    # Build event param lookup: event_name -> {param_name: param_type_str}
+    event_params: dict[str, dict[str, str]] = {}
+    for ev in sd.events:
+        event_params[ev.name] = {p.name: p.type for p in ev.params}
+
+    # Group transitions by (from_state, event)
+    from itertools import groupby
+    key_fn = lambda t: (t.from_state, t.event)  # noqa: E731
+    sorted_transitions = sorted(sd.transitions, key=key_fn)
+
+    for (from_state, event), group in groupby(sorted_transitions, key=key_fn):
+        ts = list(group)
+        guards = [t.guard for t in ts]
+
+        # Rule: multiple unguarded transitions -> error
+        unguarded = [g for g in guards if g is None]
+        if len(unguarded) > 1:
+            issues.append(_make_issue(
+                issue=(
+                    f"Ambiguous transitions: {len(unguarded)} unguarded transitions "
+                    f"from '{from_state}' on event '{event}'"
+                ),
+                location=f"{loc_prefix}::transitions",
+                value=f"({from_state}, {event})",
+                fix="Add guard expressions to disambiguate transitions",
+                severity="error",
+            ))
+            continue
+
+        # Skip groups with no guards (single unguarded transition is fine)
+        if all(g is None for g in guards):
+            continue
+
+        # Parse each guard
+        parse_results = []
+        parse_failed = False
+        for guard_str in guards:
+            if guard_str is None:
+                continue
+            try:
+                tree = GUARD_PARSER.parse(guard_str)
+                parse_results.append(tree)
+            except (UnexpectedInput, Exception):
+                issues.append(_make_issue(
+                    issue=f"Guard expression cannot be parsed: '{guard_str}'",
+                    location=f"{loc_prefix}::transitions",
+                    value=guard_str,
+                    fix="Correct the guard expression syntax",
+                    severity="warning",
+                ))
+                parse_failed = True
+
+        if parse_failed:
+            continue
+
+        # Check for AND/OR at top level
+        has_compound = any(t.data in {"and_expr", "or_expr"} for t in parse_results)
+        if has_compound:
+            issues.append(_make_issue(
+                issue=(
+                    f"Guard completeness cannot be determined for transitions "
+                    f"from '{from_state}' on '{event}': compound AND/OR expression detected"
+                ),
+                location=f"{loc_prefix}::transitions",
+                value=f"({from_state}, {event})",
+                fix="Simplify guards to simple comparisons if completeness checking is desired",
+                severity="warning",
+            ))
+            continue
+
+        # Extract (variable, op, value) from simple_compare trees
+        # Only analyze if all guards are simple_compare
+        if not all(t.data == "simple_compare" for t in parse_results):
+            continue
+
+        comparisons = []
+        for tree in parse_results:
+            left_tree = tree.children[0]
+            op_token = str(tree.children[1])
+            right_tree = tree.children[2]
+
+            # Left side should be a name (variable)
+            if left_tree.data != "name":
+                continue
+            var_name = str(left_tree.children[0])
+
+            # Right side should be a number or name (enum value)
+            comparisons.append((var_name, op_token, right_tree))
+
+        if not comparisons:
+            continue
+
+        # All comparisons should reference the same variable for completeness analysis
+        var_names = {c[0] for c in comparisons}
+        if len(var_names) != 1:
+            # Multiple variables — cannot determine completeness
+            continue
+
+        var_name = next(iter(var_names))
+
+        # Determine variable type from event params
+        ev_params = event_params.get(event, {})
+        if var_name not in ev_params:
+            # Variable not an event param — cannot determine type, skip
+            continue
+
+        type_str = ev_params[var_name]
+
+        # Check String type — forbidden in guards
+        if type_str == "String":
+            issues.append(_make_issue(
+                issue=(
+                    f"Guard on '{from_state}' -> '{event}': variable '{var_name}' "
+                    f"has type 'String' which is forbidden in guard expressions"
+                ),
+                location=f"{loc_prefix}::transitions",
+                value=var_name,
+                fix="Use an Enum or numeric type for guard variables",
+                severity="error",
+            ))
+            continue
+
+        # Resolve type from types_map
+        type_def = types_map.get(type_str) if types_map else None
+
+        # Check if type is a scalar String (via types_map)
+        if type_def is not None and isinstance(type_def, ScalarType) and type_def.base == "String":
+            issues.append(_make_issue(
+                issue=(
+                    f"Guard on '{from_state}' -> '{event}': variable '{var_name}' "
+                    f"has type '{type_str}' (String base) which is forbidden in guard expressions"
+                ),
+                location=f"{loc_prefix}::transitions",
+                value=var_name,
+                fix="Use an Enum or numeric type for guard variables",
+                severity="error",
+            ))
+            continue
+
+        # Enum completeness check
+        if type_def is not None and isinstance(type_def, EnumType):
+            # Extract compared values (right-hand side name tokens)
+            guard_values = set()
+            for _, op, right_tree in comparisons:
+                if right_tree.data == "name":
+                    guard_values.add(str(right_tree.children[0]))
+                elif right_tree.data == "number":
+                    # Number compared against enum param — treat as string literal
+                    guard_values.add(str(right_tree.children[0]))
+            missing = sorted(set(type_def.values) - guard_values)
+            if missing:
+                issues.append(_make_issue(
+                    issue=(
+                        f"Enum guard on '{from_state}' -> '{event}': "
+                        f"variable '{var_name}' (type '{type_str}') "
+                        f"is missing values: {', '.join(missing)}"
+                    ),
+                    location=f"{loc_prefix}::transitions",
+                    value=missing,
+                    fix=f"Add transitions for: {', '.join(missing)}",
+                    severity="error",
+                ))
+            continue
+
+        # Integer/Real interval analysis
+        is_numeric = (
+            type_str in ("Integer", "Real")
+            or (type_def is not None and isinstance(type_def, ScalarType) and type_def.base in ("Integer", "Real"))
+        )
+        if not is_numeric:
+            # Unknown or struct type — skip
+            continue
+
+        intervals = []
+        analysis_failed = False
+        for _, op, right_tree in comparisons:
+            if right_tree.data not in ("number", "name"):
+                analysis_failed = True
+                break
+            try:
+                val = float(str(right_tree.children[0]))
+            except ValueError:
+                analysis_failed = True
+                break
+            interval = _normalize_interval(op, val)
+            if interval is None:
+                analysis_failed = True
+                break
+            intervals.append(interval)
+
+        if analysis_failed or not intervals:
+            continue
+
+        # Determine range bounds
+        scalar_range = None
+        if type_def is not None and isinstance(type_def, ScalarType) and type_def.range:
+            scalar_range = type_def.range
+
+        if scalar_range:
+            range_lo, range_hi = float(scalar_range[0]), float(scalar_range[1]) + 1  # inclusive hi -> exclusive
+            gaps = _intervals_cover_range(intervals, range_lo, range_hi)
+            if gaps:
+                gap_strs = [f"[{g[0]}, {g[1]})" for g in gaps]
+                issues.append(_make_issue(
+                    issue=(
+                        f"Guard coverage gap on '{from_state}' -> '{event}': "
+                        f"variable '{var_name}' has uncovered intervals: {', '.join(gap_strs)}"
+                    ),
+                    location=f"{loc_prefix}::transitions",
+                    value=f"({from_state}, {event})",
+                    fix="Add guard expressions to cover the missing intervals",
+                    severity="warning",
+                ))
+        else:
+            # No range — check for gaps between defined intervals
+            sorted_ivs = sorted(intervals)
+            for i in range(len(sorted_ivs) - 1):
+                hi = sorted_ivs[i][1]
+                next_lo = sorted_ivs[i + 1][0]
+                if hi < next_lo:
+                    issues.append(_make_issue(
+                        issue=(
+                            f"Guard coverage gap on '{from_state}' -> '{event}': "
+                            f"variable '{var_name}' has gap between {hi} and {next_lo}"
+                        ),
+                        location=f"{loc_prefix}::transitions",
+                        value=f"({from_state}, {event})",
+                        fix="Add a guard expression to cover the gap",
+                        severity="warning",
+                    ))
+
+    return issues
+
+
+# ---------------------------------------------------------------------------
 # Per-domain validation core
 # ---------------------------------------------------------------------------
 
@@ -420,6 +743,10 @@ def _validate_active_class_state_diagram(
     # Referential integrity (run first — reachability depends on it)
     ri_issues = _check_referential_integrity_state_diagram(sd, domain)
     issues.extend(ri_issues)
+
+    # Guard completeness (after RI, before reachability)
+    types_map = _load_types_map(domain_path)
+    issues.extend(_check_guard_completeness(sd, domain, types_map))
 
     # Only run reachability if initial_state is valid (i.e., no initial_state issue)
     initial_state_ok = not any("initial_state" in i["location"] for i in ri_issues)
