@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Schema Foundation** - Define YAML model schema (Pydantic), canonical Draw.io bijection, and all artifact templates (completed 2026-03-06)
 - [x] **Phase 2: MCP Server + model_io** - Scaffold the library package and implement the three foundational CRUD tools (completed 2026-03-06)
-- [ ] **Phase 3: Validation Tool** - Implement validate_model with graph reachability, structural checks, and pycca pre-parser
+- [x] **Phase 3: Validation Tool** - Implement validate_model with graph reachability, structural checks, and pycca pre-parser (completed 2026-03-09)
 - [ ] **Phase 4: Draw.io Tools** - Implement render_to_drawio, validate_drawio, and sync_from_drawio against the locked canonical schema
 - [ ] **Phase 5: Simulation Engine** - Build pycca interpreter, object instance registry, three-queue event scheduler, micro-step generator, and MCP tool wrappers (simulate_domain + simulate_class)
 - [ ] **Phase 6: CLI Test Harness** - YAML test script schema, engine runner, mid-sequence and final-state assertion evaluation, mdf-sim-test entry point
@@ -147,7 +147,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Schema Foundation | 5/5 | Complete | 2026-03-06 |
 | 2. MCP Server + model_io | 2/2 | Complete | 2026-03-06 |
-| 3. Validation Tool | 3/4 | In Progress|  |
+| 3. Validation Tool | 4/4 | Complete   | 2026-03-09 |
 | 4. Draw.io Tools | 0/TBD | Not started | - |
 | 5. Simulation Engine | 0/TBD | Not started | - |
 | 6. CLI Test Harness | 0/TBD | Not started | - |
