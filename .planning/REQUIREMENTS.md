@@ -29,12 +29,14 @@
 - [x] **MCP-01**: `list_domains()` — returns all domain names in `.design/model/`
 - [x] **MCP-02**: `read_model(domain)` — returns YAML for one domain; error if not found lists available domains
 - [x] **MCP-03**: `write_model(domain, yaml)` — saves, validates against schema, returns issue list; idempotent
-- [ ] **MCP-04**: `validate_model(domain)` — returns list of issues: referential integrity, graph reachability (BFS/DFS unreachable states, trap states), pycca syntax pre-check; never pass/fail
+- [x] **MCP-04**: `validate_model(domain)` — returns list of issues: referential integrity, graph reachability (BFS/DFS unreachable states, trap states), pycca syntax pre-check; never pass/fail
 - [ ] **MCP-05**: `render_to_drawio(domain)` — generates Draw.io XML from YAML per canonical schema; deterministic and idempotent
 - [ ] **MCP-06**: `validate_drawio(domain, xml)` — validates Draw.io XML against canonical schema before sync; returns issue list
 - [ ] **MCP-07**: `sync_from_drawio(domain, xml)` — structured schema-aware parse back to YAML; runs `validate_model` automatically; returns issue list
-- [ ] **MCP-08**: `simulate_state_machine(class, events)` — runs pycca event sequence, returns execution trace (state transitions, guards evaluated, actions executed, final state)
-- [ ] **MCP-09**: Test suite — `test_model_io`, `test_drawio_roundtrip`, `test_validation`, `test_simulation`
+- [ ] **MCP-08**: Simulation engine — `simulate_domain(domain, scenario)` and `simulate_class(class, events)`; domain-scoped object instance registry, three-queue event scheduler (priority/standard/delay), run-to-completion semantics, pycca interpreter, micro-step stream output, YAML mock registry for bridge calls
+- [ ] **MCP-10**: CLI test harness — `mdf-sim-test` entry point; YAML test script format (instance setup, event sequence, per-step and final-state assertions); non-zero exit on assertion failure
+- [ ] **MCP-11**: GUI debugger — `mdf-sim-gui` entry point (Dear PyGui); domain/class canvas from `.drawio` file; action-line breakpoints, property watchpoints, domain event breakpoints; Step/Continue/Reset controls; sync and async instance creation; live Log/Instances/Queues panels; optional `--scenario` file at launch
+- [ ] **MCP-09**: Test suite — `test_engine` (detailed unit coverage), `test_model_io`, `test_drawio_roundtrip`, `test_validation`, `test_simulation`
 
 ## Out of Scope
 
@@ -64,18 +66,20 @@
 | MCP-01 | Phase 2 | Complete |
 | MCP-02 | Phase 2 | Complete |
 | MCP-03 | Phase 2 | Complete |
-| MCP-04 | Phase 3 | Pending |
+| MCP-04 | Phase 3 | Complete |
 | MCP-05 | Phase 4 | Pending |
 | MCP-06 | Phase 4 | Pending |
 | MCP-07 | Phase 4 | Pending |
 | MCP-08 | Phase 5 | Pending |
-| MCP-09 | Phase 6 | Pending |
+| MCP-10 | Phase 6 | Pending |
+| MCP-11 | Phase 7 | Pending |
+| MCP-09 | Phase 8 | Pending |
 
 **Coverage:**
-- v0.1 requirements: 19 total (SCHEMA-01..05, TMPL-01..04, MCP-00..09)
-- Mapped to phases: 19
+- v0.1 requirements: 21 total (SCHEMA-01..05, TMPL-01..04, MCP-00..11)
+- Mapped to phases: 21
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-05*
-*Last updated: 2026-03-09 — Split from monorepo; agent/skill/workflow requirements moved to mdf-server*
+*Last updated: 2026-03-09 — Phase 5 scope expanded; MCP-08 updated for domain-scope engine; MCP-10 (CLI) and MCP-11 (GUI) added; MCP-09 (test suite) moved to Phase 8*
