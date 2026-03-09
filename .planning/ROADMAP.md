@@ -66,7 +66,13 @@ Plans:
   2. Unreachable states (states with no incoming transition from reachable states) are detected and reported with state name and domain location
   3. Trap states (states with no outgoing transitions) are detected and reported
   4. Referential integrity errors (association referencing a class that does not exist, transition targeting a state that does not exist) are reported with specific names
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Schema change (initial_state on StateDiagramFile), install networkx + lark, update existing fixtures
+- [ ] 03-02-PLAN.md — Pycca grammar module: PYCCA_GRAMMAR, GUARD_PARSER, STATEMENT_PARSER (pycca/grammar.py)
+- [ ] 03-03-PLAN.md — Core validator: three public tool functions, referential integrity, graph reachability
+- [ ] 03-04-PLAN.md — Guard completeness: enum coverage, integer interval gap analysis, string guard errors
 
 ### Phase 4: Draw.io Tools
 **Goal**: Engineers can generate, validate, and sync Draw.io diagrams from YAML with a deterministic, round-trip-stable workflow
@@ -111,7 +117,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Schema Foundation | 5/5 | Complete   | 2026-03-06 |
 | 2. MCP Server + model_io | 2/2 | Complete   | 2026-03-06 |
-| 3. Validation Tool | 0/TBD | Not started | - |
+| 3. Validation Tool | 0/4 | Not started | - |
 | 4. Draw.io Tools | 0/TBD | Not started | - |
 | 5. Simulation | 0/TBD | Not started | - |
 | 6. Test Suite | 0/TBD | Not started | - |
