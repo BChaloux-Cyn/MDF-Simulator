@@ -85,7 +85,12 @@ Plans:
   2. Calling `render_to_drawio` twice on the same unchanged YAML produces byte-identical output (idempotent)
   3. `validate_drawio(domain, xml)` returns an issue list for XML containing unrecognized shape types and returns an empty list for valid canonical XML
   4. `sync_from_drawio(domain, xml)` updates the YAML file from engineer-edited Draw.io XML and automatically runs `validate_model` — the returned issue list reflects post-sync structural state
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Test scaffold: 10 skipped test stubs + minimal-domain fixture (Wave 0)
+- [ ] 04-02-PLAN.md — render_to_drawio / render_to_drawio_class / render_to_drawio_state with igraph Sugiyama layout and skip-if-unchanged (MCP-05)
+- [ ] 04-03-PLAN.md — validate_drawio + sync_from_drawio + server.py registration of all 5 tools (MCP-06, MCP-07)
 
 ### Phase 5: Simulation Engine
 **Goal**: A domain-scoped simulation engine that manages object instances, relationship links, event queues, and a step-aware pycca interpreter — exposed as two MCP tools
@@ -148,7 +153,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 1. Schema Foundation | 5/5 | Complete | 2026-03-06 |
 | 2. MCP Server + model_io | 2/2 | Complete | 2026-03-06 |
 | 3. Validation Tool | 4/4 | Complete   | 2026-03-09 |
-| 4. Draw.io Tools | 0/TBD | Not started | - |
+| 4. Draw.io Tools | 0/3 | Not started | - |
 | 5. Simulation Engine | 0/TBD | Not started | - |
 | 6. CLI Test Harness | 0/TBD | Not started | - |
 | 7. GUI Debugger | 0/TBD | Not started | - |
@@ -156,4 +161,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 ---
 *Roadmap created: 2026-03-05 for milestone v1.0 Foundation*
-*Last updated: 2026-03-09 — Phase 5 expanded into Phases 5–8: engine, CLI harness, GUI debugger, test suite*
+*Last updated: 2026-03-11 — Phase 4 planned: 3 plans (test scaffold, render tools, validate+sync+registration)*
