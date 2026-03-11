@@ -2,22 +2,29 @@
 drawio — Draw.io rendering, validation, and sync tools.
 
 Implemented in plan 04-02 (Phase 4).
+validate_drawio and sync_from_drawio added in plan 04-03.
 
 Public API:
     render_to_drawio(domain)           -> list[dict]
     render_to_drawio_class(domain)     -> list[dict]
     render_to_drawio_state(domain, class_name) -> list[dict]
+    validate_drawio(domain, xml)       -> list[dict]
+    sync_from_drawio(domain, class_name, xml) -> list[dict]
 """
 from __future__ import annotations
 
+import io
+import re
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+import defusedxml.ElementTree as DET
 import igraph as ig
 import yaml
 from lxml import etree
+from ruamel.yaml import YAML as RuamelYAML
 
 from schema.drawio_schema import (
+    BIJECTION_TABLE,
     STYLE_ASSOCIATION,
     STYLE_ATTRIBUTE,
     STYLE_CLASS,
@@ -599,15 +606,359 @@ def render_to_drawio(domain: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Stubs for plans 04-03
+# Private helpers for validate_drawio and sync_from_drawio
 # ---------------------------------------------------------------------------
 
 
-def validate_drawio(domain: str, xml_bytes: bytes) -> list[dict]:
-    """Validate Draw.io XML against the domain model. Implemented in plan 04-03."""
-    raise NotImplementedError("validate_drawio is implemented in plan 04-03")
+def _to_xml_bytes(xml: bytes | str) -> bytes:
+    """Normalize xml input to bytes for defusedxml parsing."""
+    if isinstance(xml, str):
+        return xml.encode("utf-8")
+    return xml
 
 
-def sync_from_drawio(domain: str, class_name: str, xml_bytes: bytes) -> list[dict]:
-    """Sync state diagram changes from Draw.io XML back to YAML. Implemented in plan 04-03."""
-    raise NotImplementedError("sync_from_drawio is implemented in plan 04-03")
+def _valid_styles() -> frozenset[str]:
+    """Return the set of valid canonical style strings from BIJECTION_TABLE."""
+    return frozenset(BIJECTION_TABLE.values())
+
+
+def _style_is_valid(style: str, valid: frozenset[str]) -> bool:
+    """Check if a style string matches a canonical style (with optional trailing semicolon)."""
+    if style in valid:
+        return True
+    stripped = style.rstrip(";")
+    return stripped in valid
+
+
+def _strip_html(text: str) -> str:
+    """Remove HTML tags and decode common HTML entities."""
+    clean = re.sub(r"<[^>]+>", "", text)
+    return (
+        clean.replace("&lt;", "<")
+             .replace("&gt;", ">")
+             .replace("&amp;", "&")
+             .replace("&nbsp;", " ")
+    )
+
+
+def _parse_trans_label(label: str) -> tuple[str, str | None]:
+    """Return (event_name, guard_or_None) from a multi-line transition label.
+
+    Label format (from render_to_drawio_state):
+        {trans_id}<br>{event}({params})<br>[{guard}]
+    Lines are split on '<br>' and HTML-stripped.
+    Line 0: canonical ID (skip)
+    Line 1: event signature
+    Line 2+ (optional, starts with '['): guard
+    """
+    lines = [_strip_html(part).strip() for part in label.split("<br>")]
+    lines = [l for l in lines if l]  # remove blanks
+    event_line = lines[1] if len(lines) > 1 else (lines[0] if lines else "")
+    event_name = event_line.split("(")[0].strip()
+    guard = None
+    for line in lines[2:]:
+        if line.startswith("[") and line.endswith("]"):
+            guard = line[1:-1]
+    return event_name, guard
+
+
+def _read_yaml_roundtrip(path: Path):
+    """Load a YAML file using ruamel.yaml round-trip mode (preserves comments/order)."""
+    rt = RuamelYAML()
+    return rt.load(path.read_text(encoding="utf-8"))
+
+
+def _write_yaml_roundtrip(data, path: Path) -> None:
+    """Write a ruamel CommentedMap back to a YAML file."""
+    rt = RuamelYAML()
+    rt.default_flow_style = False
+    buf = io.StringIO()
+    rt.dump(data, buf)
+    path.write_text(buf.getvalue(), encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Public API — validate_drawio and sync_from_drawio
+# ---------------------------------------------------------------------------
+
+
+def validate_drawio(domain: str, xml: bytes | str) -> list[dict]:
+    """Validate Draw.io XML against the canonical MDF bijection schema.
+
+    Returns empty list for valid canonical XML (all mxCell styles recognized).
+    Returns error issues for any mxCell with an unrecognized style string.
+    Returns a parse-error issue if the XML is malformed.
+    Never raises.
+    """
+    issues: list[dict] = []
+    xml_bytes = _to_xml_bytes(xml)
+
+    try:
+        root = DET.fromstring(xml_bytes)
+    except Exception as exc:
+        return [_make_issue(
+            f"XML parse error: {exc}",
+            location="xml_input",
+            severity="error",
+        )]
+
+    valid = _valid_styles()
+    for cell in root.iter("mxCell"):
+        cell_id = cell.get("id", "")
+        if cell_id in ("0", "1"):
+            continue
+        style = cell.get("style")
+        if style is None:
+            continue
+        if not _style_is_valid(style, valid):
+            issues.append(_make_issue(
+                "Unrecognized Draw.io cell style",
+                location=f"xml:cell:{cell_id}",
+                value=style,
+                fix="Use only canonical MDF style strings from BIJECTION_TABLE",
+                severity="error",
+            ))
+
+    return issues
+
+
+def sync_from_drawio(domain: str, class_name: str, xml: bytes | str) -> list[dict]:
+    """Sync Draw.io XML topology changes for one active class back to its state YAML.
+
+    Merges structural changes (add/remove states, transitions) while preserving
+    YAML-only fields (pycca action bodies, guards).
+    Automatically runs validate_domain after sync; its issues appear in returned list.
+    Returns info-severity issues for each new/deleted element.
+    Unrecognized cell styles produce an issue and are skipped — sync does not abort.
+    Never raises.
+    """
+    issues: list[dict] = []
+    xml_bytes = _to_xml_bytes(xml)
+
+    # 1. Parse XML safely
+    try:
+        root = DET.fromstring(xml_bytes)
+    except Exception as exc:
+        return [_make_issue(
+            f"XML parse error: {exc}",
+            location="xml_input",
+            severity="error",
+        )]
+
+    # 2. Locate domain path
+    domain_path = MODEL_ROOT / domain
+    if not domain_path.exists():
+        return [_make_issue(
+            f"Domain path not found: {domain_path}",
+            location=f"domain={domain}",
+            severity="error",
+        )]
+
+    # 3. Load state YAML with ruamel round-trip mode to preserve entry_action
+    yaml_path = domain_path / "state-diagrams" / f"{class_name}.yaml"
+    if not yaml_path.exists():
+        return [_make_issue(
+            f"State diagram YAML not found: {yaml_path}",
+            location=f"domain={domain}, class={class_name}",
+            severity="error",
+        )]
+
+    try:
+        sd_data = _read_yaml_roundtrip(yaml_path)
+    except Exception as exc:
+        return [_make_issue(
+            f"Failed to load {class_name}.yaml: {exc}",
+            location=str(yaml_path),
+            severity="error",
+        )]
+
+    valid = _valid_styles()
+
+    # 4. Scan mxCells and classify
+    # Build lookup: state_name -> existing YAML dict (CommentedMap)
+    existing_states: dict[str, object] = {}
+    if "states" in sd_data and sd_data["states"]:
+        for s in sd_data["states"]:
+            existing_states[s["name"]] = s
+
+    existing_transitions: list[dict] = list(sd_data.get("transitions") or [])
+
+    # Build a mapping from canonical trans ID -> existing transition dict
+    # (trans IDs: domain:trans:ClassName:from_state:event:idx)
+    existing_trans_by_id: dict[str, dict] = {}
+    for idx, t in enumerate(existing_transitions):
+        from_state = t.get("from", "")
+        event = t.get("event", "")
+        tid = transition_id(domain, class_name, from_state, event, idx)
+        existing_trans_by_id[tid] = t
+
+    # Build a reverse mapping: canonical state_id -> state_name
+    state_id_to_name: dict[str, str] = {}
+    for sname in existing_states:
+        state_id_to_name[state_id(domain, class_name, sname)] = sname
+
+    # Scan cells from Draw.io
+    drawio_state_names: set[str] = set()
+    drawio_trans_ids: set[str] = set()
+    new_states: list[str] = []  # state names to add
+    new_transitions: list[dict] = []  # transition dicts to add
+
+    for cell in root.iter("mxCell"):
+        cell_id = cell.get("id", "")
+        if cell_id in ("0", "1"):
+            continue
+
+        cell_style = cell.get("style")
+        if cell_style is None:
+            continue
+
+        # Check style is recognized (with trailing-semicolon tolerance) for ALL cells
+        if not _style_is_valid(cell_style, valid):
+            issues.append(_make_issue(
+                "Unrecognized Draw.io cell style — cell skipped during sync",
+                location=f"xml:cell:{cell_id}",
+                value=cell_style,
+                fix="Use only canonical MDF style strings from BIJECTION_TABLE",
+                severity="warning",
+            ))
+            continue
+
+        # Only process canonical MDF cells (ID contains ":")
+        if ":" not in (cell_id or ""):
+            continue
+
+        # Parse ID parts: domain:type:...
+        parts = cell_id.split(":")
+        if len(parts) < 3:
+            continue
+        id_domain = parts[0]
+        type_part = parts[1]
+
+        # Skip cells from other domains (shouldn't happen but be safe)
+        if id_domain.lower() != domain.lower():
+            continue
+
+        if type_part == "state":
+            # format: domain:state:ClassName:state_name
+            if len(parts) < 4:
+                continue
+            state_class = parts[2]
+            state_name = parts[3]
+            if state_class != class_name:
+                continue
+            if state_name == "__initial__":
+                continue  # pseudostate — not synced
+            drawio_state_names.add(state_name)
+            if state_name not in existing_states:
+                new_states.append(state_name)
+
+        elif type_part == "trans":
+            # format: domain:trans:ClassName:from_state:event:idx
+            if len(parts) < 6:
+                continue
+            trans_class = parts[2]
+            if trans_class != class_name:
+                continue
+            from_state_name_raw = parts[3]
+            if from_state_name_raw == "__initial__":
+                continue  # initial pseudo transition — not synced
+
+            drawio_trans_ids.add(cell_id)
+
+            if cell_id not in existing_trans_by_id:
+                # New transition — parse label
+                label = cell.get("value", "")
+                event_name, guard = _parse_trans_label(label) if label else ("", None)
+
+                # Resolve source and target state names from cell attributes
+                source_cell_id = cell.get("source", "")
+                target_cell_id = cell.get("target", "")
+                from_state_name = state_id_to_name.get(source_cell_id, from_state_name_raw)
+                to_state_name = state_id_to_name.get(target_cell_id, parts[4] if len(parts) > 4 else "")
+
+                new_transitions.append({
+                    "from": from_state_name,
+                    "to": to_state_name,
+                    "event": event_name or parts[4],
+                    "guard": guard,
+                    "action": None,
+                })
+
+        # Skip: attr, sep, attrs, methods, assoc, class, initial_pseudo, bridge
+        # (class-diagram sync is out of scope for this per-class function)
+
+    # 5. Apply state changes
+    # Add new states
+    for sname in new_states:
+        sd_data["states"].append({"name": sname, "entry_action": None})
+        issues.append(_make_issue(
+            f"New state '{sname}' added from Draw.io",
+            location=f"state-diagrams/{class_name}.yaml",
+            value=sname,
+            severity="info",
+        ))
+
+    # Remove deleted states (in YAML but not in Draw.io)
+    deleted_states = set(existing_states) - drawio_state_names
+    if deleted_states and drawio_state_names:  # only delete if Draw.io had any state cells
+        remaining = [s for s in sd_data["states"] if s["name"] not in deleted_states]
+        sd_data["states"] = remaining
+        for sname in deleted_states:
+            issues.append(_make_issue(
+                f"State '{sname}' removed (not present in Draw.io)",
+                location=f"state-diagrams/{class_name}.yaml",
+                value=sname,
+                severity="info",
+            ))
+
+    # Add new transitions
+    if "transitions" not in sd_data or sd_data["transitions"] is None:
+        sd_data["transitions"] = []
+    for t in new_transitions:
+        sd_data["transitions"].append(t)
+        issues.append(_make_issue(
+            f"New transition '{t['event']}' from '{t['from']}' to '{t['to']}' added",
+            location=f"state-diagrams/{class_name}.yaml",
+            severity="info",
+        ))
+
+    # Remove deleted transitions (canonical ID no longer in Draw.io)
+    if drawio_trans_ids is not None and existing_trans_by_id:
+        deleted_trans_ids = set(existing_trans_by_id) - drawio_trans_ids
+        if deleted_trans_ids and drawio_trans_ids:
+            # Rebuild transitions list excluding deleted ones
+            remaining_trans = [t for tid, t in existing_trans_by_id.items() if tid not in deleted_trans_ids]
+            # Append any newly added transitions
+            sd_data["transitions"] = remaining_trans + new_transitions
+            for tid in deleted_trans_ids:
+                issues.append(_make_issue(
+                    f"Transition '{tid}' removed (not present in Draw.io)",
+                    location=f"state-diagrams/{class_name}.yaml",
+                    value=tid,
+                    severity="info",
+                ))
+
+    # 6. Write updated state YAML with ruamel round-trip (preserves entry_action)
+    try:
+        _write_yaml_roundtrip(sd_data, yaml_path)
+    except Exception as exc:
+        issues.append(_make_issue(
+            f"Failed to write {class_name}.yaml: {exc}",
+            location=str(yaml_path),
+            severity="error",
+        ))
+        return issues
+
+    # 7. Run validate_class for this class and append its issues
+    try:
+        from tools.validation import validate_class
+        validation_issues = validate_class(domain, class_name, report_missing=False)
+        issues.extend(validation_issues)
+    except Exception as exc:
+        issues.append(_make_issue(
+            f"validate_class raised an unexpected error: {exc}",
+            location=f"domain={domain}, class={class_name}",
+            severity="error",
+        ))
+
+    return issues

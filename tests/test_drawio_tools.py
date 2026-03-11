@@ -105,6 +105,9 @@ def tmp_domain(tmp_path, monkeypatch):
             {"name": "Idle"},
             {"name": "Running"},
         ],
+        "events": [
+            {"name": "Start"},
+        ],
         "transitions": [
             {"from": "Idle", "to": "Running", "event": "Start"},
         ],
@@ -177,7 +180,6 @@ def test_render_status_list(tmp_domain, tmp_path):
 # MCP-06: validate_drawio tests
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skip(reason="Implemented in plan 04-03")
 def test_validate_drawio_valid(tmp_domain):
     """MCP-06: Canonical XML from render_sample_xml() produces no validation issues."""
     from schema.drawio_schema import render_sample_xml
@@ -187,7 +189,6 @@ def test_validate_drawio_valid(tmp_domain):
     assert errors == [], f"Expected no errors on canonical XML, got: {errors}"
 
 
-@pytest.mark.skip(reason="Implemented in plan 04-03")
 def test_validate_drawio_invalid_style(tmp_domain):
     """MCP-06: XML with an unknown mxCell style produces at least one error issue."""
     bad_xml = (
@@ -212,7 +213,6 @@ def test_validate_drawio_invalid_style(tmp_domain):
 # MCP-07: sync_from_drawio tests
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skip(reason="Implemented in plan 04-03")
 def test_sync_adds_state(tmp_domain, tmp_path):
     """MCP-07: Syncing XML that adds a 'Stopped' state cell updates Pump.yaml."""
     from schema.drawio_schema import STYLE_STATE, state_id
@@ -238,7 +238,6 @@ def test_sync_adds_state(tmp_domain, tmp_path):
     assert "Stopped" in contents, "Pump.yaml does not contain the new 'Stopped' state"
 
 
-@pytest.mark.skip(reason="Implemented in plan 04-03")
 def test_sync_preserves_actions(tmp_domain, tmp_path):
     """MCP-07: Syncing does not strip entry_action from states already in YAML."""
     from schema.drawio_schema import STYLE_STATE, state_id
@@ -280,7 +279,6 @@ def test_sync_preserves_actions(tmp_domain, tmp_path):
     )
 
 
-@pytest.mark.skip(reason="Implemented in plan 04-03")
 def test_sync_runs_validate_model(tmp_domain, tmp_path):
     """MCP-07: Sync of valid XML returns no error-severity issues from validate_model."""
     from schema.drawio_schema import STYLE_STATE, state_id
@@ -307,7 +305,6 @@ def test_sync_runs_validate_model(tmp_domain, tmp_path):
         assert errors == [], f"sync_from_drawio produced error-severity issues: {errors}"
 
 
-@pytest.mark.skip(reason="Implemented in plan 04-03")
 def test_sync_unrecognized_cell(tmp_domain, tmp_path):
     """MCP-07: Sync with an unrecognized style returns an 'unrecognized' issue without aborting."""
     xml = (
