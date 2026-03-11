@@ -127,7 +127,6 @@ def tmp_domain(tmp_path, monkeypatch):
 # MCP-05: render_to_drawio tests
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skip(reason="Implemented in plan 04-02")
 def test_render_class_diagram(tmp_domain, tmp_path):
     """MCP-05: Rendered class-diagram.drawio exists and contains class names."""
     result = render_to_drawio(tmp_domain)
@@ -138,7 +137,6 @@ def test_render_class_diagram(tmp_domain, tmp_path):
     assert b"Pump" in xml_bytes
 
 
-@pytest.mark.skip(reason="Implemented in plan 04-02")
 def test_render_idempotent(tmp_domain, tmp_path):
     """MCP-05: Calling render twice produces byte-identical XML."""
     render_to_drawio(tmp_domain)
@@ -149,7 +147,6 @@ def test_render_idempotent(tmp_domain, tmp_path):
     assert first_bytes == second_bytes, "Render output differs between calls (not idempotent)"
 
 
-@pytest.mark.skip(reason="Implemented in plan 04-02")
 def test_render_skip_unchanged(tmp_domain, tmp_path):
     """MCP-05: Second render does not modify mtime (or reports status 'skipped')."""
     result1 = render_to_drawio(tmp_domain)
@@ -166,7 +163,6 @@ def test_render_skip_unchanged(tmp_domain, tmp_path):
     )
 
 
-@pytest.mark.skip(reason="Implemented in plan 04-02")
 def test_render_status_list(tmp_domain, tmp_path):
     """MCP-05: render_to_drawio returns a list of dicts with 'file' and 'status' keys."""
     result = render_to_drawio(tmp_domain)
