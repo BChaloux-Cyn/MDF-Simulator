@@ -153,7 +153,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 1. Schema Foundation | 5/5 | Complete | 2026-03-06 |
 | 2. MCP Server + model_io | 2/2 | Complete | 2026-03-06 |
 | 3. Validation Tool | 4/4 | Complete   | 2026-03-09 |
-| 4. Draw.io Tools | 1/3 | In Progress|  |
+| 4. Draw.io Tools | 2/3 | In Progress|  |
 | 5. Simulation Engine | 0/TBD | Not started | - |
 | 6. CLI Test Harness | 0/TBD | Not started | - |
 | 7. GUI Debugger | 0/TBD | Not started | - |

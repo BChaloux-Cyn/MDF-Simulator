@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-draw-io-tools-01-PLAN.md
-last_updated: "2026-03-11T18:50:31.551Z"
+stopped_at: Completed 04-draw-io-tools-02-PLAN.md
+last_updated: "2026-03-11T18:56:33.436Z"
 last_activity: 2026-03-09 — pycca grammar module implemented (GUARD_PARSER + STATEMENT_PARSER)
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 14
-  completed_plans: 12
+  completed_plans: 13
   percent: 36
 ---
 
@@ -62,6 +62,7 @@ Progress: [████░░░░░░] 36%
 | Phase 03-validation-tool P03 | 15 | 2 tasks | 5 files |
 | Phase 03-validation-tool P04 | 12 | 2 tasks | 2 files |
 | Phase 04-draw-io-tools P01 | 5 | 1 tasks | 1 files |
+| Phase 04-draw-io-tools P02 | 20 | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,8 @@ Recent decisions affecting current work:
 - [Phase 03-validation-tool]: mcp package installed as blocking Rule 3 deviation — server.py uses FastMCP @mcp.tool() pattern
 - [Phase 03-validation-tool]: Guard completeness integrated into _validate_active_class_state_diagram; guard variable lookup is event-param-only
 - [Phase 04-draw-io-tools]: Import guard via try/except (not pytest.importorskip) keeps skip reasons accurate per test; fixture uses yaml.dump for correct Association alias keys
+- [Phase 04-draw-io-tools]: igraph Layout.coords has no setter in 1.0.0 — use ig.Layout(coords[:n]) then fit_into() for dummy-vertex guard
+- [Phase 04-draw-io-tools]: render_to_drawio skip-if-unchanged uses frozenset of IDs containing ':' — structural comparison avoids rewrites on unchanged YAML
 
 ### Pending Todos
 
@@ -110,6 +113,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-11T18:50:31.547Z
-Stopped at: Completed 04-draw-io-tools-01-PLAN.md
+Last session: 2026-03-11T18:56:33.432Z
+Stopped at: Completed 04-draw-io-tools-02-PLAN.md
 Resume file: None
