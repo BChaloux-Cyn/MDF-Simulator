@@ -217,29 +217,104 @@ Four levels, all active simultaneously. Engine pauses on whichever is hit first:
 
 ## CLI Test Harness
 
-**Entry point:** `mdf-sim-test`
+**Entry point:** `mdf-sim-test <script.yaml>`
 
-Runs the engine to completion against a test script. Reports pass/fail per assertion. Exits with non-zero status on any failure.
+Runs the engine to completion against a YAML test script. Reports pass/fail per assertion. Exits with non-zero status on any failure.
 
-The test script format and assertion schema are TBD (see Outstanding Questions).
+### Test Script Schema (YAML)
+
+```yaml
+domain: HydraulicSystem           # domain name (maps to .design/model/<domain>/)
+mocks: path/to/mocks.yaml         # optional YAML mock registry for bridge calls
+
+setup:
+  instances:
+    - class: Valve
+      identifier: {name: "inlet"}
+      initial_state: Closed
+    - class: Pump
+      identifier: {serial: "P-001"}
+      initial_state: Idle
+
+sequence:
+  - step: 1
+    class: Valve
+    instance: {name: "inlet"}
+    event: Open
+    args: {}
+    clock_tick_ms: 0              # optional delay before this event is dispatched
+    assert:                       # optional mid-sequence assertions after this step completes
+      - class: Valve
+        instance: {name: "inlet"}
+        state: Opening
+      - class: Valve
+        instance: {name: "inlet"}
+        attribute: position
+        value: 0
+
+  - step: 2
+    class: Pump
+    instance: {serial: "P-001"}
+    event: Start
+    args: {}
+
+final_assert:                     # assertions evaluated after all events complete
+  - class: Valve
+    instance: {name: "inlet"}
+    state: Open
+  - class: Pump
+    instance: {serial: "P-001"}
+    state: Running
+    attribute: rpm
+    value: 1800
+```
+
+**Assertion granularity:** Both mid-sequence (per step, runs immediately after that step's event is fully processed) and final-state (after all events complete) assertions are supported. A failing assertion reports step number, class, instance identifier, expected value, and actual value.
 
 ---
 
-## Outstanding Questions
+## Resolved Questions (2026-03-09)
 
 ### CLI
-1. **Test script format** — YAML is the assumed format. What is the schema? Needs to cover: domain to load, initial instance creation (class, identifier, starting state), event sequence (class, instance, event, args), clock ticks between events, and assertions (class, instance, expected state, expected property values).
-2. **Assertion granularity** — can assertions check intermediate states mid-sequence, or only final state after all events?
+1. **Test script format** — YAML, schema defined above. Covers: domain, mock registry path, instance setup (class, identifier, initial state), event sequence (class, instance, event, args, optional clock tick), per-step assertions and final assertions.
+2. **Assertion granularity** — Both mid-sequence and final-state assertions are supported.
 
 ### GUI
-3. **Launch mechanism** — does `mdf-sim-gui` take a domain name as a CLI argument, or does it have an in-app domain picker?
-4. **Draw.io source** — does the GUI read the `.drawio` file directly from disk, or call `render_to_drawio` via the MCP server to generate it fresh?
-5. **Initial simulation state** — when the GUI launches, does the domain start empty (no instances) and the user creates them via the event injector, or is there a scenario file that pre-populates instances and state?
-6. **Instance creation in the GUI** — is there a dedicated "create instance" control (to distinguish sync vs async creation), or is async creation via the event injector sufficient for v1?
+3. **Launch mechanism** — `mdf-sim-gui <domain> [--scenario file.yaml]` — domain name as positional CLI argument. No in-app domain picker for v1.
+4. **Draw.io source** — GUI reads the existing `.drawio` file directly from disk. No MCP server dependency at runtime. If the file is stale, the engineer resolves that before launching.
+5. **Initial simulation state** — Optional `--scenario` file pre-populates instances and queues. Without it, the domain starts empty and the engineer creates instances via the Create Instance control.
+6. **Instance creation in the GUI** — Dedicated Create Instance control with sync/async toggle. Both creation modes are accessible directly (not just via event injector).
 
 ### Bridge Mocking
-7. **Mock registry configuration** — is the mock registry configured in the GUI before running, loaded from a YAML file, or both?
+7. **Mock registry configuration** — YAML file only for v1. Loaded at startup by both CLI (`mocks:` field in test script) and GUI (`--mocks file.yaml` flag). GUI displays loaded mocks read-only. Runtime editing deferred to v2.
+
+### MCP Tool Names (updated from original design)
+The original design referenced a single `simulate_state_machine` MCP tool. This has been replaced by two tools:
+- `simulate_domain(domain, scenario)` — domain-scoped engine, manages full object instance pool
+- `simulate_class(class, events)` — isolated single-class simulation for unit-level behavioral testing
+
+Both are thin wrappers over `mdf_sim.engine.interpreter`. The engine generator is the shared core consumed by all three surfaces (MCP tools, CLI, GUI).
 
 ---
 
-*Design session: 2026-03-06 — engine execution model, GUI layout, and breakpoint system defined. CLI and bridge mocking partially defined. Outstanding questions to be resolved in next session.*
+## Engine Testing Requirements
+
+**Very detailed engine testing is required.** The engine is the correctness guarantee for the entire simulation stack — CLI and GUI both depend on it being right. Test coverage in `tests/test_engine.py` must include:
+
+- Each micro-step type yielded with correct payload
+- All queue routing rules (self → priority, cross-instance → standard, creation/delayed → standard)
+- Run-to-completion: event generated mid-action must not dispatch until current event completes
+- Sync vs async instance creation: distinct lifecycle behavior for each
+- Sync vs async instance deletion: distinct lifecycle behavior for each
+- Guard evaluation: true path, false path, variable resolution from instance attributes
+- All pycca interpreter constructs: assignment, generate, bridge call, create, delete, select/where, cardinality, conditional
+- select/where with multiple instances, empty result set, cardinality operator
+- Bridge call mock registry hit, miss (null return), and `bridge_called` micro-step
+- Clock and delay queue: expiry moves event to standard queue, speed multiplier only affects expiry
+- Clock pauses at breakpoints and in step-through mode
+- Edge cases: event to non-existent instance, deletion of already-deleted instance, empty domain, unparseable pycca action
+
+---
+
+*Design session: 2026-03-06 — engine execution model, GUI layout, and breakpoint system defined.*
+*Updated: 2026-03-09 — all outstanding questions resolved; test script schema added; MCP tool names updated; engine testing requirements added.*
