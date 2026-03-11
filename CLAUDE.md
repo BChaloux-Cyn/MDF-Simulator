@@ -30,6 +30,20 @@ It can be used to:
 See [`examples/elevator/README.md`](examples/elevator/README.md) for the full domain structure,
 class model, and state machine designs.
 
+## Dependencies
+
+All runtime dependencies must be declared in `requirements.in`. Do not install packages directly without also adding them to this file. The project uses a `.venv` virtual environment managed by `uv`.
+
+## Issue Tracking
+
+When you identify a bug, modeling error, schema gap, or missing test:
+**Read [`issues/ISSUES.md`](issues/ISSUES.md) for the full process and file template.**
+
+Summary of the process:
+- Create a file in `issues/<name>.md` and add a row to the manifest.
+- An issue is not closed until a test exists that failed before the fix and passes after.
+- When solved, move to `issues/solved/<name>-SOLVED.md` and remove from the manifest.
+
 ## Key Directories
 
 ```
@@ -41,4 +55,5 @@ engine/         Simulation engine (Phase 5)
 cli/            CLI test harness and GUI debugger (Phases 6–7)
 .design/model/  Runtime model root — domain YAML files live here
 .planning/      GSD planning artifacts
+issues/         Bug and modeling issue tracker (see issues/ISSUES.md)
 ```

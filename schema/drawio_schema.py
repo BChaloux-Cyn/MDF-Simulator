@@ -23,6 +23,7 @@ __all__ = [
     "attribute_id",
     "separator_id",
     "association_id",
+    "association_label_id",
     "state_id",
     "transition_id",
     "render_sample_xml",
@@ -49,7 +50,7 @@ STYLE_SEPARATOR = (
     "spacingLeft=3;spacingRight=3;rotatable=0;"
 )
 
-STYLE_ASSOCIATION = "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;"
+STYLE_ASSOCIATION = "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;startArrow=none;"
 
 STYLE_ASSOC_LABEL = "edgeLabel;align=center;"
 
@@ -104,6 +105,13 @@ def separator_id(domain: str, class_name: str) -> str:
 def association_id(domain: str, assoc_name: str) -> str:
     """Return deterministic mxCell ID for an association element."""
     return f"{domain.lower()}:assoc:{assoc_name}"
+
+
+def association_label_id(domain: str, assoc_name: str, end: str) -> str:
+    """Return deterministic mxCell ID for a multiplicity label on an association.
+    end: 'src' (near point_1) or 'tgt' (near point_2).
+    """
+    return f"{domain.lower()}:assoc_mult:{assoc_name}:{end}"
 
 
 def state_id(domain: str, class_name: str, state_name: str) -> str:

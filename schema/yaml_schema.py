@@ -157,7 +157,7 @@ class Method(BaseModel):
 
 class SubtypePartition(BaseModel):
     name: str  # R-number, e.g. "R2"
-    discriminator: str
+    discriminator: str | None = None
     subtypes: list[str]
 
 

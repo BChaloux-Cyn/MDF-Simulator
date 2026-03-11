@@ -25,6 +25,7 @@ from ruamel.yaml import YAML as RuamelYAML
 
 from schema.drawio_schema import (
     BIJECTION_TABLE,
+    STYLE_ASSOC_LABEL,
     STYLE_ASSOCIATION,
     STYLE_ATTRIBUTE,
     STYLE_CLASS,
@@ -33,6 +34,7 @@ from schema.drawio_schema import (
     STYLE_STATE,
     STYLE_TRANSITION,
     association_id,
+    association_label_id,
     class_id,
     separator_id,
     state_id,
@@ -49,9 +51,21 @@ ROW_H = 20       # px per attr/method row
 SEP_H = 8        # separator height
 CLASS_W = 220    # fixed class width
 STATE_W = 160    # fixed state width
-STATE_H = 50     # fixed state height
+STATE_H = 50     # fixed state height (minimum)
 INIT_SIZE = 20   # initial pseudostate diameter
-MARGIN = 60      # canvas margin
+MARGIN = 120     # canvas margin
+LABEL_OFFSET_X = "-0.3"   # edge-label x: toward source (-1 to +1)
+LABEL_OFFSET_Y = "-15"    # edge-label y: pixels above the line
+
+# Self-loop corner pairs: (exitX, exitY, entryX, entryY)
+# Each pair uses two adjacent sides of the box to form a tight corner loop.
+# Assigned round-robin when a vertex has multiple self-loops.
+_SELF_LOOP_CORNERS = [
+    (1.0, 0.2,  0.8,  0.0),   # top-right corner
+    (1.0, 0.8,  0.8,  1.0),   # bottom-right corner
+    (0.2, 1.0,  0.0,  0.8),   # bottom-left corner
+    (0.2, 0.0,  0.0,  0.2),   # top-left corner
+]
 
 MODEL_ROOT = Path(".design/model")
 
@@ -83,6 +97,190 @@ def _make_issue(
 def _class_height(n_attrs: int, n_methods: int) -> int:
     """Return total height of a UML class swimlane cell."""
     return HEADER_H + max(n_attrs, 1) * ROW_H + SEP_H + max(n_methods, 1) * ROW_H
+
+
+def _state_height(entry_action: str | None) -> int:
+    """Estimate state box height from entry_action line count."""
+    if not entry_action:
+        return STATE_H
+    n_lines = entry_action.count('\n') + 1
+    # name row + divider + "entry /" row + action lines + vertical padding
+    h = (3 + n_lines) * ROW_H + 16
+    return max(STATE_H, h)
+
+
+def _assign_edge_ports(
+    edges: list[tuple[int, int]],
+    positions: list[tuple[float, float]],
+) -> list[str]:
+    """Return per-edge style suffix strings for exit/entry anchor points.
+
+    Distributes multiple edges from/to the same vertex side across distinct anchor points.
+    Self-loops return empty string (let Draw.io auto-route).
+    """
+    if not edges or not positions:
+        return [""] * len(edges)
+
+    # First pass: determine which side each edge exits/enters
+    edge_info = []
+    for src, tgt in edges:
+        if src == tgt:
+            edge_info.append(None)
+            continue
+        sx, sy = positions[src]
+        tx, ty = positions[tgt]
+        dx = tx - sx
+        dy = ty - sy
+        if abs(dx) >= abs(dy):
+            src_side = "right" if dx >= 0 else "left"
+            tgt_side = "left" if dx >= 0 else "right"
+        else:
+            src_side = "bottom" if dy >= 0 else "top"
+            tgt_side = "top" if dy >= 0 else "bottom"
+        edge_info.append((src, src_side, tgt, tgt_side))
+
+    # Group edge indices by (vertex, side, direction)
+    slot_edges: dict[tuple, list[int]] = {}
+    for idx, info in enumerate(edge_info):
+        if info is None:
+            continue
+        src, src_side, tgt, tgt_side = info
+        slot_edges.setdefault((src, src_side, "exit"), []).append(idx)
+        slot_edges.setdefault((tgt, tgt_side, "entry"), []).append(idx)
+
+    # Build per-edge port data with defaults
+    port_data: list[dict] = [
+        {"exitX": 0.5, "exitY": 1.0, "entryX": 0.5, "entryY": 0.0}
+        for _ in edges
+    ]
+
+    def side_coords(side: str, k: int, n: int) -> tuple[float, float]:
+        t = (k + 1) / (n + 1)
+        if side == "top":
+            return t, 0.0
+        elif side == "bottom":
+            return t, 1.0
+        elif side == "left":
+            return 0.0, t
+        else:  # right
+            return 1.0, t
+
+    for (vertex, side, direction), idxs in slot_edges.items():
+        n = len(idxs)
+        for k, idx in enumerate(idxs):
+            x, y = side_coords(side, k, n)
+            if direction == "exit":
+                port_data[idx]["exitX"] = x
+                port_data[idx]["exitY"] = y
+            else:
+                port_data[idx]["entryX"] = x
+                port_data[idx]["entryY"] = y
+
+    result = []
+    for idx, (src, tgt) in enumerate(edges):
+        if src == tgt:
+            result.append("")  # self-loops handled by XML builders with waypoints
+            continue
+        pd = port_data[idx]
+        suffix = (
+            f"exitX={round(pd['exitX'], 4)};exitY={round(pd['exitY'], 4)};"
+            f"exitDx=0;exitDy=0;"
+            f"entryX={round(pd['entryX'], 4)};entryY={round(pd['entryY'], 4)};"
+            f"entryDx=0;entryDy=0;"
+        )
+        result.append(suffix)
+
+    return result
+
+
+def _self_loop_corner(
+    vertex: int,
+    loop_idx: int,
+    all_edges: list[tuple[int, int]],
+    positions: list[tuple[float, float]],
+) -> int:
+    """Return corner index (0=top-right, 1=bottom-right, 2=bottom-left, 3=top-left).
+
+    Picks the corner whose two adjacent sides have the fewest non-self-loop connections
+    already attached to this vertex. Cycles through corners for multiple self-loops.
+    """
+    side_count: dict[str, int] = {"top": 0, "bottom": 0, "left": 0, "right": 0}
+    for src, tgt in all_edges:
+        if src == tgt:
+            continue
+        if src != vertex and tgt != vertex:
+            continue
+        if not positions or src >= len(positions) or tgt >= len(positions):
+            continue
+        sx, sy = positions[src]
+        tx, ty = positions[tgt]
+        dx, dy = tx - sx, ty - sy
+        if abs(dx) >= abs(dy):
+            if src == vertex:
+                side_count["right" if dx >= 0 else "left"] += 1
+            else:
+                side_count["left" if dx >= 0 else "right"] += 1
+        else:
+            if src == vertex:
+                side_count["bottom" if dy >= 0 else "top"] += 1
+            else:
+                side_count["top" if dy >= 0 else "bottom"] += 1
+
+    # Score each corner by combined occupancy of its two adjacent sides
+    corner_sides = [
+        ("right", "top"),     # 0: top-right
+        ("right", "bottom"),  # 1: bottom-right
+        ("bottom", "left"),   # 2: bottom-left
+        ("top",   "left"),    # 3: top-left
+    ]
+    scores = sorted(
+        range(len(corner_sides)),
+        key=lambda i: (side_count[corner_sides[i][0]] + side_count[corner_sides[i][1]], i),
+    )
+    return scores[loop_idx % len(scores)]
+
+
+def _self_loop_waypoints(
+    corner_idx: int,
+    bx: float,
+    by: float,
+    box_w: int,
+    box_h: int,
+    offset: int = 40,
+) -> list[tuple[float, float]]:
+    """Return 3 exterior waypoints that force a clean orthogonal self-loop around a corner.
+
+    WP1: straight out from the exit anchor (perpendicular to exit side)
+    WP2: the exterior corner connecting WP1 and WP3
+    WP3: straight out from the entry anchor (perpendicular to entry side)
+
+    This guarantees 4 right-angle segments:
+        exit → WP1 → WP2 → WP3 → entry
+    """
+    ex, ey, nx, ny = _SELF_LOOP_CORNERS[corner_idx]
+    epx = bx + ex * box_w  # exit pixel x
+    epy = by + ey * box_h  # exit pixel y
+    npx = bx + nx * box_w  # entry pixel x
+    npy = by + ny * box_h  # entry pixel y
+
+    if corner_idx == 0:    # top-right: exit right, entry top
+        wp1 = (epx + offset, epy)
+        wp2 = (epx + offset, npy - offset)
+        wp3 = (npx,          npy - offset)
+    elif corner_idx == 1:  # bottom-right: exit right, entry bottom
+        wp1 = (epx + offset, epy)
+        wp2 = (epx + offset, npy + offset)
+        wp3 = (npx,          npy + offset)
+    elif corner_idx == 2:  # bottom-left: exit bottom, entry left
+        wp1 = (epx,          epy + offset)
+        wp2 = (npx - offset, epy + offset)
+        wp3 = (npx - offset, npy)
+    else:                  # top-left: exit top, entry left
+        wp1 = (epx,          epy - offset)
+        wp2 = (npx - offset, epy - offset)
+        wp3 = (npx - offset, npy)
+
+    return [wp1, wp2, wp3]
 
 
 def _layout_for_canvas(
@@ -167,6 +365,8 @@ def _compute_expected_class_ids(domain: str, cd: ClassDiagramFile) -> frozenset[
         ids.add(f"{cid}:methods")
     for assoc in cd.associations:
         ids.add(association_id(domain, assoc.name))
+        ids.add(association_label_id(domain, assoc.name, "src"))
+        ids.add(association_label_id(domain, assoc.name, "tgt"))
     return frozenset(ids)
 
 
@@ -217,18 +417,28 @@ def _build_class_diagram_xml(domain: str, cd: ClassDiagramFile) -> bytes:
     n = len(classes)
 
     # Build edges from associations (index-based)
+    # layout_edges excludes self-loops (igraph Sugiyama doesn't need them for placement)
+    # all_edges includes self-loops so _assign_edge_ports can assign corner anchors
     name_to_idx = {cls.name: i for i, cls in enumerate(classes)}
-    edges: list[tuple[int, int]] = []
+    layout_edges: list[tuple[int, int]] = []
+    all_edges: list[tuple[int, int]] = []
+    assoc_edge_idx: list[int | None] = []
     for assoc in cd.associations:
         src = name_to_idx.get(assoc.point_1)
         tgt = name_to_idx.get(assoc.point_2)
-        if src is not None and tgt is not None and src != tgt:
-            edges.append((src, tgt))
+        if src is not None and tgt is not None:
+            assoc_edge_idx.append(len(all_edges))
+            all_edges.append((src, tgt))
+            if src != tgt:
+                layout_edges.append((src, tgt))
+        else:
+            assoc_edge_idx.append(None)
 
     canvas_w = max(1200, n * 280)
     canvas_h = max(800, 600)
 
-    positions = _layout_for_canvas(n, edges, canvas_w, canvas_h)
+    positions = _layout_for_canvas(n, layout_edges, canvas_w, canvas_h)
+    port_suffixes = _assign_edge_ports(all_edges, positions)
 
     # Apply greedy x-axis nudge pass to resolve horizontal overlaps
     # Sort class indices by x position, then ensure each adjacent pair has gap >= CLASS_W
@@ -244,6 +454,12 @@ def _build_class_diagram_xml(domain: str, cd: ClassDiagramFile) -> bytes:
                     pos_list[curr_i][1],
                 )
         positions = pos_list
+
+    # Pre-compute per-class heights for self-loop waypoint calculation
+    class_heights = {
+        i: _class_height(len(cls.attributes), len(cls.methods))
+        for i, cls in enumerate(classes)
+    }
 
     # Build XML
     mxfile = etree.Element("mxfile", compressed="false", version="24.0.0")
@@ -327,20 +543,67 @@ def _build_class_diagram_xml(domain: str, cd: ClassDiagramFile) -> bytes:
         )
 
     # Association edges
-    for assoc in cd.associations:
+    self_loop_count: dict[int, int] = {}
+    for i, assoc in enumerate(cd.associations):
         aid = association_id(domain, assoc.name)
         src_cid = class_id(domain, assoc.point_1)
         tgt_cid = class_id(domain, assoc.point_2)
+        src_v = name_to_idx.get(assoc.point_1)
+        tgt_v = name_to_idx.get(assoc.point_2)
+
+        waypoints: list[tuple[float, float]] = []
+        if src_v is not None and src_v == tgt_v:
+            # Self-loop: pick the least-populated corner and compute 3-point exterior path
+            loop_idx = self_loop_count.get(src_v, 0)
+            self_loop_count[src_v] = loop_idx + 1
+            corner = _self_loop_corner(src_v, loop_idx, all_edges, positions)
+            ex, ey, nx, ny = _SELF_LOOP_CORNERS[corner]
+            port_suffix = (
+                f"exitX={ex};exitY={ey};exitDx=0;exitDy=0;"
+                f"entryX={nx};entryY={ny};entryDx=0;entryDy=0;"
+            )
+            bx, by = positions[src_v]
+            waypoints = _self_loop_waypoints(corner, bx, by, CLASS_W, class_heights[src_v])
+        else:
+            edge_idx = assoc_edge_idx[i]
+            port_suffix = port_suffixes[edge_idx] if edge_idx is not None else ""
+
         assoc_cell = etree.SubElement(
             root_el, "mxCell",
             id=aid, value=assoc.name,
-            style=STYLE_ASSOCIATION, edge="1",
+            style=STYLE_ASSOCIATION + port_suffix, edge="1",
             source=src_cid, target=tgt_cid, parent="1",
         )
-        etree.SubElement(
+        geo = etree.SubElement(
             assoc_cell, "mxGeometry",
             attrib={"relative": "1", "as": "geometry"},
         )
+        if waypoints:
+            arr = etree.SubElement(geo, "Array", attrib={"as": "points"})
+            for wx, wy in waypoints:
+                etree.SubElement(arr, "mxPoint", x=str(int(wx)), y=str(int(wy)))
+
+        # Multiplicity + verb phrase near point_1 end
+        src_label = etree.SubElement(
+            root_el, "mxCell",
+            id=association_label_id(domain, assoc.name, "src"),
+            value=f"{assoc.mult_2_to_1}\n{assoc.phrase_2_to_1}",
+            style=STYLE_ASSOC_LABEL, vertex="1", parent=aid,
+        )
+        etree.SubElement(src_label, "mxGeometry",
+            x="-0.9", y="-10",
+            attrib={"relative": "1", "as": "geometry"})
+
+        # Multiplicity + verb phrase near point_2 end
+        tgt_label = etree.SubElement(
+            root_el, "mxCell",
+            id=association_label_id(domain, assoc.name, "tgt"),
+            value=f"{assoc.mult_1_to_2}\n{assoc.phrase_1_to_2}",
+            style=STYLE_ASSOC_LABEL, vertex="1", parent=aid,
+        )
+        etree.SubElement(tgt_label, "mxGeometry",
+            x="0.9", y="-10",
+            attrib={"relative": "1", "as": "geometry"})
 
     return etree.tostring(mxfile, encoding="unicode", xml_declaration=False).encode("utf-8")
 
@@ -365,17 +628,22 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
     edges: list[tuple[int, int]] = []
     # Initial -> initial_state edge
     edges.append((0, initial_state_vertex_idx))
-    # Transition edges
+    # Transition edges — track which transitions map to which edge index
+    trans_edge_idx: list[int | None] = []
     for trans in sd.transitions:
         src = state_name_to_idx.get(trans.from_state)
         tgt = state_name_to_idx.get(trans.to)
         if src is not None and tgt is not None:
+            trans_edge_idx.append(len(edges))
             edges.append((src, tgt))
+        else:
+            trans_edge_idx.append(None)
 
-    canvas_w = max(800, n_vertices * 200)
-    canvas_h = max(600, 400)
+    canvas_w = max(1200, n_vertices * 250)
+    canvas_h = max(900, n_vertices * 220)
 
     positions = _layout_for_canvas(n_vertices, edges, canvas_w, canvas_h)
+    port_suffixes = _assign_edge_ports(edges, positions)
 
     # Build XML
     mxfile = etree.Element("mxfile", compressed="false", version="24.0.0")
@@ -408,6 +676,10 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
         attrib={"as": "geometry"},
     )
 
+    # Pre-compute per-state heights for self-loop waypoint calculation
+    # vertex index 1+i maps to sd.states[i]
+    state_heights = {1 + i: _state_height(st.entry_action) for i, st in enumerate(sd.states)}
+
     # State nodes
     for i, st in enumerate(sd.states):
         vertex_idx = 1 + i
@@ -416,7 +688,8 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
         sid = state_id(domain, class_name, st.name)
         value = st.name
         if st.entry_action:
-            value = f"{st.name}<br>──────────────────<br><i>entry /</i><br>{st.entry_action}"
+            action_html = st.entry_action.replace('\n', '<br>')
+            value = f"{st.name}<br>──────────────────<br><i>entry /</i><br>{action_html}"
         state_cell = etree.SubElement(
             root_el, "mxCell",
             id=sid, value=value,
@@ -424,7 +697,7 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
         )
         etree.SubElement(
             state_cell, "mxGeometry",
-            x=str(x), y=str(y), width=str(STATE_W), height=str(STATE_H),
+            x=str(x), y=str(y), width=str(STATE_W), height=str(state_heights[vertex_idx]),
             attrib={"as": "geometry"},
         )
 
@@ -434,7 +707,7 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
     init_trans = etree.SubElement(
         root_el, "mxCell",
         id=init_trans_cid, value="",
-        style=STYLE_TRANSITION, edge="1",
+        style=STYLE_TRANSITION + port_suffixes[0], edge="1",
         source=init_cid, target=init_target_sid, parent="1",
     )
     etree.SubElement(init_trans, "mxGeometry", attrib={"relative": "1", "as": "geometry"})
@@ -442,6 +715,7 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
     # Transition edges
     # Build event lookup map for param sigs
     event_map = {e.name: e for e in sd.events} if sd.events else {}
+    trans_self_loop_count: dict[int, int] = {}
 
     for idx, trans in enumerate(sd.transitions):
         tid = transition_id(domain, class_name, trans.from_state, trans.event, idx)
@@ -459,16 +733,41 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
         if trans.guard is not None:
             label += f"<br>[{trans.guard}]"
 
+        edge_idx = trans_edge_idx[idx]
+        src_v = state_name_to_idx.get(trans.from_state)
+        tgt_v = state_name_to_idx.get(trans.to)
+
+        trans_waypoints: list[tuple[float, float]] = []
+        if src_v is not None and src_v == tgt_v:
+            # Self-loop: density-aware corner + 3-point exterior path
+            loop_idx = trans_self_loop_count.get(src_v, 0)
+            trans_self_loop_count[src_v] = loop_idx + 1
+            corner = _self_loop_corner(src_v, loop_idx, edges, positions)
+            ex, ey, nx, ny = _SELF_LOOP_CORNERS[corner]
+            port_suffix = (
+                f"exitX={ex};exitY={ey};exitDx=0;exitDy=0;"
+                f"entryX={nx};entryY={ny};entryDx=0;entryDy=0;"
+            )
+            bx, by = positions[src_v]
+            trans_waypoints = _self_loop_waypoints(corner, bx, by, STATE_W, state_heights[src_v])
+        else:
+            port_suffix = port_suffixes[edge_idx] if edge_idx is not None else ""
+
         trans_cell = etree.SubElement(
             root_el, "mxCell",
             id=tid, value=label,
-            style=STYLE_TRANSITION, edge="1",
+            style=STYLE_TRANSITION + port_suffix, edge="1",
             source=src_sid, target=tgt_sid, parent="1",
         )
-        etree.SubElement(
+        geo = etree.SubElement(
             trans_cell, "mxGeometry",
+            x=LABEL_OFFSET_X, y=LABEL_OFFSET_Y,
             attrib={"relative": "1", "as": "geometry"},
         )
+        if trans_waypoints:
+            arr = etree.SubElement(geo, "Array", attrib={"as": "points"})
+            for wx, wy in trans_waypoints:
+                etree.SubElement(arr, "mxPoint", x=str(int(wx)), y=str(int(wy)))
 
     return etree.tostring(mxfile, encoding="unicode", xml_declaration=False).encode("utf-8")
 
@@ -622,12 +921,21 @@ def _valid_styles() -> frozenset[str]:
     return frozenset(BIJECTION_TABLE.values())
 
 
+_PORT_RE = re.compile(r'(exit|entry)[XYDxy]+=[^;]*;?')
+
+
+def _strip_port_tokens(style: str) -> str:
+    return _PORT_RE.sub('', style)
+
+
 def _style_is_valid(style: str, valid: frozenset[str]) -> bool:
-    """Check if a style string matches a canonical style (with optional trailing semicolon)."""
+    """Check if a style string matches a canonical style (with optional trailing semicolon or port tokens)."""
     if style in valid:
         return True
-    stripped = style.rstrip(";")
-    return stripped in valid
+    if style.rstrip(";") in valid:
+        return True
+    port_stripped = _strip_port_tokens(style).rstrip(";")
+    return port_stripped in valid
 
 
 def _strip_html(text: str) -> str:

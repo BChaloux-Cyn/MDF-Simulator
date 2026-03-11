@@ -53,6 +53,11 @@ classes:
 
   - name: Call
     stereotype: entity
+    partitions:
+      - name: R5
+        subtypes:
+          - ElevatorCall
+          - FloorCall
     attributes:
       - name: call_id
         type: UniqueID
@@ -103,6 +108,11 @@ classes:
 
   - name: CallButton
     stereotype: entity
+    partitions:
+      - name: R6
+        subtypes:
+          - DestFloorButton
+          - FloorCallButton
     attributes:
       - name: button_id
         type: UniqueID

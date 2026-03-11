@@ -721,6 +721,111 @@ transitions:
     assert gap_issues == [], f"Expected no gap issues for full coverage, got: {gap_issues}"
 
 
+# ---------------------------------------------------------------------------
+# Subtype partition checks (ELV-002, ELV-004)
+# ---------------------------------------------------------------------------
+
+PARTITION_SUPERTYPE_CLASS_YAML = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: Shape
+    stereotype: entity
+    partitions:
+      - name: R1
+        subtypes:
+          - Circle
+  - name: Circle
+    stereotype: entity
+    specializes: R1
+  - name: Square
+    stereotype: entity
+    specializes: R1
+associations:
+  - name: R1
+    point_1: Shape
+    point_2: Circle
+    1_mult_2: "1"
+    2_mult_1: "1"
+    1_phrase_2: is specialized as
+    2_phrase_1: specializes
+bridges: []
+"""
+
+PARTITION_SUPERTYPE_CLASS_YAML_FIXED = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: Shape
+    stereotype: entity
+    partitions:
+      - name: R1
+        subtypes:
+          - Circle
+          - Square
+  - name: Circle
+    stereotype: entity
+    specializes: R1
+  - name: Square
+    stereotype: entity
+    specializes: R1
+associations:
+  - name: R1
+    point_1: Shape
+    point_2: Circle
+    1_mult_2: "1"
+    2_mult_1: "1"
+    1_phrase_2: is specialized as
+    2_phrase_1: specializes
+bridges: []
+"""
+
+
+def test_subtype_not_in_supertype_partition(tmp_path, monkeypatch):
+    """Subtype with specializes: RN not listed in supertype partitions returns an error."""
+    monkeypatch.chdir(tmp_path)
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(PARTITION_SUPERTYPE_CLASS_YAML)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    partition_issues = [
+        i for i in result
+        if "partition" in i["issue"].lower() or "Square" in i["issue"]
+    ]
+    assert len(partition_issues) >= 1, f"Expected partition issue for Square, got: {result}"
+    assert partition_issues[0]["severity"] == "error"
+
+
+def test_subtype_listed_in_supertype_partition_no_error(tmp_path, monkeypatch):
+    """All subtypes listed in supertype partitions produces no partition issue."""
+    monkeypatch.chdir(tmp_path)
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(PARTITION_SUPERTYPE_CLASS_YAML_FIXED)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    partition_issues = [
+        i for i in result
+        if "partition" in i["issue"].lower()
+    ]
+    assert partition_issues == [], f"Expected no partition issues, got: {partition_issues}"
+
+
+def test_elevator_model_no_partition_errors(monkeypatch):
+    """Elevator example model has no subtype partition errors after ELV-002/ELV-004 fixes."""
+    elevator_path = Path(__file__).parent.parent / "examples" / "elevator"
+    monkeypatch.chdir(elevator_path)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_model()
+    partition_issues = [
+        i for i in result
+        if "partition" in i["issue"].lower()
+    ]
+    assert partition_issues == [], f"Elevator model has partition errors: {partition_issues}"
+
+
 def test_guard_complex_expression_warning(tmp_path, monkeypatch):
     """Guard containing 'and'/'or' returns severity='warning' (cannot determine completeness)."""
     monkeypatch.chdir(tmp_path)

@@ -181,6 +181,13 @@ def _check_referential_integrity_class_diagram(
                     fix=f"Add class '{val}' to the domain or fix the association endpoint",
                 ))
 
+    # Build partition map: r_number -> set of listed subtype names, from all supertype classes
+    partition_map: dict[str, set[str]] = {}
+    for cls in cd.classes:
+        if cls.partitions:
+            for part in cls.partitions:
+                partition_map.setdefault(part.name, set()).update(part.subtypes)
+
     # Classes: specializes and formalizes R-numbers must exist in associations
     for cls in cd.classes:
         if cls.specializes is not None and cls.specializes not in assoc_names:
@@ -190,6 +197,21 @@ def _check_referential_integrity_class_diagram(
                 value=cls.specializes,
                 fix=f"Add association '{cls.specializes}' or correct the specializes field",
             ))
+        if cls.specializes is not None:
+            listed = partition_map.get(cls.specializes, set())
+            if cls.name not in listed:
+                issues.append(_make_issue(
+                    issue=(
+                        f"Class '{cls.name}' specializes '{cls.specializes}' "
+                        f"but is not listed in any supertype's partitions for '{cls.specializes}'"
+                    ),
+                    location=f"{loc_cd}::classes.{cls.name}.specializes",
+                    value=cls.name,
+                    fix=(
+                        f"Add '{cls.name}' to the partitions.subtypes list of the supertype "
+                        f"that owns '{cls.specializes}'"
+                    ),
+                ))
         if cls.formalizes is not None and cls.formalizes not in assoc_names:
             issues.append(_make_issue(
                 issue=f"Class '{cls.name}' formalizes R-number '{cls.formalizes}' which is not in associations",
