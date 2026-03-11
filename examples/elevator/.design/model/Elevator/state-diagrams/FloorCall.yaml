@@ -1,0 +1,26 @@
+schema_version: "1.0.0"
+domain: Elevator
+class: FloorCall
+initial_state: Waiting
+events:
+  - name: Request_created
+  - name: Elevator_arrived
+states:
+  - name: Waiting
+  - name: Assigned
+  - name: Fulfilled
+    terminal: true
+    entry_action: >-
+      generate Call_fulfilled to r7_button_id;
+      select any req from instances of Request where r8_call_id == self.call_id;
+      if req != empty; generate Request_cancelled to req; end if;
+transitions:
+  - from: Waiting
+    to: Assigned
+    event: Request_created
+  - from: Waiting
+    to: Fulfilled
+    event: Elevator_arrived
+  - from: Assigned
+    to: Fulfilled
+    event: Elevator_arrived

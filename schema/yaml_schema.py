@@ -239,6 +239,9 @@ class EventDef(BaseModel):
 class StateDef(BaseModel):
     name: str
     entry_action: str | None = None
+    terminal: bool = False
+    """If True, this is a lifecycle-ending state. After the entry_action completes,
+    the object instance deletes itself. Terminal states must have no outgoing transitions."""
 
 
 class Transition(BaseModel):

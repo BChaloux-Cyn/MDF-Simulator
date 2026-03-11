@@ -1,0 +1,19 @@
+schema_version: "1.0.0"
+domain: Building
+classes:
+  - name: BuildingSpec
+    stereotype: entity
+    attributes:
+      - name: spec_id
+        type: UniqueID
+        identifier: true
+      - name: floor_count
+        type: Integer
+      - name: elevator_count
+        type: Integer
+      - name: min_floor
+        type: Integer
+      - name: max_floor
+        type: Integer
+associations: []
+bridges: []

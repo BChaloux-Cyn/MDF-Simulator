@@ -1,0 +1,39 @@
+schema_version: "1.0.0"
+domain: Elevator
+class: Dispatcher
+initial_state: Idle
+events:
+  - name: Call_submitted
+    params:
+      - name: has_idle_elevator
+        type: Boolean
+  - name: Elevator_available
+    params:
+      - name: queue_length
+        type: Integer
+states:
+  - name: Idle
+  - name: Waiting
+transitions:
+  - from: Idle
+    to: Idle
+    event: Call_submitted
+    guard: "has_idle_elevator == True"
+    action: "create object of Request;"
+  - from: Idle
+    to: Waiting
+    event: Call_submitted
+    guard: "has_idle_elevator != True"
+  - from: Waiting
+    to: Waiting
+    event: Call_submitted
+  - from: Waiting
+    to: Waiting
+    event: Elevator_available
+    guard: "queue_length > 1"
+    action: "create object of Request; generate Request_assigned to Elevator;"
+  - from: Waiting
+    to: Idle
+    event: Elevator_available
+    guard: "queue_length == 1"
+    action: "create object of Request; generate Request_assigned to Elevator;"

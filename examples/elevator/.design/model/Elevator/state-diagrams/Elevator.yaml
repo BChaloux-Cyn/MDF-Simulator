@@ -1,0 +1,85 @@
+schema_version: "1.0.0"
+domain: Elevator
+class: Elevator
+initial_state: Idle
+events:
+  - name: Request_assigned
+    params:
+      - name: target_floor
+        type: FloorNumber
+  - name: Floor_reached
+    params:
+      - name: current_floor
+        type: FloorNumber
+  - name: Stopped
+  - name: Service_complete
+  - name: Elevator_available
+states:
+  - name: Idle
+    entry_action: >-
+      self.direction = Stopped; self.next_stop_floor = 0;
+      select any req from instances of Request where r2_elevator_id == self.elevator_id;
+      if req != empty; generate Request_assigned to SELF;
+      else; generate Elevator_available to Dispatcher; end if;
+  - name: Moving_Up
+    entry_action: "self.direction = Up;"
+  - name: Moving_Down
+    entry_action: "self.direction = Down;"
+  - name: Stopping
+    entry_action: "self.direction = Stopped;"
+  - name: At_Floor
+    entry_action: >-
+      select any next_req from instances of Request where request_id == self.r_queue_head_id;
+      if next_req != empty;
+        if next_req.destination_floor > self.current_floor; self.next_direction = Up; end if;
+        if next_req.destination_floor < self.current_floor; self.next_direction = Down; end if;
+      else;
+        select any fc from instances of FloorCall where floor_num == self.current_floor;
+        if fc != empty; self.next_direction = fc.direction;
+        else; self.next_direction = Stopped; end if;
+      end if;
+      select any indicator from instances of FloorIndicator where r10_elevator_id == self.elevator_id and r10_floor_num == self.current_floor;
+      generate Direction_set to indicator;
+      generate Elevator_arrived to Floor;
+      generate Open_door to SELF;
+transitions:
+  - from: Idle
+    to: Moving_Up
+    event: Request_assigned
+    guard: "target_floor > current_floor"
+    action: "self.next_stop_floor = target_floor;"
+  - from: Idle
+    to: Moving_Down
+    event: Request_assigned
+    guard: "target_floor < current_floor"
+    action: "self.next_stop_floor = target_floor;"
+  - from: Idle
+    to: At_Floor
+    event: Request_assigned
+    guard: "target_floor == current_floor"
+  - from: Moving_Up
+    to: Stopping
+    event: Floor_reached
+    guard: "current_floor == next_stop_floor"
+    action: "self.current_floor = next_stop_floor;"
+  - from: Moving_Up
+    to: Moving_Up
+    event: Floor_reached
+    guard: "current_floor != next_stop_floor"
+    action: "self.current_floor = current_floor + 1;"
+  - from: Moving_Down
+    to: Stopping
+    event: Floor_reached
+    guard: "current_floor == next_stop_floor"
+    action: "self.current_floor = next_stop_floor;"
+  - from: Moving_Down
+    to: Moving_Down
+    event: Floor_reached
+    guard: "current_floor != next_stop_floor"
+    action: "self.current_floor = current_floor - 1;"
+  - from: Stopping
+    to: At_Floor
+    event: Stopped
+  - from: At_Floor
+    to: Idle
+    event: Service_complete

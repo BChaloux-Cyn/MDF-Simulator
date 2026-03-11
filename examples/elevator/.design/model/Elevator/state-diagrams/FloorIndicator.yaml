@@ -1,0 +1,41 @@
+schema_version: "1.0.0"
+domain: Elevator
+class: FloorIndicator
+initial_state: Off
+events:
+  - name: Direction_set
+    params:
+      - name: direction
+        type: Direction
+  - name: Reset
+states:
+  - name: Off
+  - name: Showing_Up
+  - name: Showing_Down
+transitions:
+  - from: Off
+    to: Showing_Up
+    event: Direction_set
+    guard: "direction == Up"
+  - from: Off
+    to: Showing_Down
+    event: Direction_set
+    guard: "direction == Down"
+  - from: Off
+    to: Off
+    event: Direction_set
+    guard: "direction == Stopped"
+  - from: Showing_Up
+    to: Off
+    event: Reset
+  - from: Showing_Down
+    to: Off
+    event: Reset
+  - from: Showing_Up
+    to: Showing_Down
+    event: Direction_set
+    guard: "direction == Down"
+  - from: Showing_Down
+    to: Showing_Up
+    event: Direction_set
+    guard: "direction == Up"

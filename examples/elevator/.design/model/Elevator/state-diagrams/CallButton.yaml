@@ -1,0 +1,18 @@
+schema_version: "1.0.0"
+domain: Elevator
+class: CallButton
+initial_state: Unlit
+events:
+  - name: Button_pushed
+  - name: Call_fulfilled
+states:
+  - name: Unlit
+  - name: Lit
+transitions:
+  - from: Unlit
+    to: Lit
+    event: Button_pushed
+    action: "create object of ElevatorCall;"
+  - from: Lit
+    to: Unlit
+    event: Call_fulfilled

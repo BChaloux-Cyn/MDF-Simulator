@@ -1,0 +1,20 @@
+schema_version: "1.0.0"
+domain: Elevator
+types:
+  - name: Direction
+    base: enum
+    values:
+      - Up
+      - Down
+      - Stopped
+    description: Current or intended direction of elevator travel
+  - name: CallDirection
+    base: enum
+    values:
+      - Up
+      - Down
+    description: Direction of a floor call (Up or Down only)
+  - name: FloorNumber
+    base: Integer
+    range: [1, 100]
+    description: A valid floor number in the building

@@ -372,14 +372,27 @@ def _check_reachability(sd: StateDiagramFile, domain: str) -> list[dict]:
             fix=f"Add a transition into '{state}' from a reachable state or remove it",
         ))
 
-    # Trap states: no outgoing edges (warning only)
+    # Build terminal state set for reference
+    terminal_states = {s.name for s in sd.states if s.terminal}
+
+    # Terminal states must not have outgoing transitions
+    for state in terminal_states:
+        if G.out_degree(state) > 0:
+            issues.append(_make_issue(
+                issue=f"Terminal state '{state}' has outgoing transitions",
+                location=loc_sd,
+                value=state,
+                fix="Remove outgoing transitions from terminal states, or remove the terminal flag",
+            ))
+
+    # Trap states: no outgoing edges and not marked terminal (warning only)
     for state in state_names:
-        if G.out_degree(state) == 0:
+        if G.out_degree(state) == 0 and state not in terminal_states:
             issues.append(_make_issue(
                 issue=f"State '{state}' has no outgoing transitions",
                 location=loc_sd,
                 value=state,
-                fix="If this is an intentional final state, this warning can be ignored",
+                fix="Add outgoing transitions or mark the state as terminal: true if it ends the object lifecycle",
                 severity="warning",
             ))
 

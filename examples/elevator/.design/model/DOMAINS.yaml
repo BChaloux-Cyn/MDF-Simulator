@@ -1,0 +1,22 @@
+schema_version: "1.0.0"
+domains:
+  - name: Building
+    type: realized
+    description: Represents the physical building infrastructure (floor count, elevator count)
+  - name: Elevator
+    type: application
+    description: Core elevator control logic — movement, doors, dispatch, calls, requests
+bridges:
+  - from: Elevator
+    to: Building
+    operations:
+      - name: IsTopFloor
+        params:
+          - name: floor_num
+            type: Integer
+        return: Boolean
+      - name: IsBottomFloor
+        params:
+          - name: floor_num
+            type: Integer
+        return: Boolean
