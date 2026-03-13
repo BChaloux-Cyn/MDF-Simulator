@@ -22,11 +22,20 @@ states:
       if req != empty; generate Request_assigned to SELF;
       else; generate Elevator_available to Dispatcher; end if;
   - name: Moving_Up
-    entry_action: "self.direction = Up;"
+    entry_action: >-
+      self.direction = Up;
+      select any shaft from instances of Shaft where R11;
+      generate Move_up to shaft;
   - name: Moving_Down
-    entry_action: "self.direction = Down;"
+    entry_action: >-
+      self.direction = Down;
+      select any shaft from instances of Shaft where R11;
+      generate Move_down to shaft;
   - name: Stopping
-    entry_action: "self.direction = Stopped;"
+    entry_action: >-
+      self.direction = Stopped;
+      select any shaft from instances of Shaft where R11;
+      generate Stop to shaft;
   - name: At_Floor
     entry_action: >-
       select any next_req from instances of Request where request_id == self.r_queue_head_id;
@@ -38,9 +47,10 @@ states:
         if fc != empty; self.next_direction = fc.direction;
         else; self.next_direction = Stopped; end if;
       end if;
+      select any floor_inst from instances of Floor where floor_num == self.current_floor;
       select any indicator from instances of FloorIndicator where r10_elevator_id == self.elevator_id and r10_floor_num == self.current_floor;
       generate Direction_set to indicator;
-      generate Elevator_arrived to Floor;
+      generate Elevator_arrived to floor_inst;
       generate Open_door to SELF;
 transitions:
   - from: Idle
@@ -61,22 +71,22 @@ transitions:
     to: Stopping
     event: Floor_reached
     guard: "current_floor == next_stop_floor"
-    action: "self.current_floor = next_stop_floor;"
+    action: "self.current_floor = current_floor;"
   - from: Moving_Up
     to: Moving_Up
     event: Floor_reached
     guard: "current_floor != next_stop_floor"
-    action: "self.current_floor = current_floor + 1;"
+    action: "self.current_floor = current_floor;"
   - from: Moving_Down
     to: Stopping
     event: Floor_reached
     guard: "current_floor == next_stop_floor"
-    action: "self.current_floor = next_stop_floor;"
+    action: "self.current_floor = current_floor;"
   - from: Moving_Down
     to: Moving_Down
     event: Floor_reached
     guard: "current_floor != next_stop_floor"
-    action: "self.current_floor = current_floor - 1;"
+    action: "self.current_floor = current_floor;"
   - from: Stopping
     to: At_Floor
     event: Stopped

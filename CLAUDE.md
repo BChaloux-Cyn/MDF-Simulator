@@ -44,6 +44,15 @@ Summary of the process:
 - An issue is not closed until a test exists that failed before the fix and passes after.
 - When solved, move to `issues/solved/<name>-SOLVED.md` and remove from the manifest.
 
+## Key References
+
+- **Upstream pycca manual:** <https://tcl-cm3.sourceforge.net/pycca.html>
+  The original pycca code generator for Shlaer-Mellor models. Our MDF action language
+  is inspired by (but not derived from) this tool. Useful for reference on storage
+  strategies, relationship formalization, event generation patterns, and generalization.
+- **`pycca/SYNTAX.md`** — MDF action language syntax reference
+- **`schema/COMPILATION.md`** — How schema elements compile into pycca-accessible names
+
 ## Key Directories
 
 ```

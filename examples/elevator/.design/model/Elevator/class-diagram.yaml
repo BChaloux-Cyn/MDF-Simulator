@@ -144,6 +144,24 @@ classes:
         type: FloorNumber
         referential: R3
 
+  - name: Shaft
+    stereotype: active
+    attributes:
+      - name: shaft_id
+        type: UniqueID
+        identifier: true
+      - name: current_floor
+        type: FloorNumber
+
+  - name: ElevatorIndicator
+    stereotype: active
+    attributes:
+      - name: indicator_id
+        type: UniqueID
+        identifier: true
+      - name: displayed_floor
+        type: FloorNumber
+
   - name: FloorIndicator
     stereotype: associative
     formalizes: R10
@@ -232,6 +250,22 @@ associations:
     2_mult_1: "0..1"
     1_phrase_2: is followed by
     2_phrase_1: follows
+
+  - name: R11
+    point_1: Elevator
+    point_2: Shaft
+    1_mult_2: "1"
+    2_mult_1: "1"
+    1_phrase_2: moves within
+    2_phrase_1: carries
+
+  - name: R12
+    point_1: Elevator
+    point_2: ElevatorIndicator
+    1_mult_2: "1"
+    2_mult_1: "1"
+    1_phrase_2: displays floor on
+    2_phrase_1: shows floor for
 
   - name: R10
     point_1: Elevator

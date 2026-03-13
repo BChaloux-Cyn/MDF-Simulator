@@ -133,7 +133,7 @@ class TypesFile(SchemaVersionMixin):
 class Attribute(BaseModel):
     name: str
     type: str
-    visibility: Literal["public", "private", "protected"] = "private"
+    visibility: Literal["public", "private"] = "public"
     scope: Literal["instance", "class"] = "instance"
     identifier: bool = False
     referential: str | None = None
@@ -148,8 +148,8 @@ class Method(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     name: str
-    visibility: Literal["public", "private", "protected"] = "private"
-    scope: Literal["instance", "class"]
+    visibility: Literal["public", "private"] = "public"
+    scope: Literal["instance", "class"] = "instance"
     params: list[MethodParam] = []
     return_type: str | None = Field(default=None, alias="return")
     action: str | None = None
@@ -163,20 +163,11 @@ class SubtypePartition(BaseModel):
 
 class ClassDef(BaseModel):
     name: str
-    stereotype: Literal["entity", "active", "associative"]
+    stereotype: Literal["entity", "active"]
     specializes: str | None = None
-    formalizes: str | None = None
     partitions: list[SubtypePartition] | None = None
     attributes: list[Attribute] = []
     methods: list[Method] = []
-
-    @model_validator(mode="after")
-    def check_associative_has_formalizes(self) -> "ClassDef":
-        if self.stereotype == "associative" and self.formalizes is None:
-            raise ValueError(
-                f"Class {self.name!r}: stereotype 'associative' requires a 'formalizes' field"
-            )
-        return self
 
 
 class BridgeImplementation(BaseModel):

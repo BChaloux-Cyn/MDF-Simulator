@@ -1,0 +1,47 @@
+schema_version: "1.0.0"
+domain: Elevator
+class: Shaft
+initial_state: Idle
+events:
+  - name: Move_up
+  - name: Move_down
+  - name: Stop
+  - name: Floor_sensor_triggered
+    params:
+      - name: floor_num
+        type: FloorNumber
+states:
+  - name: Idle
+  - name: Moving_Up
+  - name: Moving_Down
+transitions:
+  - from: Idle
+    to: Moving_Up
+    event: Move_up
+  - from: Idle
+    to: Moving_Down
+    event: Move_down
+  - from: Moving_Up
+    to: Moving_Up
+    event: Floor_sensor_triggered
+    action: >-
+      self.current_floor = floor_num;
+      select any elev from instances of Elevator where R11;
+      generate Floor_reached to elev;
+      select any ind from instances of ElevatorIndicator where R12;
+      generate Floor_updated to ind;
+  - from: Moving_Up
+    to: Idle
+    event: Stop
+  - from: Moving_Down
+    to: Moving_Down
+    event: Floor_sensor_triggered
+    action: >-
+      self.current_floor = floor_num;
+      select any elev from instances of Elevator where R11;
+      generate Floor_reached to elev;
+      select any ind from instances of ElevatorIndicator where R12;
+      generate Floor_updated to ind;
+  - from: Moving_Down
+    to: Idle
+    event: Stop
