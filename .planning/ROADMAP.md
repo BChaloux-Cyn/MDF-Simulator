@@ -92,6 +92,26 @@ Plans:
 - [ ] 04-02-PLAN.md — render_to_drawio / render_to_drawio_class / render_to_drawio_state with igraph Sugiyama layout and skip-if-unchanged (MCP-05)
 - [ ] 04-03-PLAN.md — validate_drawio + sync_from_drawio + server.py registration of all 5 tools (MCP-06, MCP-07)
 
+### Phase 04.1: Model Development and Compiler Testing (INSERTED)
+
+**Goal:** Fix all broken schema artifacts (associative removal aftermath), complete the elevator reference model with simulate-ready pycca action bodies for all active classes, resolve all 5 open elevator issues, and prove the pycca grammar against real action bodies via test_elevator.py and test_pycca.py
+**Requirements**: TBD
+**Depends on:** Phase 4
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 04.1 to break down)
+
+### Phase 04.2: Body of Knowledge and Modeling Process (INSERTED)
+
+**Goal:** Produce BoK documentation that enables a fresh Claude context to create valid, well-formed domain models — modeling patterns observed in Phase 4.1, schema/language reference synthesis, domain/class/state machine authoring guide, and a draft subagent strategy for model development
+**Requirements**: TBD
+**Depends on:** Phase 04.1
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 04.2 to break down)
+
 ### Phase 5: Simulation Engine
 **Goal**: A domain-scoped simulation engine that manages object instances, relationship links, event queues, and a step-aware pycca interpreter — exposed as two MCP tools
 **Depends on**: Phase 3 (pycca grammar)
