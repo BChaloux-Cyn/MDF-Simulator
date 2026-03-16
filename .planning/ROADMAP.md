@@ -95,12 +95,17 @@ Plans:
 ### Phase 04.1: Model Development and Compiler Testing (INSERTED)
 
 **Goal:** Fix all broken schema artifacts (associative removal aftermath), complete the elevator reference model with simulate-ready pycca action bodies for all active classes, resolve all 5 open elevator issues, and prove the pycca grammar against real action bodies via test_elevator.py and test_pycca.py
-**Requirements**: TBD
+**Requirements**: SCHEMA-REPAIR-01, SCHEMA-REPAIR-02, ELV-001, ELV-003, ELV-005, ELV-006, ELV-007, GRAMMAR-EXT, ACTION-BODIES-01, ACTION-BODIES-02, TEST-ELEVATOR
 **Depends on:** Phase 4
-**Plans:** 0 plans
+**Plans:** 6 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 04.1 to break down)
+- [ ] 04.1-01-PLAN.md — Remove formalizes blocks from validation.py and associative fixture from test_yaml_schema.py
+- [ ] 04.1-02-PLAN.md — FloorIndicator migration to active class; ELV-001 subtype inheritance; ELV-003 R14 head pointer
+- [ ] 04.1-03-PLAN.md — ELV-005/006/007 model YAML fixes; Dispatcher/CallButton/FloorCall syntax corrections
+- [ ] 04.1-04-PLAN.md — Grammar extension: 9 pycca constructs + tests/test_pycca.py
+- [ ] 04.1-05-PLAN.md — Action bodies: Shaft, Door, Floor, ElevatorIndicator, FloorIndicator
+- [ ] 04.1-06-PLAN.md — Action bodies: Elevator, Dispatcher, ElevatorCall, FloorCall, Request, CallButton; test_elevator.py
 
 ### Phase 04.2: Body of Knowledge and Modeling Process (INSERTED)
 
