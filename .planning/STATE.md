@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04.1-03-PLAN.md
-last_updated: "2026-03-17T12:43:35.302Z"
+stopped_at: Completed 04.1-04-PLAN.md
+last_updated: "2026-03-17T12:48:38.651Z"
 last_activity: 2026-03-11 — validate_drawio and sync_from_drawio implemented; all 5 Draw.io MCP tools registered
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 20
-  completed_plans: 17
+  completed_plans: 18
   percent: 100
 ---
 
@@ -67,6 +67,7 @@ Progress: [██████████] 100%
 | Phase 04.1-model-development-and-compiler-testing P01 | 10 | 2 tasks | 2 files |
 | Phase 04.1-model-development-and-compiler-testing P02 | 7 | 2 tasks | 6 files |
 | Phase 04.1-model-development-and-compiler-testing P03 | 10 | 2 tasks | 7 files |
+| Phase 04.1-model-development-and-compiler-testing P04 | 3 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -112,6 +113,8 @@ Recent decisions affecting current work:
 - [Phase 04.1-model-development-and-compiler-testing]: Attribute.visibility and Method.visibility defaults changed from public to private — consistent with phase-01 schema decision
 - [Phase 04.1-model-development-and-compiler-testing]: ELV-006 resolved via Option A (Elevator adds Door_closed, relays to active Request) — keeps Door decoupled from Request
 - [Phase 04.1-model-development-and-compiler-testing]: ELV-007 pragmatic workaround: select any fc from instances of FloorCall where floor_num != 0 — formal Dispatcher-FloorCall association deferred to Phase 4.2
+- [Phase 04.1-model-development-and-compiler-testing]: Brace-style if syntax only in grammar — old semicolon-style (if expr; ... end if;) removed in 04.1-04
+- [Phase 04.1-model-development-and-compiler-testing]: LALR compiled with all 9 grammar extensions — dotted_name before name in atom avoids shift-reduce conflicts
 
 ### Roadmap Evolution
 
@@ -127,6 +130,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-17T12:43:35.297Z
-Stopped at: Completed 04.1-03-PLAN.md
+Last session: 2026-03-17T12:48:38.646Z
+Stopped at: Completed 04.1-04-PLAN.md
 Resume file: None

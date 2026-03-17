@@ -97,7 +97,7 @@ Plans:
 **Goal:** Fix all broken schema artifacts (associative removal aftermath), complete the elevator reference model with simulate-ready pycca action bodies for all active classes, resolve all 5 open elevator issues, and prove the pycca grammar against real action bodies via test_elevator.py and test_pycca.py
 **Requirements**: SCHEMA-REPAIR-01, SCHEMA-REPAIR-02, ELV-001, ELV-003, ELV-005, ELV-006, ELV-007, GRAMMAR-EXT, ACTION-BODIES-01, ACTION-BODIES-02, TEST-ELEVATOR
 **Depends on:** Phase 4
-**Plans:** 3/6 plans executed
+**Plans:** 4/6 plans executed
 
 Plans:
 - [ ] 04.1-01-PLAN.md — Remove formalizes blocks from validation.py and associative fixture from test_yaml_schema.py
