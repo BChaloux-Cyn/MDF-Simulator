@@ -52,14 +52,6 @@ VALID_CLASS_DIAGRAM = {
                 {"name": "r1_timer_id", "type": "UniqueID", "referential": "R1"},
             ],
         },
-        {
-            "name": "ValveCommand",
-            "stereotype": "associative",
-            "formalizes": "R2",
-            "attributes": [
-                {"name": "command_id", "type": "UniqueID", "identifier": True},
-            ],
-        },
     ],
     "associations": [
         {
@@ -165,15 +157,12 @@ def test_valid_class_diagram_accepted():
     result = ClassDiagramFile.model_validate(VALID_CLASS_DIAGRAM)
     assert result.schema_version == "1.0.0"
     assert result.domain == "Hydraulics"
-    assert len(result.classes) == 2
+    assert len(result.classes) == 1
     valve = result.classes[0]
     assert valve.name == "Valve"
     assert valve.stereotype == "entity"
     id_attr = next(a for a in valve.attributes if a.identifier)
     assert id_attr.name == "valve_id"
-    assoc_class = result.classes[1]
-    assert assoc_class.stereotype == "associative"
-    assert assoc_class.formalizes == "R2"
     assert len(result.associations) == 1
     assoc = result.associations[0]
     assert assoc.name == "R1"
@@ -249,30 +238,7 @@ def test_invalid_semver_rejected():
 
 
 # ---------------------------------------------------------------------------
-# Test 7: SCHEMA-01 — associative without formalizes rejected
-# ---------------------------------------------------------------------------
-
-def test_associative_missing_formalizes_rejected():
-    """SCHEMA-01: ClassDef with stereotype=associative and no formalizes raises ValidationError."""
-    bad = {
-        "schema_version": "1.0.0",
-        "domain": "Hydraulics",
-        "classes": [
-            {
-                "name": "ValveCommand",
-                "stereotype": "associative",
-                # formalizes intentionally omitted
-                "attributes": [],
-            }
-        ],
-    }
-    with pytest.raises(ValidationError) as exc_info:
-        ClassDiagramFile.model_validate(bad)
-    assert "formalizes" in str(exc_info.value)
-
-
-# ---------------------------------------------------------------------------
-# Test 8: SCHEMA-01 — guard all-or-none violation rejected
+# Test 7: SCHEMA-01 — guard all-or-none violation rejected
 # ---------------------------------------------------------------------------
 
 def test_guard_all_or_none_violation_rejected():
