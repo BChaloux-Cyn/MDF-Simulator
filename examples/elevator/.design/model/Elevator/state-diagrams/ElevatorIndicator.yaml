@@ -9,7 +9,7 @@ events:
         type: FloorNumber
 states:
   - name: Displaying
-    entry_action: "self.displayed_floor = floor_num;"
+    entry_action: "self.displayed_floor = rcvd_evt.floor_num;"
 transitions:
   - from: Displaying
     to: Displaying

@@ -25,11 +25,11 @@ transitions:
     to: Moving_Up
     event: Floor_sensor_triggered
     action: >-
-      self.current_floor = floor_num;
-      select any elev from instances of Elevator where R11;
-      generate Floor_reached to elev;
-      select any ind from instances of ElevatorIndicator where R12;
-      generate Floor_updated to ind;
+      self.current_floor = rcvd_evt.floor_num;
+      select any elev related by self->R11;
+      generate Floor_reached(floor_num: self.current_floor) to elev;
+      select any ind related by elev->R12;
+      generate Floor_updated(floor_num: self.current_floor) to ind;
   - from: Moving_Up
     to: Idle
     event: Stop
@@ -37,11 +37,11 @@ transitions:
     to: Moving_Down
     event: Floor_sensor_triggered
     action: >-
-      self.current_floor = floor_num;
-      select any elev from instances of Elevator where R11;
-      generate Floor_reached to elev;
-      select any ind from instances of ElevatorIndicator where R12;
-      generate Floor_updated to ind;
+      self.current_floor = rcvd_evt.floor_num;
+      select any elev related by self->R11;
+      generate Floor_reached(floor_num: self.current_floor) to elev;
+      select any ind related by elev->R12;
+      generate Floor_updated(floor_num: self.current_floor) to ind;
   - from: Moving_Down
     to: Idle
     event: Stop
