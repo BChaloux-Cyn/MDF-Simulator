@@ -50,14 +50,35 @@ pattern already in the model.
 
 ## Fix Applied
 
-_Pending. Awaiting design decision on queue mechanism._
+Applied in Phase 04.1 Plan 03 (2026-03-17). **Pragmatic workaround applied; formal fix deferred to Phase 4.2.**
+
+**Pragmatic fix (Plan 03):**
+The formal Option A (explicit Dispatcher↔FloorCall association) requires schema and class-diagram
+changes that are out of scope for this plan. As a pragmatic workaround, the Dispatcher transition
+actions now use `select any fc from instances of FloorCall where floor_num != 0` to retrieve a
+pending FloorCall without a formal association traversal. This is semantically equivalent when only
+one FloorCall is pending but does not guarantee FIFO ordering with multiple pending calls.
+
+Changes made:
+1. All three Dispatcher transition actions using `create object of Request` replaced with:
+   ```
+   select any fc from instances of FloorCall where floor_num != 0;
+   create req of Request;
+   req.destination_floor = fc.floor_num;
+   select any elev from instances of Elevator;
+   generate Request_assigned(target_floor: req.destination_floor) to elev;
+   ```
+2. `Request_assigned` now includes `(target_floor: req.destination_floor)` param (matching Elevator event signature).
+
+**Pending (Phase 4.2):** Add formal Dispatcher↔FloorCall association to class-diagram.yaml and
+replace the `select any fc where floor_num != 0` workaround with proper queue traversal.
 
 ## Change Log
 
 | Date | File | Change |
 |------|------|--------|
-| | `Elevator/class-diagram.yaml` | Add Dispatcher↔FloorCall association and any needed head-pointer referential |
-| | `Elevator/state-diagrams/Dispatcher.yaml` | Update actions to traverse the queue association |
+| 2026-03-17 | `Elevator/state-diagrams/Dispatcher.yaml` | Replaced create object of Request with create req of Request + select FloorCall (pragmatic workaround) |
+| Phase 4.2 | `Elevator/class-diagram.yaml` | Add Dispatcher↔FloorCall association and head-pointer referential (pending) |
 
 ## Tests Added
 

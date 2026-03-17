@@ -12,7 +12,7 @@ states:
     terminal: true
     entry_action: >-
       generate Call_fulfilled to r7_button_id;
-      select any req from instances of Request where r8_call_id == self.call_id;
+      select any req from instances of Request where r8_request_id == self.call_id;
       if req != empty; generate Request_cancelled to req; end if;
 transitions:
   - from: Waiting

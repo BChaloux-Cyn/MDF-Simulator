@@ -19,7 +19,12 @@ transitions:
     to: Idle
     event: Call_submitted
     guard: "has_idle_elevator == True"
-    action: "create object of Request;"
+    action: >-
+      select any fc from instances of FloorCall where floor_num != 0;
+      create req of Request;
+      req.destination_floor = fc.floor_num;
+      select any elev from instances of Elevator;
+      generate Request_assigned(target_floor: req.destination_floor) to elev;
   - from: Idle
     to: Waiting
     event: Call_submitted
@@ -31,9 +36,19 @@ transitions:
     to: Waiting
     event: Elevator_available
     guard: "queue_length > 1"
-    action: "create object of Request; generate Request_assigned to Elevator;"
+    action: >-
+      select any fc from instances of FloorCall where floor_num != 0;
+      create req of Request;
+      req.destination_floor = fc.floor_num;
+      select any elev from instances of Elevator;
+      generate Request_assigned(target_floor: req.destination_floor) to elev;
   - from: Waiting
     to: Idle
     event: Elevator_available
     guard: "queue_length == 1"
-    action: "create object of Request; generate Request_assigned to Elevator;"
+    action: >-
+      select any fc from instances of FloorCall where floor_num != 0;
+      create req of Request;
+      req.destination_floor = fc.floor_num;
+      select any elev from instances of Elevator;
+      generate Request_assigned(target_floor: req.destination_floor) to elev;

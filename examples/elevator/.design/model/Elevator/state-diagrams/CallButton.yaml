@@ -12,7 +12,7 @@ transitions:
   - from: Unlit
     to: Lit
     event: Button_pushed
-    action: "create object of ElevatorCall;"
+    action: "create ec of ElevatorCall;"
   - from: Lit
     to: Unlit
     event: Call_fulfilled
