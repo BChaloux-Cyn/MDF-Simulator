@@ -10,10 +10,12 @@ in Phase 4.
 
 __all__ = [
     "STYLE_CLASS",
+    "STYLE_CLASS_ACTIVE",
     "STYLE_ATTRIBUTE",
     "STYLE_SEPARATOR",
     "STYLE_ASSOCIATION",
     "STYLE_ASSOC_LABEL",
+    "STYLE_GENERALIZATION",
     "STYLE_STATE",
     "STYLE_INITIAL_PSEUDO",
     "STYLE_TRANSITION",
@@ -52,7 +54,20 @@ STYLE_SEPARATOR = (
 
 STYLE_ASSOCIATION = "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;startArrow=none;"
 
-STYLE_ASSOC_LABEL = "edgeLabel;align=center;"
+STYLE_ASSOC_LABEL = (
+    "edgeLabel;html=1;fillColor=none;strokeColor=none;"
+    "labelBackgroundColor=none;resizable=0;points=[];"
+)
+
+STYLE_GENERALIZATION = (
+    "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;"
+    "endArrow=block;endFill=0;startArrow=none;"
+)
+
+STYLE_CLASS_ACTIVE = (
+    "swimlane;fontStyle=1;horizontal=1;"
+    "startSize=26;fillColor=#d5e8d4;strokeColor=#82b366;rounded=0;"
+)
 
 STYLE_STATE = "rounded=1;whiteSpace=wrap;html=1;arcSize=10;"
 
@@ -71,9 +86,11 @@ STYLE_BRIDGE = "dashed=1;endArrow=open;endFill=0;html=1;"
 
 BIJECTION_TABLE: dict[str, str] = {
     "class":          STYLE_CLASS,
+    "class_active":   STYLE_CLASS_ACTIVE,
     "attribute":      STYLE_ATTRIBUTE,
     "association":    STYLE_ASSOCIATION,
     "assoc_label":    STYLE_ASSOC_LABEL,
+    "generalization": STYLE_GENERALIZATION,
     "state":          STYLE_STATE,
     "initial_pseudo": STYLE_INITIAL_PSEUDO,
     "transition":     STYLE_TRANSITION,

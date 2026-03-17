@@ -14,7 +14,9 @@ Public API:
 from __future__ import annotations
 
 import io
+import math
 import re
+from itertools import combinations
 from pathlib import Path
 
 import defusedxml.ElementTree as DET
@@ -29,6 +31,8 @@ from schema.drawio_schema import (
     STYLE_ASSOCIATION,
     STYLE_ATTRIBUTE,
     STYLE_CLASS,
+    STYLE_CLASS_ACTIVE,
+    STYLE_GENERALIZATION,
     STYLE_INITIAL_PSEUDO,
     STYLE_SEPARATOR,
     STYLE_STATE,
@@ -56,6 +60,8 @@ INIT_SIZE = 20   # initial pseudostate diameter
 MARGIN = 120     # canvas margin
 LABEL_OFFSET_X = "-0.3"   # edge-label x: toward source (-1 to +1)
 LABEL_OFFSET_Y = "-15"    # edge-label y: pixels above the line
+LABEL_PERP_OFFSET = 5     # px perpendicular from edge to label vertex (mult/phrase on opposite sides)
+PHRASE_TARGET_RATIO = 2.0 # target width:height ratio for action phrase wrapping
 
 # Self-loop corner pairs: (exitX, exitY, entryX, entryY)
 # Each pair uses two adjacent sides of the box to form a tight corner loop.
@@ -167,7 +173,14 @@ def _assign_edge_ports(
 
     for (vertex, side, direction), idxs in slot_edges.items():
         n = len(idxs)
-        for k, idx in enumerate(idxs):
+        # Sort edges so anchor positions along this side match the spatial order of
+        # the other endpoints.  top/bottom sides spread horizontally (sort by x);
+        # left/right sides spread vertically (sort by y).  This prevents edges from
+        # crossing each other unnecessarily at the box boundary.
+        dim = 0 if side in ("top", "bottom") else 1
+        other_end = 1 if direction == "exit" else 0
+        sorted_idxs = sorted(idxs, key=lambda idx: positions[edges[idx][other_end]][dim])
+        for k, idx in enumerate(sorted_idxs):
             x, y = side_coords(side, k, n)
             if direction == "exit":
                 port_data[idx]["exitX"] = x
@@ -283,30 +296,81 @@ def _self_loop_waypoints(
     return [wp1, wp2, wp3]
 
 
+def _grid_layout(
+    n_vertices: int,
+    col_gap: int = CLASS_W + 40,
+    row_gap: int = 200,
+    margin: int = MARGIN,
+) -> list[tuple[float, float]]:
+    """Place vertices in a left-to-right grid, wrapping at ceil(sqrt(n)) columns."""
+    import math
+    if n_vertices == 0:
+        return []
+    cols = max(1, math.ceil(math.sqrt(n_vertices)))
+    return [
+        (margin + (i % cols) * col_gap, margin + (i // cols) * row_gap)
+        for i in range(n_vertices)
+    ]
+
+
+def _scale_for_min_spacing(
+    positions: list[tuple[float, float]],
+    min_dist: float,
+    margin: int = MARGIN,
+) -> list[tuple[float, float]]:
+    """Scale and translate positions so the closest pair of node centers is at
+    least *min_dist* apart, then shift so the top-left node sits at (margin, margin).
+
+    This preserves the topology of the layout while guaranteeing that boxes of
+    width/height up to min_dist will not overlap their nearest neighbour.
+    """
+    if len(positions) <= 1:
+        return [(float(margin), float(margin))] * len(positions)
+
+    closest = min(
+        math.hypot(positions[i][0] - positions[j][0], positions[i][1] - positions[j][1])
+        for i, j in combinations(range(len(positions)), 2)
+    )
+    scale = (min_dist / closest) if closest > 0 else 1.0
+
+    min_x = min(x for x, _ in positions)
+    min_y = min(y for _, y in positions)
+    return [
+        ((x - min_x) * scale + margin, (y - min_y) * scale + margin)
+        for x, y in positions
+    ]
+
+
 def _layout_for_canvas(
     n_vertices: int,
     edges: list[tuple[int, int]],
-    canvas_w: int,
-    canvas_h: int,
+    min_dist: float,
     margin: int = MARGIN,
+    method: str = "sugiyama",
 ) -> list[tuple[float, float]]:
-    """Run Sugiyama layout and return (x, y) per vertex, fitted to the canvas.
+    """Run a graph layout and return (x, y) per vertex with guaranteed minimum spacing.
 
-    Edge cases:
-    - n_vertices == 0 -> returns []
-    - n_vertices == 1 -> returns [(canvas_w // 2, canvas_h // 2)] (no igraph call)
+    Replaces fit_into with _scale_for_min_spacing so that the closest pair of
+    node centres is at least *min_dist* pixels apart regardless of canvas size.
+    Canvas dimensions are derived from the resulting positions by the caller.
+
+    method:
+      "sugiyama"     — layered hierarchical (igraph layout_sugiyama)
+      "kamada_kawai" — force-directed spring embedder (igraph layout_kamada_kawai)
     """
     if n_vertices == 0:
         return []
     if n_vertices == 1:
-        return [(canvas_w // 2, canvas_h // 2)]
+        return [(float(margin), float(margin))]
 
     g = ig.Graph(n=n_vertices, edges=edges, directed=True)
-    layout = g.layout_sugiyama()
-    # Slice to original vertex count — igraph Sugiyama may inflate with dummy vertices
-    sliced = ig.Layout(layout.coords[:n_vertices])
-    sliced.fit_into((margin, margin, canvas_w - margin, canvas_h - margin))
-    return [(sliced.coords[i][0], sliced.coords[i][1]) for i in range(n_vertices)]
+    if method == "kamada_kawai":
+        raw = g.layout_kamada_kawai()
+    else:
+        raw = g.layout_sugiyama()
+    # Sugiyama may inflate vertex count with dummy nodes — slice back to original
+    coords = [(raw.coords[i][0], raw.coords[i][1]) for i in range(n_vertices)]
+    return _scale_for_min_spacing(coords, min_dist, margin)
 
 
 def _attr_label(vis: str, scope: str, name: str, type_: str) -> str:
@@ -365,8 +429,8 @@ def _compute_expected_class_ids(domain: str, cd: ClassDiagramFile) -> frozenset[
         ids.add(f"{cid}:methods")
     for assoc in cd.associations:
         ids.add(association_id(domain, assoc.name))
-        ids.add(association_label_id(domain, assoc.name, "src"))
-        ids.add(association_label_id(domain, assoc.name, "tgt"))
+        for suffix in ("src_mult", "src_phrase", "tgt_mult", "tgt_phrase"):
+            ids.add(association_label_id(domain, assoc.name, suffix))
     return frozenset(ids)
 
 
@@ -411,19 +475,42 @@ def _structure_matches_state(
     return existing == expected
 
 
-def _build_class_diagram_xml(domain: str, cd: ClassDiagramFile) -> bytes:
+def _build_class_diagram_xml(
+    domain: str,
+    cd: ClassDiagramFile,
+    use_layout: bool = True,
+    layout: str = "sugiyama",
+    include_edges: bool = True,
+    route_edges: bool = True,
+) -> bytes:
     """Build the full mxfile XML for a class diagram. Returns UTF-8 bytes."""
     classes = cd.classes
     n = len(classes)
 
-    # Build edges from associations (index-based)
-    # layout_edges excludes self-loops (igraph Sugiyama doesn't need them for placement)
-    # all_edges includes self-loops so _assign_edge_ports can assign corner anchors
     name_to_idx = {cls.name: i for i, cls in enumerate(classes)}
+
+    # Build generalization map first so all subtype→supertype edges enter the layout.
+    # cd.associations only lists ONE subtype per generalization relationship; the rest
+    # are declared via cls.specializes/cls.partitions and would be invisible to the
+    # layout engine if we relied solely on cd.associations.
+    gen_map: dict[str, dict] = {}
+    for cls in classes:
+        if cls.partitions:
+            for p in cls.partitions:
+                gen_map[p.name] = {"supertype": cls.name, "subtypes": list(p.subtypes)}
+
+    # Build edges from associations (index-based).
+    # layout_edges excludes self-loops (igraph Sugiyama doesn't need them for placement).
+    # all_edges includes self-loops so _assign_edge_ports can assign corner anchors.
+    # Generalization associations are skipped here — all their subtype edges are added
+    # below from gen_map so every subtype participates in the layout.
     layout_edges: list[tuple[int, int]] = []
     all_edges: list[tuple[int, int]] = []
     assoc_edge_idx: list[int | None] = []
     for assoc in cd.associations:
+        if assoc.name in gen_map:
+            assoc_edge_idx.append(None)
+            continue
         src = name_to_idx.get(assoc.point_1)
         tgt = name_to_idx.get(assoc.point_2)
         if src is not None and tgt is not None:
@@ -434,26 +521,43 @@ def _build_class_diagram_xml(domain: str, cd: ClassDiagramFile) -> bytes:
         else:
             assoc_edge_idx.append(None)
 
-    canvas_w = max(1200, n * 280)
-    canvas_h = max(800, 600)
+    # Add every subtype→supertype edge from gen_map into both edge lists
+    for info in gen_map.values():
+        sup_idx = name_to_idx.get(info["supertype"])
+        if sup_idx is None:
+            continue
+        for subtype in info["subtypes"]:
+            sub_idx = name_to_idx.get(subtype)
+            if sub_idx is not None:
+                all_edges.append((sub_idx, sup_idx))
+                layout_edges.append((sub_idx, sup_idx))
 
-    positions = _layout_for_canvas(n, layout_edges, canvas_w, canvas_h)
-    port_suffixes = _assign_edge_ports(all_edges, positions)
+    # Reserve space so no box overflows: layout positions are top-left corners,
+    # so the canvas must extend CLASS_W beyond the rightmost position and
+    # max_height beyond the bottommost position.
+    max_height = max(
+        (_class_height(len(cls.attributes), len(cls.methods)) for cls in classes),
+        default=HEADER_H + ROW_H + SEP_H + ROW_H,
+    )
 
-    # Apply greedy x-axis nudge pass to resolve horizontal overlaps
-    # Sort class indices by x position, then ensure each adjacent pair has gap >= CLASS_W
-    if n > 1:
-        sorted_indices = sorted(range(n), key=lambda i: positions[i][0])
-        pos_list = list(positions)
-        for k in range(1, len(sorted_indices)):
-            prev_i = sorted_indices[k - 1]
-            curr_i = sorted_indices[k]
-            if pos_list[curr_i][0] - pos_list[prev_i][0] < CLASS_W:
-                pos_list[curr_i] = (
-                    pos_list[prev_i][0] + CLASS_W,
-                    pos_list[curr_i][1],
-                )
-        positions = pos_list
+    # Node spacing: guarantee that for ANY pair orientation, at least one axis
+    # clears H_GAP pixels.  Euclidean-only scaling fails when boxes are tall and
+    # nodes are positioned diagonally — the correct bound is the hypotenuse of
+    # (CLASS_W + H_GAP) and (max_height + H_GAP), i.e. the worst-case diagonal.
+    H_GAP = 40
+    min_dist = math.hypot(CLASS_W + H_GAP, max_height + H_GAP)
+
+    if use_layout:
+        positions = _layout_for_canvas(n, layout_edges, min_dist, method=layout)
+    else:
+        positions = _grid_layout(n)
+
+    max_x = max((x for x, _ in positions), default=0)
+    max_y = max((y for _, y in positions), default=0)
+    canvas_w = int(max_x) + CLASS_W + MARGIN
+    canvas_h = int(max_y) + max_height + MARGIN
+
+    port_suffixes = _assign_edge_ports(all_edges, positions) if route_edges else [""] * len(all_edges)
 
     # Pre-compute per-class heights for self-loop waypoint calculation
     class_heights = {
@@ -483,11 +587,12 @@ def _build_class_diagram_xml(domain: str, cd: ClassDiagramFile) -> bytes:
         height = _class_height(len(cls.attributes), len(cls.methods))
         cid = class_id(domain, cls.name)
 
-        # Swimlane cell
+        # Swimlane cell — active classes get a distinct green fill
+        cls_style = STYLE_CLASS_ACTIVE if cls.stereotype == "active" else STYLE_CLASS
         cls_cell = etree.SubElement(
             root_el, "mxCell",
             id=cid, value=f"<<{cls.stereotype}>>\n{cls.name}",
-            style=STYLE_CLASS, vertex="1", parent="1",
+            style=cls_style, vertex="1", parent="1",
         )
         etree.SubElement(
             cls_cell, "mxGeometry",
@@ -542,9 +647,16 @@ def _build_class_diagram_xml(domain: str, cd: ClassDiagramFile) -> bytes:
             attrib={"as": "geometry"},
         )
 
-    # Association edges
+    if not include_edges:
+        etree.indent(mxfile, space="  ")
+        return etree.tostring(mxfile, encoding="unicode", xml_declaration=False).encode("utf-8")
+
+    # Association edges (skip generalizations — rendered separately below)
     self_loop_count: dict[int, int] = {}
     for i, assoc in enumerate(cd.associations):
+        if assoc.name in gen_map:
+            continue
+
         aid = association_id(domain, assoc.name)
         src_cid = class_id(domain, assoc.point_1)
         tgt_cid = class_id(domain, assoc.point_2)
@@ -583,28 +695,103 @@ def _build_class_diagram_xml(domain: str, cd: ClassDiagramFile) -> bytes:
             for wx, wy in waypoints:
                 etree.SubElement(arr, "mxPoint", x=str(int(wx)), y=str(int(wy)))
 
-        # Multiplicity + verb phrase near point_1 end
-        src_label = etree.SubElement(
-            root_el, "mxCell",
-            id=association_label_id(domain, assoc.name, "src"),
-            value=f"{assoc.mult_2_to_1}\n{assoc.phrase_2_to_1}",
-            style=STYLE_ASSOC_LABEL, vertex="1", parent=aid,
-        )
-        etree.SubElement(src_label, "mxGeometry",
-            x="-0.9", y="-10",
-            attrib={"relative": "1", "as": "geometry"})
+        # Multiplicity + verb phrase labels: split into 4 separate cells.
+        # Each label gets its own alignment — mult and phrase sit on opposite sides
+        # of a vertical edge, so they need opposite left/right alignment.
+        mult_src_y,   phrase_src_y   = _label_perp_y(port_suffix, "exit")
+        mult_tgt_y,   phrase_tgt_y   = _label_perp_y(port_suffix, "entry")
+        mult_src_style   = STYLE_ASSOC_LABEL + f"align={_label_align(port_suffix, 'exit',   mult_src_y)};verticalAlign={_label_valign(port_suffix, 'exit',   mult_src_y)};"
+        phrase_src_style = STYLE_ASSOC_LABEL + f"align={_label_align(port_suffix, 'exit',   phrase_src_y)};verticalAlign={_label_valign(port_suffix, 'exit',   phrase_src_y)};"
+        mult_tgt_style   = STYLE_ASSOC_LABEL + f"align={_label_align(port_suffix, 'entry',  mult_tgt_y)};verticalAlign={_label_valign(port_suffix, 'entry',  mult_tgt_y)};"
+        phrase_tgt_style = STYLE_ASSOC_LABEL + f"align={_label_align(port_suffix, 'entry',  phrase_tgt_y)};verticalAlign={_label_valign(port_suffix, 'entry',  phrase_tgt_y)};"
 
-        # Multiplicity + verb phrase near point_2 end
-        tgt_label = etree.SubElement(
-            root_el, "mxCell",
-            id=association_label_id(domain, assoc.name, "tgt"),
-            value=f"{assoc.mult_1_to_2}\n{assoc.phrase_1_to_2}",
-            style=STYLE_ASSOC_LABEL, vertex="1", parent=aid,
-        )
-        etree.SubElement(tgt_label, "mxGeometry",
-            x="0.9", y="-10",
-            attrib={"relative": "1", "as": "geometry"})
+        def _emit_label(cell_id, value, style, x, perp_y):
+            cell = etree.SubElement(root_el, "mxCell",
+                id=cell_id, value=value, style=style,
+                vertex="1", connectable="0", parent=aid)
+            etree.SubElement(cell, "mxGeometry",
+                x=str(x), y=str(perp_y),
+                attrib={"relative": "1", "as": "geometry"})
 
+        _emit_label(association_label_id(domain, assoc.name, "src_mult"),
+                    assoc.mult_2_to_1,
+                    mult_src_style,   -1.0, mult_src_y)
+        _emit_label(association_label_id(domain, assoc.name, "src_phrase"),
+                    _wrap_squarest(assoc.phrase_2_to_1),
+                    phrase_src_style, -1.0, phrase_src_y)
+        _emit_label(association_label_id(domain, assoc.name, "tgt_mult"),
+                    assoc.mult_1_to_2,
+                    mult_tgt_style,    1.0, mult_tgt_y)
+        _emit_label(association_label_id(domain, assoc.name, "tgt_phrase"),
+                    _wrap_squarest(assoc.phrase_1_to_2),
+                    phrase_tgt_style,  1.0, phrase_tgt_y)
+
+    # Generalization edges — one edge per subtype, hollow-triangle pointing at supertype
+    for rname, info in gen_map.items():
+        supertype = info["supertype"]
+        subtypes = info["subtypes"]
+        sup_idx = name_to_idx.get(supertype)
+        if sup_idx is None:
+            continue
+
+        sup_x, sup_y = positions[sup_idx]
+
+        # Compute average subtype position to determine which side of supertype they face
+        sub_positions = [positions[name_to_idx[s]] for s in subtypes if name_to_idx.get(s) is not None]
+        if not sub_positions:
+            continue
+        avg_sub_x = sum(p[0] for p in sub_positions) / len(sub_positions)
+        avg_sub_y = sum(p[1] for p in sub_positions) / len(sub_positions)
+        dx = avg_sub_x - sup_x
+        dy = avg_sub_y - sup_y
+
+        # Determine entry port on supertype
+        if abs(dy) >= abs(dx):
+            if dy >= 0:
+                entry_port = "entryX=0.5;entryY=1.0;entryDx=0;entryDy=0;"  # subtypes below → enter bottom
+            else:
+                entry_port = "entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;"  # subtypes above → enter top
+        else:
+            if dx >= 0:
+                entry_port = "entryX=1.0;entryY=0.5;entryDx=0;entryDy=0;"  # subtypes right → enter right
+            else:
+                entry_port = "entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;"  # subtypes left → enter left
+
+        for k, subtype in enumerate(subtypes):
+            sub_idx = name_to_idx.get(subtype)
+            if sub_idx is None:
+                continue
+            sub_x, sub_y = positions[sub_idx]
+
+            # Exit port on subtype: toward supertype
+            sdx = sup_x - sub_x
+            sdy = sup_y - sub_y
+            if abs(sdy) >= abs(sdx):
+                if sdy >= 0:
+                    exit_port = "exitX=0.5;exitY=1.0;exitDx=0;exitDy=0;"
+                else:
+                    exit_port = "exitX=0.5;exitY=0.0;exitDx=0;exitDy=0;"
+            else:
+                if sdx >= 0:
+                    exit_port = "exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;"
+                else:
+                    exit_port = "exitX=0.0;exitY=0.5;exitDx=0;exitDy=0;"
+
+            # First subtype edge carries the R-name label; rest are empty
+            edge_value = rname if k == 0 else ""
+            edge_id = association_id(domain, rname) + f":{subtype}"
+
+            gen_cell = etree.SubElement(
+                root_el, "mxCell",
+                id=edge_id, value=edge_value,
+                style=STYLE_GENERALIZATION + exit_port + entry_port, edge="1",
+                source=class_id(domain, subtype),
+                target=class_id(domain, supertype),
+                parent="1",
+            )
+            etree.SubElement(gen_cell, "mxGeometry", attrib={"relative": "1", "as": "geometry"})
+
+    etree.indent(mxfile, space="  ")
     return etree.tostring(mxfile, encoding="unicode", xml_declaration=False).encode("utf-8")
 
 
@@ -769,6 +956,7 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
             for wx, wy in trans_waypoints:
                 etree.SubElement(arr, "mxPoint", x=str(int(wx)), y=str(int(wy)))
 
+    etree.indent(mxfile, space="  ")
     return etree.tostring(mxfile, encoding="unicode", xml_declaration=False).encode("utf-8")
 
 
@@ -924,10 +1112,125 @@ def _valid_styles() -> frozenset[str]:
 
 
 _PORT_RE = re.compile(r'(exit|entry)[XYDxy]+=[^;]*;?')
+_PORT_VAL_RE = re.compile(r'(exit|entry)([XY])=([0-9.]+)')
 
 
 def _strip_port_tokens(style: str) -> str:
     return _PORT_RE.sub('', style)
+
+
+def _label_align(port_suffix: str, end: str, perp_y: int = 0) -> str:
+    """Return 'left', 'right', or 'center' alignment for a label near a given edge end.
+
+    For horizontal exits (left/right sides), text must extend AWAY from the box.
+    For vertical exits (top/bottom), text extends away from the edge line based on
+    which side (left/right) the label sits on, determined by the sign of perp_y.
+    end: 'exit' for the source label, 'entry' for the target label.
+    perp_y: perpendicular offset for this specific label (from _label_perp_y).
+    """
+    if not port_suffix:
+        return "center"
+    vals: dict[str, float] = {}
+    for m in _PORT_VAL_RE.finditer(port_suffix):
+        direction, axis, value = m.group(1), m.group(2), float(m.group(3))
+        if direction == end:
+            vals[axis] = value
+    px = vals.get("X")
+    if px is None:
+        return "center"
+    if px < 0.01:
+        return "right"   # left-side exit: text extends leftward (right-align)
+    if px > 0.99:
+        return "left"    # right-side exit: text extends rightward (left-align)
+    # Vertical exit/entry: determine if edge goes upward at this endpoint.
+    # Draw.io perpendicular y is edge-direction-relative, so the sign meaning
+    # flips for upward edges: y > 0 = canvas LEFT (not RIGHT).
+    py = vals.get("Y", 0.5)
+    edge_upward = (py < 0.1 and end == "exit") or (py > 0.9 and end == "entry")
+    effective_perp = -perp_y if edge_upward else perp_y
+    if effective_perp > 0:
+        return "left"
+    if effective_perp < 0:
+        return "right"
+    return "center"
+
+
+def _wrap_squarest(text: str) -> str:
+    """Wrap text at a single word boundary closest to PHRASE_TARGET_RATIO (width:height)."""
+    words = text.split()
+    n = len(words)
+    if n <= 1:
+        return text
+    CHAR_W, LINE_H = 7, 16
+
+    def _score(lines):
+        w = max(len(l) for l in lines) * CHAR_W
+        h = len(lines) * LINE_H
+        return abs(w / max(h, 1) - PHRASE_TARGET_RATIO)
+
+    best, best_score = text, _score([text])
+    for i in range(1, n):
+        candidate = " ".join(words[:i]) + "\n" + " ".join(words[i:])
+        s = _score(candidate.split("\n"))
+        if s < best_score:
+            best_score, best = s, candidate
+    return best
+
+
+def _label_perp_y(port_suffix: str, end: str) -> tuple[int, int]:
+    """Return signed perpendicular y offsets for (multiplicity, phrase) labels.
+
+    Puts mult on visual-left (vertical edge) or visual-top (horizontal edge).
+    end: 'exit' for source labels, 'entry' for target labels.
+    """
+    if not port_suffix:
+        return (-LABEL_PERP_OFFSET, +LABEL_PERP_OFFSET)
+    vals: dict[str, float] = {}
+    for m in _PORT_VAL_RE.finditer(port_suffix):
+        if m.group(1) == end:
+            vals[m.group(2)] = float(m.group(3))
+    px, py = vals.get("X", 0.5), vals.get("Y", 0.5)
+    if end == "exit":
+        positive = (py > 0.9) or (px < 0.1)   # exit bottom or exit left
+    else:
+        positive = (py < 0.1) or (px > 0.9)   # entry top or entry right
+    mult_y = +LABEL_PERP_OFFSET if positive else -LABEL_PERP_OFFSET
+    return mult_y, -mult_y
+
+
+def _label_valign(port_suffix: str, end: str, perp_y: int = 0) -> str:
+    """Return verticalAlign for a label at the given end.
+
+    Pins a vertex of the label box to the exit/entry anchor:
+      bottom exit → 'top'    (label hangs below the anchor)
+      top exit    → 'bottom' (label sits above the anchor)
+      left/right  → 'top' or 'bottom' based on perp_y sign (vertex pinning)
+    end: 'exit' for source labels, 'entry' for target labels.
+    perp_y: perpendicular offset for this specific label (from _label_perp_y).
+    """
+    if not port_suffix:
+        return "middle"
+    vals: dict[str, float] = {}
+    for m in _PORT_VAL_RE.finditer(port_suffix):
+        if m.group(1) == end:
+            vals[m.group(2)] = float(m.group(3))
+    px = vals.get("X", 0.5)
+    py = vals.get("Y", 0.5)
+    if py > 0.9:
+        return "top"      # exits/enters through bottom face
+    if py < 0.1:
+        return "bottom"   # exits/enters through top face
+    # Horizontal exit/entry (left or right face): pin the near vertex of the label.
+    # Draw.io perpendicular y is edge-direction-relative, so the sign meaning
+    # flips for right-going edges: y > 0 = canvas UP (not DOWN).
+    edge_rightward = (px > 0.99 and end == "exit") or (px < 0.01 and end == "entry")
+    effective_perp = -perp_y if edge_rightward else perp_y
+    if effective_perp > 0:
+        return "top"    # label displaced downward → pin top vertex at anchor
+    if effective_perp < 0:
+        return "bottom" # label displaced upward   → pin bottom vertex at anchor
+    return "middle"
+
 
 
 def _style_is_valid(style: str, valid: frozenset[str]) -> bool:
@@ -937,7 +1240,12 @@ def _style_is_valid(style: str, valid: frozenset[str]) -> bool:
     if style.rstrip(";") in valid:
         return True
     port_stripped = _strip_port_tokens(style).rstrip(";")
-    return port_stripped in valid
+    if port_stripped in valid:
+        return True
+    # Strip dynamic per-cell alignment properties (appended after base style)
+    s = re.sub(r';verticalAlign=[^;]+$', '', port_stripped)
+    s = re.sub(r';align=[^;]+$', '', s)
+    return s in valid
 
 
 def _strip_html(text: str) -> str:

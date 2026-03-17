@@ -656,16 +656,16 @@ def test_association_multiplicity_labels(tmp_domain, tmp_path):
     render_to_drawio_class(tmp_domain)
     drawio_path = tmp_path / ".design" / "model" / "diagrams" / f"{tmp_domain}-class-diagram.drawio"
     cells = _cells_by_id(drawio_path.read_bytes())
-    src_cell = cells.get("hydraulics:assoc_mult:R1:src")
-    tgt_cell = cells.get("hydraulics:assoc_mult:R1:tgt")
-    assert src_cell is not None, "hydraulics:assoc_mult:R1:src cell not found"
-    assert tgt_cell is not None, "hydraulics:assoc_mult:R1:tgt cell not found"
-    assert src_cell.get("value", "").startswith("M"), f"src label value={src_cell.get('value')!r}, expected to start with 'M'"
-    assert tgt_cell.get("value", "").startswith("1"), f"tgt label value={tgt_cell.get('value')!r}, expected to start with '1'"
+    src_cell = cells.get("hydraulics:assoc_mult:R1:src_mult")
+    tgt_cell = cells.get("hydraulics:assoc_mult:R1:tgt_mult")
+    assert src_cell is not None, "hydraulics:assoc_mult:R1:src_mult cell not found"
+    assert tgt_cell is not None, "hydraulics:assoc_mult:R1:tgt_mult cell not found"
+    assert src_cell.get("value") == "M", f"src_mult value={src_cell.get('value')!r}, expected 'M'"
+    assert tgt_cell.get("value") == "1", f"tgt_mult value={tgt_cell.get('value')!r}, expected '1'"
 
 
 def test_association_edge_has_verb_phrases(tmp_domain, tmp_path):
-    """R1 verb phrases appear in the endpoint label cells, not the center edge label."""
+    """R1 verb phrases appear in the endpoint phrase cells, not the center edge label."""
     render_to_drawio_class(tmp_domain)
     drawio_path = tmp_path / ".design" / "model" / "diagrams" / f"{tmp_domain}-class-diagram.drawio"
     cells = _cells_by_id(drawio_path.read_bytes())
@@ -673,13 +673,15 @@ def test_association_edge_has_verb_phrases(tmp_domain, tmp_path):
     r1_cell = cells.get("hydraulics:assoc:R1")
     assert r1_cell is not None, "R1 association cell not found"
     assert r1_cell.get("value") == "R1", f"Center label should be 'R1', got {r1_cell.get('value')!r}"
-    # Verb phrases live in the endpoint labels
-    src_cell = cells.get("hydraulics:assoc_mult:R1:src")
-    tgt_cell = cells.get("hydraulics:assoc_mult:R1:tgt")
-    assert src_cell is not None and "is driven by" in src_cell.get("value", ""), \
-        f"src label {src_cell.get('value') if src_cell else 'missing'!r} missing 'is driven by'"
-    assert tgt_cell is not None and "drives" in tgt_cell.get("value", ""), \
-        f"tgt label {tgt_cell.get('value') if tgt_cell else 'missing'!r} missing 'drives'"
+    # Verb phrases live in the phrase cells
+    src_phrase = cells.get("hydraulics:assoc_mult:R1:src_phrase")
+    tgt_phrase = cells.get("hydraulics:assoc_mult:R1:tgt_phrase")
+    assert src_phrase is not None, "hydraulics:assoc_mult:R1:src_phrase cell not found"
+    assert "is driven by" in src_phrase.get("value", "").replace("\n", " "), \
+        f"src_phrase {src_phrase.get('value')!r} missing 'is driven by'"
+    assert tgt_phrase is not None, "hydraulics:assoc_mult:R1:tgt_phrase cell not found"
+    assert "drives" in tgt_phrase.get("value", "").replace("\n", " "), \
+        f"tgt_phrase {tgt_phrase.get('value')!r} missing 'drives'"
 
 
 def test_sync_unrecognized_cell(tmp_domain, tmp_path):

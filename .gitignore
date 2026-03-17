@@ -5,6 +5,9 @@ __pycache__/
 *.egg-info/
 dist/
 
+# Test render output (for visual inspection)
+tests/output/
+
 # Local Settings
 settings.local.json
 .claude/settings.local.json
