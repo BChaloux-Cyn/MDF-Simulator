@@ -133,7 +133,7 @@ def tmp_domain(tmp_path, monkeypatch):
 def test_render_class_diagram(tmp_domain, tmp_path):
     """MCP-05: Rendered class-diagram.drawio exists and contains class names."""
     result = render_to_drawio(tmp_domain)
-    drawio_path = tmp_path / ".design" / "model" / tmp_domain / "class-diagram.drawio"
+    drawio_path = tmp_path / ".design" / "model" / "diagrams" / f"{tmp_domain}-class-diagram.drawio"
     assert drawio_path.exists(), "class-diagram.drawio was not created"
     xml_bytes = drawio_path.read_bytes()
     assert b"Valve" in xml_bytes
@@ -143,7 +143,7 @@ def test_render_class_diagram(tmp_domain, tmp_path):
 def test_render_idempotent(tmp_domain, tmp_path):
     """MCP-05: Calling render twice produces byte-identical XML."""
     render_to_drawio(tmp_domain)
-    drawio_path = tmp_path / ".design" / "model" / tmp_domain / "class-diagram.drawio"
+    drawio_path = tmp_path / ".design" / "model" / "diagrams" / f"{tmp_domain}-class-diagram.drawio"
     first_bytes = drawio_path.read_bytes()
     render_to_drawio(tmp_domain)
     second_bytes = drawio_path.read_bytes()
@@ -153,7 +153,7 @@ def test_render_idempotent(tmp_domain, tmp_path):
 def test_render_skip_unchanged(tmp_domain, tmp_path):
     """MCP-05: Second render does not modify mtime (or reports status 'skipped')."""
     result1 = render_to_drawio(tmp_domain)
-    drawio_path = tmp_path / ".design" / "model" / tmp_domain / "class-diagram.drawio"
+    drawio_path = tmp_path / ".design" / "model" / "diagrams" / f"{tmp_domain}-class-diagram.drawio"
     mtime_after_first = drawio_path.stat().st_mtime
 
     result2 = render_to_drawio(tmp_domain)
@@ -424,7 +424,7 @@ def test_state_height_grows_with_entry_action(tmp_domain_rich, tmp_path):
     """Running state height is greater than STATE_H when it has a multi-line entry_action."""
     from tools.drawio import STATE_H
     result = render_to_drawio_state(tmp_domain_rich, "Pump")
-    drawio_path = tmp_path / ".design" / "model" / tmp_domain_rich / "state-diagrams" / "Pump.drawio"
+    drawio_path = tmp_path / ".design" / "model" / "diagrams" / f"{tmp_domain_rich}-Pump.drawio"
     cells = _cells_by_id(drawio_path.read_bytes())
     running_cell = cells.get("hydraulics:state:Pump:Running")
     assert running_cell is not None, "Running state cell not found"
@@ -437,7 +437,7 @@ def test_state_height_minimum_without_entry_action(tmp_domain_rich, tmp_path):
     """Idle state height equals STATE_H (no entry_action)."""
     from tools.drawio import STATE_H
     render_to_drawio_state(tmp_domain_rich, "Pump")
-    drawio_path = tmp_path / ".design" / "model" / tmp_domain_rich / "state-diagrams" / "Pump.drawio"
+    drawio_path = tmp_path / ".design" / "model" / "diagrams" / f"{tmp_domain_rich}-Pump.drawio"
     cells = _cells_by_id(drawio_path.read_bytes())
     idle_cell = cells.get("hydraulics:state:Pump:Idle")
     assert idle_cell is not None, "Idle state cell not found"
@@ -449,7 +449,7 @@ def test_state_height_minimum_without_entry_action(tmp_domain_rich, tmp_path):
 def test_transition_label_has_xy_offset(tmp_domain, tmp_path):
     """Transition mxGeometry has non-zero x and y attributes for label offset."""
     render_to_drawio_state(tmp_domain, "Pump")
-    drawio_path = tmp_path / ".design" / "model" / tmp_domain / "state-diagrams" / "Pump.drawio"
+    drawio_path = tmp_path / ".design" / "model" / "diagrams" / f"{tmp_domain}-Pump.drawio"
     cells = _cells_by_id(drawio_path.read_bytes())
     trans_cells = {k: v for k, v in cells.items() if ":trans:" in k and "__initial__" not in k}
     assert trans_cells, "No transition cells found"
@@ -465,7 +465,7 @@ def test_transition_label_has_xy_offset(tmp_domain, tmp_path):
 def test_no_duplicate_exit_anchors(tmp_domain_rich, tmp_path):
     """For each source state, all outgoing edges have unique (exitX, exitY) pairs."""
     render_to_drawio_state(tmp_domain_rich, "Pump")
-    drawio_path = tmp_path / ".design" / "model" / tmp_domain_rich / "state-diagrams" / "Pump.drawio"
+    drawio_path = tmp_path / ".design" / "model" / "diagrams" / f"{tmp_domain_rich}-Pump.drawio"
     from lxml import etree
     root = etree.fromstring(drawio_path.read_bytes())
     # Group edges by source attribute
@@ -491,7 +491,7 @@ def test_no_duplicate_exit_anchors(tmp_domain_rich, tmp_path):
 def test_no_duplicate_entry_anchors(tmp_domain_rich, tmp_path):
     """For each target state, all incoming edges have unique (entryX, entryY) pairs."""
     render_to_drawio_state(tmp_domain_rich, "Pump")
-    drawio_path = tmp_path / ".design" / "model" / tmp_domain_rich / "state-diagrams" / "Pump.drawio"
+    drawio_path = tmp_path / ".design" / "model" / "diagrams" / f"{tmp_domain_rich}-Pump.drawio"
     from lxml import etree
     root = etree.fromstring(drawio_path.read_bytes())
     target_to_entries = {}
@@ -517,7 +517,7 @@ def test_all_transitions_have_edge_cells(tmp_domain_rich, tmp_path):
     """Count of domain:trans:* cells matches len(sd.transitions)."""
     import yaml as _yaml
     render_to_drawio_state(tmp_domain_rich, "Pump")
-    drawio_path = tmp_path / ".design" / "model" / tmp_domain_rich / "state-diagrams" / "Pump.drawio"
+    drawio_path = tmp_path / ".design" / "model" / "diagrams" / f"{tmp_domain_rich}-Pump.drawio"
     cells = _cells_by_id(drawio_path.read_bytes())
     trans_cells = [k for k in cells if ":trans:" in k and "__initial__" not in k]
     yaml_path = tmp_path / ".design" / "model" / tmp_domain_rich / "state-diagrams" / "Pump.yaml"
@@ -561,7 +561,7 @@ def test_self_referential_association_has_corner_anchors(tmp_path, monkeypatch):
     )
     monkeypatch.chdir(tmp_path)
     render_to_drawio_class("testcd")
-    drawio_path = tmp_path / ".design" / "model" / "testcd" / "class-diagram.drawio"
+    drawio_path = tmp_path / ".design" / "model" / "diagrams" / "testcd-class-diagram.drawio"
     from lxml import etree
     root = etree.fromstring(drawio_path.read_bytes())
     self_assoc = [
@@ -590,7 +590,7 @@ def test_self_referential_association_has_corner_anchors(tmp_path, monkeypatch):
 def test_association_edges_have_no_arrows(tmp_domain, tmp_path):
     """Association edge styles must not render arrowheads (endArrow=none, startArrow=none)."""
     render_to_drawio_class(tmp_domain)
-    drawio_path = tmp_path / ".design" / "model" / tmp_domain / "class-diagram.drawio"
+    drawio_path = tmp_path / ".design" / "model" / "diagrams" / f"{tmp_domain}-class-diagram.drawio"
     from lxml import etree
     root = etree.fromstring(drawio_path.read_bytes())
     assoc_cells = [
@@ -625,7 +625,7 @@ def test_self_loop_has_orthogonal_anchors(tmp_path, monkeypatch):
     )
     monkeypatch.chdir(tmp_path)
     render_to_drawio_state("testdomain", "Widget")
-    drawio_path = tmp_path / ".design" / "model" / "testdomain" / "state-diagrams" / "Widget.drawio"
+    drawio_path = tmp_path / ".design" / "model" / "diagrams" / "testdomain-Widget.drawio"
     from lxml import etree
     root = etree.fromstring(drawio_path.read_bytes())
     self_loops = [
@@ -654,7 +654,7 @@ def test_self_loop_has_orthogonal_anchors(tmp_path, monkeypatch):
 def test_association_multiplicity_labels(tmp_domain, tmp_path):
     """Multiplicity label cells exist with correct values for R1."""
     render_to_drawio_class(tmp_domain)
-    drawio_path = tmp_path / ".design" / "model" / tmp_domain / "class-diagram.drawio"
+    drawio_path = tmp_path / ".design" / "model" / "diagrams" / f"{tmp_domain}-class-diagram.drawio"
     cells = _cells_by_id(drawio_path.read_bytes())
     src_cell = cells.get("hydraulics:assoc_mult:R1:src")
     tgt_cell = cells.get("hydraulics:assoc_mult:R1:tgt")
@@ -667,7 +667,7 @@ def test_association_multiplicity_labels(tmp_domain, tmp_path):
 def test_association_edge_has_verb_phrases(tmp_domain, tmp_path):
     """R1 verb phrases appear in the endpoint label cells, not the center edge label."""
     render_to_drawio_class(tmp_domain)
-    drawio_path = tmp_path / ".design" / "model" / tmp_domain / "class-diagram.drawio"
+    drawio_path = tmp_path / ".design" / "model" / "diagrams" / f"{tmp_domain}-class-diagram.drawio"
     cells = _cells_by_id(drawio_path.read_bytes())
     # Center edge label should be just the R-number
     r1_cell = cells.get("hydraulics:assoc:R1")

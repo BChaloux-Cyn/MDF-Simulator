@@ -374,7 +374,7 @@ def _structure_matches_class(
     domain_path: Path, domain: str, cd: ClassDiagramFile
 ) -> bool:
     """Return True if existing class-diagram.drawio has the same element set."""
-    drawio_path = domain_path / "class-diagram.drawio"
+    drawio_path = domain_path.parent / "diagrams" / f"{domain}-class-diagram.drawio"
     existing = _extract_drawio_ids(drawio_path)
     if existing is None:
         return False
@@ -403,7 +403,7 @@ def _structure_matches_state(
     domain_path: Path, domain: str, class_name: str, sd: StateDiagramFile
 ) -> bool:
     """Return True if existing state diagram .drawio has the same element set."""
-    drawio_path = domain_path / "state-diagrams" / f"{class_name}.drawio"
+    drawio_path = domain_path.parent / "diagrams" / f"{domain}-{class_name}.drawio"
     existing = _extract_drawio_ids(drawio_path)
     if existing is None:
         return False
@@ -809,7 +809,9 @@ def render_to_drawio_class(domain: str) -> list[dict]:
             severity="error",
         )]
 
-    drawio_path = domain_path / "class-diagram.drawio"
+    diagrams_dir = domain_path.parent / "diagrams"
+    diagrams_dir.mkdir(parents=True, exist_ok=True)
+    drawio_path = diagrams_dir / f"{domain}-class-diagram.drawio"
 
     if _structure_matches_class(domain_path, domain, cd):
         return [{"file": str(drawio_path), "status": "skipped"}]
@@ -851,9 +853,9 @@ def render_to_drawio_state(domain: str, class_name: str) -> list[dict]:
             severity="error",
         )]
 
-    drawio_dir = domain_path / "state-diagrams"
+    drawio_dir = domain_path.parent / "diagrams"
     drawio_dir.mkdir(parents=True, exist_ok=True)
-    drawio_path = drawio_dir / f"{class_name}.drawio"
+    drawio_path = drawio_dir / f"{domain}-{class_name}.drawio"
 
     if _structure_matches_state(domain_path, domain, class_name, sd):
         return [{"file": str(drawio_path), "status": "skipped"}]
