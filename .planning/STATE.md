@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04.1-02-PLAN.md
-last_updated: "2026-03-17T12:38:18.491Z"
+stopped_at: Completed 04.1-03-PLAN.md
+last_updated: "2026-03-17T12:43:35.302Z"
 last_activity: 2026-03-11 — validate_drawio and sync_from_drawio implemented; all 5 Draw.io MCP tools registered
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 20
-  completed_plans: 16
+  completed_plans: 17
   percent: 100
 ---
 
@@ -66,6 +66,7 @@ Progress: [██████████] 100%
 | Phase 04-draw-io-tools P03 | 25 | 2 tasks | 3 files |
 | Phase 04.1-model-development-and-compiler-testing P01 | 10 | 2 tasks | 2 files |
 | Phase 04.1-model-development-and-compiler-testing P02 | 7 | 2 tasks | 6 files |
+| Phase 04.1-model-development-and-compiler-testing P03 | 10 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -109,6 +110,8 @@ Recent decisions affecting current work:
 - [Phase 04.1-model-development-and-compiler-testing]: When schema field removed: audit validation.py and test files for all references (code + comments) in lock-step
 - [Phase 04.1-model-development-and-compiler-testing]: ELV-003 resolved via Option A (explicit R14 association) — R11 already taken by Elevator-Shaft, so R14 used for queue head pointer
 - [Phase 04.1-model-development-and-compiler-testing]: Attribute.visibility and Method.visibility defaults changed from public to private — consistent with phase-01 schema decision
+- [Phase 04.1-model-development-and-compiler-testing]: ELV-006 resolved via Option A (Elevator adds Door_closed, relays to active Request) — keeps Door decoupled from Request
+- [Phase 04.1-model-development-and-compiler-testing]: ELV-007 pragmatic workaround: select any fc from instances of FloorCall where floor_num != 0 — formal Dispatcher-FloorCall association deferred to Phase 4.2
 
 ### Roadmap Evolution
 
@@ -124,6 +127,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-17T12:38:18.487Z
-Stopped at: Completed 04.1-02-PLAN.md
+Last session: 2026-03-17T12:43:35.297Z
+Stopped at: Completed 04.1-03-PLAN.md
 Resume file: None
