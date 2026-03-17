@@ -14,6 +14,7 @@ events:
   - name: Stopped
   - name: Service_complete
   - name: Elevator_available
+  - name: Door_closed
 states:
   - name: Idle
     entry_action: >-
@@ -38,7 +39,7 @@ states:
       generate Stop to shaft;
   - name: At_Floor
     entry_action: >-
-      select any next_req from instances of Request where request_id == self.r_queue_head_id;
+      select any next_req from instances of Request where request_id == self.r14_request_id;
       if next_req != empty;
         if next_req.destination_floor > self.current_floor; self.next_direction = Up; end if;
         if next_req.destination_floor < self.current_floor; self.next_direction = Down; end if;
@@ -48,10 +49,10 @@ states:
         else; self.next_direction = Stopped; end if;
       end if;
       select any floor_inst from instances of Floor where floor_num == self.current_floor;
-      select any indicator from instances of FloorIndicator where r10_elevator_id == self.elevator_id and r10_floor_num == self.current_floor;
-      generate Direction_set to indicator;
+      select any indicator from instances of FloorIndicator where r10_elevator_id == self.elevator_id and r13_floor_num == self.current_floor;
+      generate Direction_set(direction: self.next_direction) to indicator;
       generate Elevator_arrived to floor_inst;
-      generate Open_door to SELF;
+      generate Open_door to self;
 transitions:
   - from: Idle
     to: Moving_Up
@@ -90,6 +91,12 @@ transitions:
   - from: Stopping
     to: At_Floor
     event: Stopped
+  - from: At_Floor
+    to: Idle
+    event: Door_closed
+    action: >-
+      select any req from instances of Request where r2_elevator_id == self.elevator_id;
+      if req != empty; generate Door_closed to req; end if;
   - from: At_Floor
     to: Idle
     event: Service_complete

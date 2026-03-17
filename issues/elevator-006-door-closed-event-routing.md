@@ -55,14 +55,22 @@ Current recommendation: **Option A** — minimal model change, keeps coupling lo
 
 ## Fix Applied
 
-_Pending. Awaiting design decision on routing option._
+Applied in Phase 04.1 Plan 03 (2026-03-17). **Option A selected.**
+
+Changes made to `Elevator.yaml`:
+1. Added `Door_closed` to events list (after `Elevator_available`).
+2. Added new At_Floor→Idle transition on `Door_closed` event with action that relays
+   `Door_closed` to the active `Request` (selected via `r2_elevator_id == self.elevator_id`).
+3. Retained At_Floor→Idle transition on `Service_complete` as a fallback.
+
+`Door.yaml` required no changes — it already generates `Door_closed` to `r1_elevator_id` (the Elevator).
 
 ## Change Log
 
 | Date | File | Change |
 |------|------|--------|
-| | `Elevator/state-diagrams/Elevator.yaml` | Add `Door_closed` event (Option A) or adjust At_Floor→Idle trigger |
-| | `Elevator/state-diagrams/Door.yaml` | Confirm or update target of `Door_closed` generate |
+| 2026-03-17 | `Elevator/state-diagrams/Elevator.yaml` | Added Door_closed event; added At_Floor→Idle Door_closed relay transition |
+| 2026-03-17 | `Elevator/state-diagrams/Door.yaml` | No change needed — already sends Door_closed to r1_elevator_id |
 
 ## Tests Added
 

@@ -40,13 +40,20 @@ flag it as an error. A valid target is one of:
 
 ## Fix Applied
 
-_Pending._
+Applied in Phase 04.1 Plan 03 (2026-03-17).
+
+Changes made to `Elevator.yaml`:
+1. Replaced `r_queue_head_id` with `r14_request_id` (correct referential from Plan 02 R14 association).
+2. Replaced `r10_floor_num` with `r13_floor_num` (correct referential — FloorIndicator formalizes R13).
+3. Added `(direction: self.next_direction)` param to `generate Direction_set`.
+4. `generate Elevator_arrived to floor_inst` was already using bound variable `floor_inst` — confirmed correct.
+5. Changed `generate Open_door to SELF` to `generate Open_door to self` (lowercase canonical form).
 
 ## Change Log
 
 | Date | File | Change |
 |------|------|--------|
-| | `Elevator/state-diagrams/Elevator.yaml` | Replace `generate Elevator_arrived to Floor;` with select + generate to instance variable |
+| 2026-03-17 | `Elevator/state-diagrams/Elevator.yaml` | Fixed At_Floor entry_action: r14_request_id, r13_floor_num, Direction_set param, Open_door target |
 
 ## Tests Added
 
