@@ -354,7 +354,7 @@ def test_attribute_visibility_scope_explicit():
                     {
                         "name": "pressure",
                         "type": "Real",
-                        "visibility": "protected",
+                        "visibility": "private",
                         "scope": "instance",
                     },
                 ],
@@ -372,7 +372,7 @@ def test_attribute_visibility_scope_explicit():
     attrs = result.classes[0].attributes
     assert attrs[0].visibility == "public"
     assert attrs[0].scope == "class"
-    assert attrs[1].visibility == "protected"
+    assert attrs[1].visibility == "private"
     assert attrs[1].scope == "instance"
     method = result.classes[0].methods[0]
     assert method.visibility == "public"

@@ -154,6 +154,25 @@ def _is_valid_type(type_str: str, domain_types: frozenset[str]) -> bool:
     return type_str in _SCALAR_PRIMITIVES or type_str in domain_types
 
 
+def _get_effective_attributes(cls, class_map: dict) -> list:
+    """Return cls.attributes merged with supertype identifier attributes for subtypes.
+
+    If cls.specializes is not None, find the supertype that declares a partition
+    for cls.specializes and prepend its identifier attributes to cls.attributes.
+    This implements ELV-001: subtypes inherit supertype identifier attributes.
+    """
+    if cls.specializes is None:
+        return list(cls.attributes)
+    # Find the supertype: a class with a partition whose name matches cls.specializes
+    for candidate in class_map.values():
+        for partition in (candidate.partitions or []):
+            if partition.name == cls.specializes:
+                # Return supertype identifiers + subtype attributes
+                supertype_ids = [a for a in candidate.attributes if a.identifier]
+                return supertype_ids + list(cls.attributes)
+    return list(cls.attributes)
+
+
 # ---------------------------------------------------------------------------
 # Referential integrity: class-diagram
 # ---------------------------------------------------------------------------
@@ -166,6 +185,7 @@ def _check_referential_integrity_class_diagram(
 ) -> list[dict]:
     issues = []
     class_names = {c.name for c in cd.classes}
+    class_map = {c.name: c for c in cd.classes}
     assoc_names = {a.name for a in cd.associations}
     loc_cd = f"{domain}::class-diagram.yaml"
 
@@ -211,6 +231,26 @@ def _check_referential_integrity_class_diagram(
                         f"that owns '{cls.specializes}'"
                     ),
                 ))
+        # ELV-001: check that subtypes do not re-declare identifier attributes
+        # that already exist on the supertype.
+        if cls.specializes is not None:
+            effective_attrs = _get_effective_attributes(cls, class_map)
+            subtype_attr_names = {a.name for a in cls.attributes}
+            for supertype_attr in effective_attrs:
+                if supertype_attr.identifier and supertype_attr.name in subtype_attr_names:
+                    issues.append(_make_issue(
+                        issue=(
+                            f"Subtype '{cls.name}' re-declares identifier attribute "
+                            f"'{supertype_attr.name}' that exists on its supertype"
+                        ),
+                        location=f"{loc_cd}::classes.{cls.name}.attributes.{supertype_attr.name}",
+                        value=supertype_attr.name,
+                        fix=(
+                            f"Remove '{supertype_attr.name}' from '{cls.name}' — "
+                            f"it is inherited from the supertype via '{cls.specializes}'"
+                        ),
+                    ))
+
         # Attributes: type must be primitive or in types.yaml
         for attr in cls.attributes:
             if not _is_valid_type(attr.type, domain_types):
