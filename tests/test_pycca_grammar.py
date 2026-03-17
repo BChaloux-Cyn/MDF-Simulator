@@ -67,4 +67,6 @@ def test_statement_select_any():
 
 def test_statement_if():
     from pycca.grammar import STATEMENT_PARSER
-    STATEMENT_PARSER.parse("if x > 0; self.y = 1; end if;")
+    # Grammar extended in 04.1-04 to use brace syntax (if (expr) { stmts })
+    # Old semicolon-style "if x > 0; ... end if;" is no longer supported.
+    STATEMENT_PARSER.parse("if (x > 0) { self.y = 1; }")
