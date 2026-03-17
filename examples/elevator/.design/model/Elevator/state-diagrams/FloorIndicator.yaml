@@ -1,7 +1,7 @@
 schema_version: "1.0.0"
 domain: Elevator
 class: FloorIndicator
-initial_state: Off
+initial_state: "Off"
 events:
   - name: Direction_set
     params:
@@ -9,27 +9,29 @@ events:
         type: Direction
   - name: Reset
 states:
-  - name: Off
+  - name: "Off"
   - name: Showing_Up
+    entry_action: "self.direction = Up;"
   - name: Showing_Down
+    entry_action: "self.direction = Down;"
 transitions:
-  - from: Off
+  - from: "Off"
     to: Showing_Up
     event: Direction_set
     guard: "direction == Up"
-  - from: Off
+  - from: "Off"
     to: Showing_Down
     event: Direction_set
     guard: "direction == Down"
-  - from: Off
-    to: Off
+  - from: "Off"
+    to: "Off"
     event: Direction_set
     guard: "direction == Stopped"
   - from: Showing_Up
-    to: Off
+    to: "Off"
     event: Reset
   - from: Showing_Down
-    to: Off
+    to: "Off"
     event: Reset
   - from: Showing_Up
     to: Showing_Down

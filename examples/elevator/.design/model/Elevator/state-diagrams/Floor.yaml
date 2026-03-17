@@ -10,7 +10,7 @@ states:
   - name: Serving
     entry_action: >-
       select any fc from instances of FloorCall where floor_num == self.floor_num;
-      if fc != empty; generate Elevator_arrived to fc; end if;
+      if (fc != empty) { generate Elevator_arrived to fc; }
 transitions:
   - from: Available
     to: Serving
