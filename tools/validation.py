@@ -119,7 +119,6 @@ def _check_missing_state_diagram(
         cls_def = next((c for c in class_defs if c.name == class_name), None)
         if cls_def and cls_def.specializes is not None:
             # Subtype class — check if supertype state diagram exists
-            # Find the supertype via formalizes/specializes R-number (checked by referential integrity)
             # For the missing-file check: if the class specializes, allow missing state diagram
             pass
         else:
@@ -188,7 +187,7 @@ def _check_referential_integrity_class_diagram(
             for part in cls.partitions:
                 partition_map.setdefault(part.name, set()).update(part.subtypes)
 
-    # Classes: specializes and formalizes R-numbers must exist in associations
+    # Classes: specializes R-numbers must exist in associations
     for cls in cd.classes:
         if cls.specializes is not None and cls.specializes not in assoc_names:
             issues.append(_make_issue(
@@ -212,14 +211,6 @@ def _check_referential_integrity_class_diagram(
                         f"that owns '{cls.specializes}'"
                     ),
                 ))
-        if cls.formalizes is not None and cls.formalizes not in assoc_names:
-            issues.append(_make_issue(
-                issue=f"Class '{cls.name}' formalizes R-number '{cls.formalizes}' which is not in associations",
-                location=f"{loc_cd}::classes.{cls.name}.formalizes",
-                value=cls.formalizes,
-                fix=f"Add association '{cls.formalizes}' or correct the formalizes field",
-            ))
-
         # Attributes: type must be primitive or in types.yaml
         for attr in cls.attributes:
             if not _is_valid_type(attr.type, domain_types):
@@ -914,13 +905,6 @@ def validate_class(
                 location=f"{loc_cd}::classes.{cls_def.name}.specializes",
                 value=cls_def.specializes,
                 fix=f"Add association '{cls_def.specializes}' or correct the specializes field",
-            ))
-        if cls_def.formalizes is not None and cls_def.formalizes not in assoc_names:
-            issues.append(_make_issue(
-                issue=f"Class '{cls_def.name}' formalizes R-number '{cls_def.formalizes}' which is not in associations",
-                location=f"{loc_cd}::classes.{cls_def.name}.formalizes",
-                value=cls_def.formalizes,
-                fix=f"Add association '{cls_def.formalizes}' or correct the formalizes field",
             ))
         for attr in cls_def.attributes:
             if not _is_valid_type(attr.type, domain_types):
