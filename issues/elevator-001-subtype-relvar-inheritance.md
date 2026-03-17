@@ -27,13 +27,27 @@ e.g., `r7_button_id` = R7 pointing to `CallButton`, whose identifier is `button_
 
 ## Fix Applied
 
-_Pending._
+Partial fix applied in Phase 04.1 Plan 02:
+
+1. **Model fix (ELV-001):** Removed redundant `call_id` attribute from `ElevatorCall` and
+   `FloorCall` — both subtypes no longer re-declare the identifier inherited from `Call`.
+
+2. **Validator fix:** Added `_get_effective_attributes(cls, class_map)` helper to
+   `tools/validation.py`. This function merges supertype identifier attributes with subtype
+   own attributes. A new check in `_check_referential_integrity_class_diagram` flags any
+   subtype that re-declares an identifier attribute already present on the supertype.
+
+Remaining work: The validator does not yet resolve implicit relvar references (e.g.,
+`r7_button_id` inherited by `ElevatorCall` from `Call`) in action body expressions.
+That requires the compiler layer (Phase 5) to use `_get_effective_attributes` during
+name resolution.
 
 ## Change Log
 
 | Date | File | Change |
 |------|------|--------|
-| | | |
+| 2026-03-17 | `Elevator/class-diagram.yaml` | Removed `call_id` from ElevatorCall and FloorCall |
+| 2026-03-17 | `tools/validation.py` | Added `_get_effective_attributes`; added subtype re-declaration check |
 
 ## Tests Added
 

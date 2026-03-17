@@ -46,13 +46,22 @@ Revisit when the simulation engine (Phase 5) is designed.
 
 ## Fix Applied
 
-_Pending. Awaiting design decision on Option A vs B._
+Option A implemented (explicit association, not metamodel primitive) in Phase 04.1 Plan 02.
+R11 was already in use (Elevator-Shaft), so R14 was used instead.
+
+Changes made:
+- `Elevator.r_queue_head_id` renamed to `r14_request_id` with `referential: R14`
+- New association R14 added: `Elevator 0..1 --- 0..1 Request` ("has as queue head" / "is queue head for")
+- Self-referential R9 (Request next-pointer) unchanged
+
+The head pointer is now a proper declared association. Action bodies can navigate it via
+`select any head_req related by self->R14`.
 
 ## Change Log
 
 | Date | File | Change |
 |------|------|--------|
-| | `Elevator/class-diagram.yaml` | Fix `r_queue_head_id` referential; add R11 if Option A chosen |
+| 2026-03-17 | `Elevator/class-diagram.yaml` | Renamed `r_queue_head_id` to `r14_request_id`; changed `referential: R2` to `referential: R14`; added R14 association |
 
 ## Tests Added
 
