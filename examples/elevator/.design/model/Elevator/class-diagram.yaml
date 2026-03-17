@@ -15,9 +15,9 @@ classes:
         type: FloorNumber
       - name: next_direction
         type: Direction
-      - name: r_queue_head_id
+      - name: r14_request_id
         type: UniqueID
-        referential: R2
+        referential: R14
 
   - name: Door
     stereotype: active
@@ -73,9 +73,6 @@ classes:
     stereotype: active
     specializes: R5
     attributes:
-      - name: call_id
-        type: UniqueID
-        identifier: true
       - name: destination_floor
         type: FloorNumber
 
@@ -83,9 +80,6 @@ classes:
     stereotype: active
     specializes: R5
     attributes:
-      - name: call_id
-        type: UniqueID
-        identifier: true
       - name: floor_num
         type: FloorNumber
       - name: direction
@@ -163,8 +157,7 @@ classes:
         type: FloorNumber
 
   - name: FloorIndicator
-    stereotype: associative
-    formalizes: R10
+    stereotype: active
     attributes:
       - name: indicator_id
         type: UniqueID
@@ -174,9 +167,9 @@ classes:
       - name: r10_elevator_id
         type: UniqueID
         referential: R10
-      - name: r10_floor_num
+      - name: r13_floor_num
         type: FloorNumber
-        referential: R10
+        referential: R13
 
 associations:
   - name: R1
@@ -269,11 +262,27 @@ associations:
 
   - name: R10
     point_1: Elevator
-    point_2: Floor
+    point_2: FloorIndicator
     1_mult_2: "0..*"
-    2_mult_1: "0..*"
+    2_mult_1: "1"
     1_phrase_2: has indicator at
-    2_phrase_1: shows indicator for
+    2_phrase_1: shows floor for
+
+  - name: R13
+    point_1: Floor
+    point_2: FloorIndicator
+    1_mult_2: "0..*"
+    2_mult_1: "1"
+    1_phrase_2: has indicator
+    2_phrase_1: is located on
+
+  - name: R14
+    point_1: Elevator
+    point_2: Request
+    1_mult_2: "0..1"
+    2_mult_1: "0..1"
+    1_phrase_2: has as queue head
+    2_phrase_1: is queue head for
 
 bridges:
   - to_domain: Building
