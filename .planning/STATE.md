@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04.1-05-PLAN.md
-last_updated: "2026-03-17T12:53:58.896Z"
+stopped_at: Completed 04.1-06-PLAN.md
+last_updated: "2026-03-17T13:00:45.920Z"
 last_activity: 2026-03-11 — validate_drawio and sync_from_drawio implemented; all 5 Draw.io MCP tools registered
 progress:
   total_phases: 10
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 20
-  completed_plans: 19
+  completed_plans: 20
   percent: 100
 ---
 
@@ -69,6 +69,7 @@ Progress: [██████████] 100%
 | Phase 04.1-model-development-and-compiler-testing P03 | 10 | 2 tasks | 7 files |
 | Phase 04.1-model-development-and-compiler-testing P04 | 3 | 2 tasks | 3 files |
 | Phase 04.1-model-development-and-compiler-testing P05 | 3 | 2 tasks | 4 files |
+| Phase 04.1-model-development-and-compiler-testing P06 | 15 | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,8 @@ Recent decisions affecting current work:
 - [Phase 04.1-model-development-and-compiler-testing]: LALR compiled with all 9 grammar extensions — dotted_name before name in atom avoids shift-reduce conflicts
 - [Phase 04.1-model-development-and-compiler-testing]: select related by uses NAME->NAME in grammar — non-self traversal source (e.g., elev->R12) is valid
 - [Phase 04.1-model-development-and-compiler-testing]: YAML boolean keywords (Off, On) used as state names must be quoted — PyYAML 1.1 coerces them to bool
+- [Phase 04.1-model-development-and-compiler-testing]: DestFloorButton/FloorCallButton must not re-declare button_id — inherited from CallButton via R6
+- [Phase 04.1-model-development-and-compiler-testing]: FloorIndicator Showing_Up/Showing_Down require Stopped transition to Off — enum guard completeness checks all Direction values
 
 ### Roadmap Evolution
 
@@ -133,6 +136,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-17T12:53:58.892Z
-Stopped at: Completed 04.1-05-PLAN.md
+Last session: 2026-03-17T13:00:45.915Z
+Stopped at: Completed 04.1-06-PLAN.md
 Resume file: None
