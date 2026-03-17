@@ -116,9 +116,6 @@ classes:
     stereotype: entity
     specializes: R6
     attributes:
-      - name: button_id
-        type: UniqueID
-        identifier: true
       - name: floor_num
         type: FloorNumber
       - name: r4_elevator_id
@@ -129,9 +126,6 @@ classes:
     stereotype: entity
     specializes: R6
     attributes:
-      - name: button_id
-        type: UniqueID
-        identifier: true
       - name: direction
         type: CallDirection
       - name: r3_floor_num

@@ -9,7 +9,7 @@ states:
   - name: Waiting
   - name: Assigned
   - name: Fulfilled
-    entry_action: "generate Call_fulfilled to r7_button_id;"
+    entry_action: "generate Call_fulfilled to self.r7_button_id;"
     terminal: true
 transitions:
   - from: Waiting

@@ -18,38 +18,43 @@ events:
 states:
   - name: Idle
     entry_action: >-
-      self.direction = Stopped; self.next_stop_floor = 0;
-      select any req from instances of Request where r2_elevator_id == self.elevator_id;
-      if req != empty; generate Request_assigned to SELF;
-      else; generate Elevator_available to Dispatcher; end if;
+      self.direction = Stopped;
+      self.next_stop_floor = 0;
+      select any req from instances of Request where request_id == self.r14_request_id;
+      if (req != empty) {
+        generate Request_assigned(target_floor: req.destination_floor) to self;
+      } else {
+        select any disp from instances of Dispatcher;
+        generate Elevator_available(queue_length: 0) to disp;
+      }
   - name: Moving_Up
     entry_action: >-
       self.direction = Up;
-      select any shaft from instances of Shaft where R11;
+      select any shaft related by self->R11;
       generate Move_up to shaft;
   - name: Moving_Down
     entry_action: >-
       self.direction = Down;
-      select any shaft from instances of Shaft where R11;
+      select any shaft related by self->R11;
       generate Move_down to shaft;
   - name: Stopping
     entry_action: >-
       self.direction = Stopped;
-      select any shaft from instances of Shaft where R11;
+      select any shaft related by self->R11;
       generate Stop to shaft;
   - name: At_Floor
     entry_action: >-
       select any next_req from instances of Request where request_id == self.r14_request_id;
-      if next_req != empty;
-        if next_req.destination_floor > self.current_floor; self.next_direction = Up; end if;
-        if next_req.destination_floor < self.current_floor; self.next_direction = Down; end if;
-      else;
+      if (next_req != empty) {
+        if (next_req.destination_floor > self.current_floor) { self.next_direction = Up; }
+        if (next_req.destination_floor < self.current_floor) { self.next_direction = Down; }
+      } else {
         select any fc from instances of FloorCall where floor_num == self.current_floor;
-        if fc != empty; self.next_direction = fc.direction;
-        else; self.next_direction = Stopped; end if;
-      end if;
+        if (fc != empty) { self.next_direction = fc.direction; }
+        else { self.next_direction = Stopped; }
+      }
       select any floor_inst from instances of Floor where floor_num == self.current_floor;
-      select any indicator from instances of FloorIndicator where r10_elevator_id == self.elevator_id and r13_floor_num == self.current_floor;
+      select any indicator related by self->R10;
       generate Direction_set(direction: self.next_direction) to indicator;
       generate Elevator_arrived to floor_inst;
       generate Open_door to self;
@@ -57,37 +62,37 @@ transitions:
   - from: Idle
     to: Moving_Up
     event: Request_assigned
-    guard: "target_floor > current_floor"
-    action: "self.next_stop_floor = target_floor;"
+    guard: "rcvd_evt.target_floor > self.current_floor"
+    action: "self.next_stop_floor = rcvd_evt.target_floor;"
   - from: Idle
     to: Moving_Down
     event: Request_assigned
-    guard: "target_floor < current_floor"
-    action: "self.next_stop_floor = target_floor;"
+    guard: "rcvd_evt.target_floor < self.current_floor"
+    action: "self.next_stop_floor = rcvd_evt.target_floor;"
   - from: Idle
     to: At_Floor
     event: Request_assigned
-    guard: "target_floor == current_floor"
+    guard: "rcvd_evt.target_floor == self.current_floor"
   - from: Moving_Up
     to: Stopping
     event: Floor_reached
-    guard: "current_floor == next_stop_floor"
-    action: "self.current_floor = current_floor;"
+    guard: "rcvd_evt.current_floor == self.next_stop_floor"
+    action: "self.current_floor = rcvd_evt.current_floor;"
   - from: Moving_Up
     to: Moving_Up
     event: Floor_reached
-    guard: "current_floor != next_stop_floor"
-    action: "self.current_floor = current_floor;"
+    guard: "rcvd_evt.current_floor != self.next_stop_floor"
+    action: "self.current_floor = rcvd_evt.current_floor;"
   - from: Moving_Down
     to: Stopping
     event: Floor_reached
-    guard: "current_floor == next_stop_floor"
-    action: "self.current_floor = current_floor;"
+    guard: "rcvd_evt.current_floor == self.next_stop_floor"
+    action: "self.current_floor = rcvd_evt.current_floor;"
   - from: Moving_Down
     to: Moving_Down
     event: Floor_reached
-    guard: "current_floor != next_stop_floor"
-    action: "self.current_floor = current_floor;"
+    guard: "rcvd_evt.current_floor != self.next_stop_floor"
+    action: "self.current_floor = rcvd_evt.current_floor;"
   - from: Stopping
     to: At_Floor
     event: Stopped
@@ -95,8 +100,8 @@ transitions:
     to: Idle
     event: Door_closed
     action: >-
-      select any req from instances of Request where r2_elevator_id == self.elevator_id;
-      if req != empty; generate Door_closed to req; end if;
+      select any req related by self->R2;
+      if (req != empty) { generate Door_closed to req; }
   - from: At_Floor
     to: Idle
     event: Service_complete

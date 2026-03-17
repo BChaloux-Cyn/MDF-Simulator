@@ -11,9 +11,9 @@ states:
   - name: Fulfilled
     terminal: true
     entry_action: >-
-      generate Call_fulfilled to r7_button_id;
-      select any req from instances of Request where r8_request_id == self.call_id;
-      if req != empty; generate Request_cancelled to req; end if;
+      generate Call_fulfilled to self.r7_button_id;
+      select any req from instances of Request where request_id == self.r8_request_id;
+      if (req != empty) { generate Request_cancelled to req; }
 transitions:
   - from: Waiting
     to: Assigned

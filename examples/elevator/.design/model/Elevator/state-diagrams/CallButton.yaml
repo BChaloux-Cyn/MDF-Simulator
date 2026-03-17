@@ -12,7 +12,11 @@ transitions:
   - from: Unlit
     to: Lit
     event: Button_pushed
-    action: "create ec of ElevatorCall;"
+    action: >-
+      create ec of ElevatorCall;
+      relate ec to self across R7;
+      select any disp from instances of Dispatcher;
+      generate Call_submitted(has_idle_elevator: disp.has_idle_elevator) to disp;
   - from: Lit
     to: Unlit
     event: Call_fulfilled

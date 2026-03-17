@@ -18,15 +18,15 @@ transitions:
   - from: "Off"
     to: Showing_Up
     event: Direction_set
-    guard: "direction == Up"
+    guard: "rcvd_evt.direction == Up"
   - from: "Off"
     to: Showing_Down
     event: Direction_set
-    guard: "direction == Down"
+    guard: "rcvd_evt.direction == Down"
   - from: "Off"
     to: "Off"
     event: Direction_set
-    guard: "direction == Stopped"
+    guard: "rcvd_evt.direction == Stopped"
   - from: Showing_Up
     to: "Off"
     event: Reset
@@ -36,8 +36,16 @@ transitions:
   - from: Showing_Up
     to: Showing_Down
     event: Direction_set
-    guard: "direction == Down"
+    guard: "rcvd_evt.direction == Down"
+  - from: Showing_Up
+    to: "Off"
+    event: Direction_set
+    guard: "rcvd_evt.direction == Stopped"
   - from: Showing_Down
     to: Showing_Up
     event: Direction_set
-    guard: "direction == Up"
+    guard: "rcvd_evt.direction == Up"
+  - from: Showing_Down
+    to: "Off"
+    event: Direction_set
+    guard: "rcvd_evt.direction == Stopped"

@@ -12,7 +12,7 @@ states:
   - name: Assigned
   - name: Serving
   - name: Complete
-    entry_action: "generate Service_complete to r2_elevator_id;"
+    entry_action: "generate Service_complete to self.r2_elevator_id;"
     terminal: true
   - name: Cancelled
     terminal: true
