@@ -826,11 +826,17 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
         else:
             trans_edge_idx.append(None)
 
-    canvas_w = max(1200, n_vertices * 250)
-    canvas_h = max(900, n_vertices * 220)
+    max_state_h = max((_state_height(st.entry_action) for st in sd.states), default=STATE_H)
+    S_GAP = 40
+    min_dist = math.hypot(STATE_W + S_GAP, max_state_h + S_GAP)
 
-    positions = _layout_for_canvas(n_vertices, edges, canvas_w, canvas_h)
+    positions = _layout_for_canvas(n_vertices, edges, min_dist)
     port_suffixes = _assign_edge_ports(edges, positions)
+
+    max_x = max((x for x, _ in positions), default=0)
+    max_y = max((y for _, y in positions), default=0)
+    canvas_w = int(max_x) + STATE_W + MARGIN
+    canvas_h = int(max_y) + max_state_h + MARGIN
 
     # Build XML
     mxfile = etree.Element("mxfile", compressed="false", version="24.0.0")
