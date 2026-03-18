@@ -4,8 +4,8 @@ milestone: v0.1
 milestone_name: milestone
 status: executing
 stopped_at: Completed 04.1-06-PLAN.md
-last_updated: "2026-03-17T13:06:05.860Z"
-last_activity: 2026-03-11 — validate_drawio and sync_from_drawio implemented; all 5 Draw.io MCP tools registered
+last_updated: "2026-03-18T00:00:00.000Z"
+last_activity: 2026-03-18 — Draw.io edge routing overhauled (optimization-based); state diagram spacing and background improved; 9 new tests added (47 total)
 progress:
   total_phases: 10
   completed_phases: 5
@@ -121,6 +121,10 @@ Recent decisions affecting current work:
 - [Phase 04.1-model-development-and-compiler-testing]: YAML boolean keywords (Off, On) used as state names must be quoted — PyYAML 1.1 coerces them to bool
 - [Phase 04.1-model-development-and-compiler-testing]: DestFloorButton/FloorCallButton must not re-declare button_id — inherited from CallButton via R6
 - [Phase 04.1-model-development-and-compiler-testing]: FloorIndicator Showing_Up/Showing_Down require Stopped transition to Off — enum guard completeness checks all Direction values
+- [Draw.io routing improvement 2026-03-18]: Replaced direction-heuristic anchor assignment (`abs(dx) >= abs(dy)`) with `_optimize_edge_routing` — 3-pass iterative optimizer scores all 16 exit×entry side combinations per edge using W_BOX=10000, W_EDGE=1000, W_LEN=1; fixes pseudostate left/right routing bug caused by near-diagonal layout positions
+- [Draw.io routing improvement 2026-03-18]: S_GAP raised from 10 to 100 px in `_build_state_diagram_xml` — 10 px allowed Moving_Up to be placed directly adjacent to At_Floor, cluttering routing corridors; 100 px enforced by both Kamada-Kawai ideal weights and `_remove_overlaps`
+- [Draw.io routing improvement 2026-03-18]: `background="#FFFFFF"` added to mxGraphModel in both diagram builders — draw.io defaults to transparent/grey; explicit white matches expected visual output
+- [Draw.io routing improvement 2026-03-18]: New geometry helpers `_anchor_point`, `_segments_intersect`, `_route_path` extracted as independently testable units; `_assign_edge_ports` and `_route_edges_around_boxes` kept in place (still tested directly)
 
 ### Roadmap Evolution
 
@@ -136,6 +140,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-17T13:00:45.915Z
-Stopped at: Completed 04.1-06-PLAN.md
+Last session: 2026-03-18
+Stopped at: Draw.io routing improvement complete — _optimize_edge_routing implemented, S_GAP=100, white background, 47 tests green
 Resume file: None
+Next action: Plan Phase 04.2 (Body of Knowledge) or Phase 5 (Simulation Engine) — run /gsd:progress to route
