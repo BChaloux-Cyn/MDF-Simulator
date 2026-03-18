@@ -16,6 +16,9 @@ try:
         render_to_drawio_state,
         validate_drawio,
         sync_from_drawio,
+        _remove_overlaps,
+        _route_edges_around_boxes,
+        MARGIN,
     )
 except ImportError:
     render_to_drawio = None
@@ -23,6 +26,9 @@ except ImportError:
     render_to_drawio_state = None
     validate_drawio = None
     sync_from_drawio = None
+    _remove_overlaps = None
+    _route_edges_around_boxes = None
+    MARGIN = 120
 
 
 # ---------------------------------------------------------------------------
@@ -707,3 +713,92 @@ def test_sync_unrecognized_cell(tmp_domain, tmp_path):
     assert len(unrecognized) >= 1, (
         f"Expected at least one 'unrecognized' issue, got: {issues}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for _remove_overlaps and _route_edges_around_boxes
+# ---------------------------------------------------------------------------
+
+def _boxes_overlap(pos, widths, heights, gap=0):
+    """Return True if any pair of boxes overlaps (with optional gap)."""
+    n = len(pos)
+    for i in range(n):
+        for j in range(i + 1, n):
+            cx_i = pos[i][0] + widths[i] / 2
+            cy_i = pos[i][1] + heights[i] / 2
+            cx_j = pos[j][0] + widths[j] / 2
+            cy_j = pos[j][1] + heights[j] / 2
+            half_w = (widths[i] + widths[j]) / 2 + gap
+            half_h = (heights[i] + heights[j]) / 2 + gap
+            if abs(cx_j - cx_i) < half_w and abs(cy_j - cy_i) < half_h:
+                return True
+    return False
+
+
+@pytest.mark.skipif(_remove_overlaps is None, reason="tools.drawio not importable")
+def test_remove_overlaps_clears_all_pairs():
+    """Two overlapping boxes are pushed apart so no overlap remains."""
+    positions = [(0.0, 0.0), (10.0, 0.0)]   # heavily overlapping
+    widths  = [100, 100]
+    heights = [50,  50]
+    result = _remove_overlaps(positions, widths, heights, gap=10)
+    assert not _boxes_overlap(result, widths, heights, gap=10), (
+        f"Boxes still overlap after _remove_overlaps: {result}"
+    )
+
+
+@pytest.mark.skipif(_remove_overlaps is None, reason="tools.drawio not importable")
+def test_remove_overlaps_single_node_noop():
+    """Single node is translated to (MARGIN, MARGIN) with no error."""
+    result = _remove_overlaps([(500.0, 300.0)], [100], [50])
+    assert len(result) == 1
+    assert result[0] == (float(MARGIN), float(MARGIN))
+
+
+@pytest.mark.skipif(_remove_overlaps is None, reason="tools.drawio not importable")
+def test_remove_overlaps_coincident_nodes():
+    """Two nodes at the exact same position are pushed apart (no overlap)."""
+    positions = [(200.0, 200.0), (200.0, 200.0)]
+    widths  = [80, 80]
+    heights = [40, 40]
+    result = _remove_overlaps(positions, widths, heights, gap=10)
+    assert not _boxes_overlap(result, widths, heights, gap=10), (
+        f"Coincident boxes still overlap after _remove_overlaps: {result}"
+    )
+
+
+@pytest.mark.skipif(_route_edges_around_boxes is None, reason="tools.drawio not importable")
+def test_route_edges_no_blocker():
+    """Triangle layout: edge between two outer nodes with no blocker → empty waypoints."""
+    # Three nodes: A at (0,0), B at (300,0), C at (0,300) — well separated
+    positions = [(120.0, 120.0), (500.0, 120.0), (120.0, 500.0)]
+    widths    = [100, 100, 100]
+    heights   = [50,  50,  50]
+    edges = [(0, 1)]   # A→B; C is not on the straight path
+    port_suffixes = ["exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;"]
+    result = _route_edges_around_boxes(edges, positions, widths, heights, port_suffixes, gap=10)
+    assert len(result) == 1
+    assert result[0] == [], f"Expected no waypoints for unblocked edge, got: {result[0]}"
+
+
+@pytest.mark.skipif(_route_edges_around_boxes is None, reason="tools.drawio not importable")
+def test_route_edges_blocked():
+    """Node B sits directly between A and C: edge A→C gets one waypoint not inside B's AABB."""
+    # A at x=120, C at x=700, B halfway at x=410 — all on same y-row
+    W, H = 100, 50
+    gap = 10
+    positions = [(120.0, 200.0), (410.0, 200.0), (700.0, 200.0)]
+    widths    = [W, W, W]
+    heights   = [H, H, H]
+    edges = [(0, 2)]   # A→C, B is in between
+    port_suffixes = ["exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;"]
+    result = _route_edges_around_boxes(edges, positions, widths, heights, port_suffixes, gap=gap)
+    assert len(result) == 1
+    wps = result[0]
+    assert len(wps) == 1, f"Expected exactly one waypoint for blocked edge, got: {wps}"
+    wx, wy = wps[0]
+    # Waypoint must NOT be inside B's expanded AABB
+    bx0, by0 = positions[1][0] - gap, positions[1][1] - gap
+    bx1, by1 = positions[1][0] + W + gap, positions[1][1] + H + gap
+    inside_b = bx0 <= wx <= bx1 and by0 <= wy <= by1
+    assert not inside_b, f"Waypoint {wps[0]} is still inside blocker B's expanded AABB"

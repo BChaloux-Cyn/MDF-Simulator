@@ -7,8 +7,8 @@ from schema.drawio_schema import (
 )
 
 REQUIRED_ELEMENT_TYPES = {
-    "class", "attribute", "separator", "association", "assoc_label",
-    "state", "initial_pseudo", "transition", "bridge",
+    "class", "class_active", "attribute", "separator", "association", "assoc_label",
+    "generalization", "state", "initial_pseudo", "transition", "bridge",
 }
 
 

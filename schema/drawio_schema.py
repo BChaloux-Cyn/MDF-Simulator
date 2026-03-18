@@ -69,14 +69,14 @@ STYLE_CLASS_ACTIVE = (
     "startSize=26;fillColor=#d5e8d4;strokeColor=#82b366;rounded=0;"
 )
 
-STYLE_STATE = "rounded=1;whiteSpace=wrap;html=1;arcSize=10;"
+STYLE_STATE = "rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Courier New;"
 
 STYLE_INITIAL_PSEUDO = (
     "ellipse;whiteSpace=wrap;html=1;aspect=fixed;"
     "fillColor=#000000;strokeColor=#000000;"
 )
 
-STYLE_TRANSITION = "edgeStyle=orthogonalEdgeStyle;html=1;"
+STYLE_TRANSITION = "edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;"
 
 STYLE_BRIDGE = "dashed=1;endArrow=open;endFill=0;html=1;"
 

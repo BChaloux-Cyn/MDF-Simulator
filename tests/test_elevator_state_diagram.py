@@ -95,7 +95,7 @@ def test_no_overlapping_states(diagram_xml):
             if geo is not None:
                 boxes.append((
                     int(geo.get("x", 0)), int(geo.get("y", 0)),
-                    STATE_W, int(geo.get("height", STATE_H)),
+                    int(geo.get("width", STATE_W)), int(geo.get("height", STATE_H)),
                     cid,
                 ))
 

@@ -13,6 +13,7 @@ Public API:
 """
 from __future__ import annotations
 
+import html
 import io
 import math
 import re
@@ -111,8 +112,21 @@ def _state_height(entry_action: str | None) -> int:
         return STATE_H
     n_lines = entry_action.count('\n') + 1
     # name row + divider + "entry /" row + action lines + vertical padding
-    h = (3 + n_lines) * ROW_H + 16
+    h = (3 + n_lines) * ROW_H
     return max(STATE_H, h)
+
+
+_STATE_CHARS_PER_PX = 7.2   # approximate px per character for Courier New 11px (monospace)
+_STATE_PAD_X = 10            # horizontal padding (each side)
+
+
+def _state_width(state_name: str, entry_action: str | None) -> int:
+    """Estimate state box width from the longest text line."""
+    lines: list[str] = [state_name]
+    if entry_action:
+        lines += entry_action.split('\n')
+    max_chars = max(len(line) for line in lines)
+    return max(STATE_W, int(max_chars * _STATE_CHARS_PER_PX))
 
 
 def _assign_edge_ports(
@@ -145,14 +159,16 @@ def _assign_edge_ports(
             tgt_side = "top" if dy >= 0 else "bottom"
         edge_info.append((src, src_side, tgt, tgt_side))
 
-    # Group edge indices by (vertex, side, direction)
-    slot_edges: dict[tuple, list[int]] = {}
+    # Group all connections on a vertex-side together (exits AND entries pooled).
+    # Pooling prevents bidirectional edges from independently landing on the same
+    # anchor: A→B and B→A both touch B's left side and must share that space.
+    side_slots: dict[tuple, list[tuple[int, str]]] = {}  # (vertex, side) → [(idx, direction)]
     for idx, info in enumerate(edge_info):
         if info is None:
             continue
         src, src_side, tgt, tgt_side = info
-        slot_edges.setdefault((src, src_side, "exit"), []).append(idx)
-        slot_edges.setdefault((tgt, tgt_side, "entry"), []).append(idx)
+        side_slots.setdefault((src, src_side), []).append((idx, "exit"))
+        side_slots.setdefault((tgt, tgt_side), []).append((idx, "entry"))
 
     # Build per-edge port data with defaults
     port_data: list[dict] = [
@@ -171,16 +187,16 @@ def _assign_edge_ports(
         else:  # right
             return 1.0, t
 
-    for (vertex, side, direction), idxs in slot_edges.items():
-        n = len(idxs)
-        # Sort edges so anchor positions along this side match the spatial order of
-        # the other endpoints.  top/bottom sides spread horizontally (sort by x);
-        # left/right sides spread vertically (sort by y).  This prevents edges from
-        # crossing each other unnecessarily at the box boundary.
+    for (vertex, side), slot_list in side_slots.items():
+        n = len(slot_list)
+        # Sort by position of the other endpoint along the side's spreading axis so
+        # anchor order matches spatial order — minimises edge crossings at the border.
         dim = 0 if side in ("top", "bottom") else 1
-        other_end = 1 if direction == "exit" else 0
-        sorted_idxs = sorted(idxs, key=lambda idx: positions[edges[idx][other_end]][dim])
-        for k, idx in enumerate(sorted_idxs):
+        sorted_slots = sorted(
+            slot_list,
+            key=lambda item: positions[edges[item[0]][1 if item[1] == "exit" else 0]][dim],
+        )
+        for k, (idx, direction) in enumerate(sorted_slots):
             x, y = side_coords(side, k, n)
             if direction == "exit":
                 port_data[idx]["exitX"] = x
@@ -239,16 +255,36 @@ def _self_loop_corner(
             else:
                 side_count["top" if dy >= 0 else "bottom"] += 1
 
-    # Score each corner by combined occupancy of its two adjacent sides
+    # Score each corner by (a) combined side occupancy and (b) proximity of other
+    # nodes in that corner's outward quadrant.  Corners pointing toward nearby boxes
+    # are penalised so the self-loop routes into open space.
     corner_sides = [
         ("right", "top"),     # 0: top-right
         ("right", "bottom"),  # 1: bottom-right
         ("bottom", "left"),   # 2: bottom-left
         ("top",   "left"),    # 3: top-left
     ]
+    # Outward quadrant direction for each corner (dx_sign, dy_sign)
+    corner_quadrants = [(1, -1), (1, 1), (-1, 1), (-1, -1)]
+    vx, vy = positions[vertex]
+    proximity: list[float] = []
+    for qdx, qdy in corner_quadrants:
+        min_dist = float("inf")
+        for j, (nx, ny) in enumerate(positions):
+            if j == vertex:
+                continue
+            dx, dy = nx - vx, ny - vy
+            if dx * qdx > 0 and dy * qdy > 0:
+                min_dist = min(min_dist, math.hypot(dx, dy))
+        proximity.append(0.0 if min_dist == float("inf") else 1.0 / min_dist)
+
     scores = sorted(
         range(len(corner_sides)),
-        key=lambda i: (side_count[corner_sides[i][0]] + side_count[corner_sides[i][1]], i),
+        key=lambda i: (
+            side_count[corner_sides[i][0]] + side_count[corner_sides[i][1]],
+            proximity[i],
+            i,
+        ),
     )
     return scores[loop_idx % len(scores)]
 
@@ -341,12 +377,481 @@ def _scale_for_min_spacing(
     ]
 
 
+def _remove_overlaps(
+    positions: list[tuple[float, float]],
+    widths:    list[int],
+    heights:   list[int],
+    gap:       int = 10,
+    max_iter:  int = 100,
+) -> list[tuple[float, float]]:
+    """Iterative SAT minimum-axis push to separate overlapping boxes.
+
+    *positions* are top-left corners (same convention as mxGeometry x/y).
+    Returns translated positions so the minimum top-left corner lands at
+    (MARGIN, MARGIN).
+    """
+    if len(positions) <= 1:
+        if positions:
+            return [(float(MARGIN), float(MARGIN))]
+        return []
+
+    pos = [list(p) for p in positions]  # mutable working copy
+
+    for _ in range(max_iter):
+        moved = False
+        for i in range(len(pos)):
+            for j in range(i + 1, len(pos)):
+                cx_i = pos[i][0] + widths[i] / 2
+                cy_i = pos[i][1] + heights[i] / 2
+                cx_j = pos[j][0] + widths[j] / 2
+                cy_j = pos[j][1] + heights[j] / 2
+                dx = cx_j - cx_i
+                dy = cy_j - cy_i
+                half_w = (widths[i] + widths[j]) / 2 + gap
+                half_h = (heights[i] + heights[j]) / 2 + gap
+                dist = math.hypot(dx, dy)
+                if dist < 1e-6:
+                    # Coincident: push j in +x, i in -x
+                    push = half_w / 2
+                    pos[j][0] += push
+                    pos[i][0] -= push
+                    moved = True
+                    continue
+                if abs(dx) < half_w and abs(dy) < half_h:
+                    push_x = half_w - abs(dx)
+                    push_y = half_h - abs(dy)
+                    if push_x <= push_y:
+                        sign = 1.0 if dx >= 0 else -1.0
+                        pos[j][0] += sign * push_x / 2
+                        pos[i][0] -= sign * push_x / 2
+                    else:
+                        sign = 1.0 if dy >= 0 else -1.0
+                        pos[j][1] += sign * push_y / 2
+                        pos[i][1] -= sign * push_y / 2
+                    moved = True
+        if not moved:
+            break
+
+    # Translate so minimum top-left corner lands at (MARGIN, MARGIN)
+    min_x = min(p[0] for p in pos)
+    min_y = min(p[1] for p in pos)
+    offset_x = MARGIN - min_x
+    offset_y = MARGIN - min_y
+    return [(p[0] + offset_x, p[1] + offset_y) for p in pos]
+
+
+_PORT_FRAC_RE = re.compile(r'(exit|entry)(X|Y)=([^;]+)')
+
+
+def _route_edges_around_boxes(
+    edges:         list[tuple[int, int]],
+    positions:     list[tuple[float, float]],
+    widths:        list[int],
+    heights:       list[int],
+    port_suffixes: list[str],
+    gap:           int = 10,
+) -> list[list[tuple[float, float]]]:
+    """Return one waypoint list per edge; empty means no waypoint needed.
+
+    Self-loops always return []. For each non-self-loop edge, checks if any
+    third box blocks the straight anchor-to-anchor path and adds one waypoint
+    (perpendicular detour around the first blocker found).
+    """
+    result: list[list[tuple[float, float]]] = []
+    n = len(positions)
+
+    for e_idx, (src, tgt) in enumerate(edges):
+        if src == tgt:
+            result.append([])
+            continue
+
+        # Parse exit/entry port fractions to compute anchor pixels
+        suffix = port_suffixes[e_idx] if e_idx < len(port_suffixes) else ""
+        exit_x_frac = exit_y_frac = entry_x_frac = entry_y_frac = 0.5
+        for m in _PORT_FRAC_RE.finditer(suffix):
+            kind, axis, val = m.group(1), m.group(2), float(m.group(3))
+            if kind == "exit" and axis == "X":
+                exit_x_frac = val
+            elif kind == "exit" and axis == "Y":
+                exit_y_frac = val
+            elif kind == "entry" and axis == "X":
+                entry_x_frac = val
+            elif kind == "entry" and axis == "Y":
+                entry_y_frac = val
+
+        ax = positions[src][0] + exit_x_frac * widths[src]
+        ay = positions[src][1] + exit_y_frac * heights[src]
+        bx = positions[tgt][0] + entry_x_frac * widths[tgt]
+        by = positions[tgt][1] + entry_y_frac * heights[tgt]
+
+        seg_dx = bx - ax
+        seg_dy = by - ay
+        seg_len = math.hypot(seg_dx, seg_dy)
+
+        waypoints: list[tuple[float, float]] = []
+        for k in range(n):
+            if k == src or k == tgt:
+                continue
+            # Slab test uses no gap (box body only) to avoid false positives
+            # when anchor points sit near the edge of an adjacent node.
+            kx0 = positions[k][0]
+            ky0 = positions[k][1]
+            kx1 = positions[k][0] + widths[k]
+            ky1 = positions[k][1] + heights[k]
+
+            # Liang-Barsky slab test: does segment (A→B) intersect this AABB?
+            # Standard form: p_k*t <= q_k; p<0 → t_min update, p>0 → t_max update.
+            t_min, t_max = 0.0, 1.0
+            blocked = True
+            for p, q in [
+                (-seg_dx, ax - kx0),   # left boundary:   ax + t*dx >= kx0
+                ( seg_dx, kx1 - ax),   # right boundary:  ax + t*dx <= kx1
+                (-seg_dy, ay - ky0),   # bottom boundary: ay + t*dy >= ky0
+                ( seg_dy, ky1 - ay),   # top boundary:    ay + t*dy <= ky1
+            ]:
+                if p == 0:
+                    if q < 0:          # parallel and outside this slab
+                        blocked = False
+                        break
+                else:
+                    t = q / p
+                    if p < 0:
+                        t_min = max(t_min, t)
+                    else:
+                        t_max = min(t_max, t)
+            if not blocked or t_min > t_max:
+                continue
+
+            # Box k blocks this edge — place one waypoint via perpendicular detour
+            ux = seg_dx / seg_len if seg_len > 1e-6 else 1.0
+            uy = seg_dy / seg_len if seg_len > 1e-6 else 0.0
+            px, py = -uy, ux   # left-normal perpendicular
+            mx, my = (ax + bx) / 2, (ay + by) / 2
+            kcx = positions[k][0] + widths[k] / 2
+            kcy = positions[k][1] + heights[k] / 2
+            cross = ux * (kcy - ay) - uy * (kcx - ax)
+            side = -1.0 if cross > 0 else 1.0
+            half_ext = abs(px) * widths[k] / 2 + abs(py) * heights[k] / 2
+            offset = (half_ext + gap) * 2
+            waypoints = [(mx + side * px * offset, my + side * py * offset)]
+            break  # only first blocker per edge
+
+        result.append(waypoints)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Optimized edge routing helpers
+# ---------------------------------------------------------------------------
+
+_SIDES = ("top", "right", "bottom", "left")
+
+
+def _anchor_point(
+    vertex: int,
+    side: str,
+    t: float,
+    positions: list[tuple[float, float]],
+    widths: list[int],
+    heights: list[int],
+) -> tuple[float, float]:
+    """Return the pixel coordinate of a point at fraction t along *side* of *vertex*."""
+    x0, y0 = positions[vertex]
+    w, h = widths[vertex], heights[vertex]
+    if side == "top":
+        return x0 + t * w, y0
+    elif side == "bottom":
+        return x0 + t * w, y0 + h
+    elif side == "left":
+        return x0, y0 + t * h
+    else:  # right
+        return x0 + w, y0 + t * h
+
+
+def _segments_intersect(
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+    p3: tuple[float, float],
+    p4: tuple[float, float],
+) -> bool:
+    """Return True if segment p1→p2 properly intersects segment p3→p4."""
+    def _cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    d1 = _cross(p3, p4, p1)
+    d2 = _cross(p3, p4, p2)
+    d3 = _cross(p1, p2, p3)
+    d4 = _cross(p1, p2, p4)
+
+    if ((d1 > 0 and d2 < 0) or (d1 < 0 and d2 > 0)) and \
+       ((d3 > 0 and d4 < 0) or (d3 < 0 and d4 > 0)):
+        return True
+    return False
+
+
+def _route_path(
+    ax: float,
+    ay: float,
+    bx: float,
+    by: float,
+    src_idx: int,
+    tgt_idx: int,
+    positions: list[tuple[float, float]],
+    widths: list[int],
+    heights: list[int],
+    gap: int,
+) -> tuple[list[tuple[float, float]], int]:
+    """Route from anchor (ax,ay) to anchor (bx,by) around intervening boxes.
+
+    Returns (waypoints, box_crossing_count).  Uses the same slab-test logic as
+    _route_edges_around_boxes but counts all crossing boxes (not just the first).
+    """
+    seg_dx = bx - ax
+    seg_dy = by - ay
+    seg_len = math.hypot(seg_dx, seg_dy)
+
+    n = len(positions)
+    crossings = 0
+    first_blocker: int | None = None
+
+    for k in range(n):
+        if k == src_idx or k == tgt_idx:
+            continue
+        kx0 = positions[k][0]
+        ky0 = positions[k][1]
+        kx1 = kx0 + widths[k]
+        ky1 = ky0 + heights[k]
+
+        t_min, t_max = 0.0, 1.0
+        blocked = True
+        for p, q in [
+            (-seg_dx, ax - kx0),
+            ( seg_dx, kx1 - ax),
+            (-seg_dy, ay - ky0),
+            ( seg_dy, ky1 - ay),
+        ]:
+            if p == 0:
+                if q < 0:
+                    blocked = False
+                    break
+            else:
+                t = q / p
+                if p < 0:
+                    t_min = max(t_min, t)
+                else:
+                    t_max = min(t_max, t)
+        if blocked and t_min <= t_max:
+            crossings += 1
+            if first_blocker is None:
+                first_blocker = k
+
+    waypoints: list[tuple[float, float]] = []
+    if first_blocker is not None:
+        k = first_blocker
+        ux = seg_dx / seg_len if seg_len > 1e-6 else 1.0
+        uy = seg_dy / seg_len if seg_len > 1e-6 else 0.0
+        px, py = -uy, ux
+        mx, my = (ax + bx) / 2, (ay + by) / 2
+        kcx = positions[k][0] + widths[k] / 2
+        kcy = positions[k][1] + heights[k] / 2
+        cross = ux * (kcy - ay) - uy * (kcx - ax)
+        side = -1.0 if cross > 0 else 1.0
+        half_ext = abs(px) * widths[k] / 2 + abs(py) * heights[k] / 2
+        offset = (half_ext + gap) * 2
+        waypoints = [(mx + side * px * offset, my + side * py * offset)]
+
+    return waypoints, crossings
+
+
+def _optimize_edge_routing(
+    edges: list[tuple[int, int]],
+    positions: list[tuple[float, float]],
+    node_widths: list[int],
+    node_heights: list[int],
+    gap: int = 10,
+) -> tuple[list[str], list[list[tuple[float, float]]]]:
+    """Return (port_suffixes, waypoints) per edge, jointly optimized.
+
+    For each non-self-loop edge, tries all 16 (exit_side × entry_side) combinations.
+    Scores each by: box_crossings * 10000 + edge_crossings * 1000 + path_length.
+    Runs 3 iterative passes so later edges' choices inform earlier ones' revisions.
+    After side selection, anchors are spread within each side to avoid collisions,
+    then final waypoints are generated from the spread anchors.
+    """
+    if not edges or not positions:
+        return [""] * len(edges), [[] for _ in edges]
+
+    W_BOX  = 10_000
+    W_EDGE = 1_000
+    W_LEN  = 1
+
+    n_edges = len(edges)
+
+    # ------------------------------------------------------------------
+    # Edge ordering: pseudostate edges first, then by combined box area.
+    # ------------------------------------------------------------------
+    def _order_key(idx):
+        src, tgt = edges[idx]
+        if src == 0 or tgt == 0:
+            return (0, 0)
+        area = node_widths[src] * node_heights[src] + node_widths[tgt] * node_heights[tgt]
+        return (1, -area)
+
+    process_order = sorted(range(n_edges), key=_order_key)
+
+    # selected_sides[idx] = (exit_side, entry_side) | None for self-loops
+    selected_sides: dict[int, tuple[str, str] | None] = {}
+    # paths[idx] = list of (x,y) points along the routed path (for edge-crossing detection)
+    paths: dict[int, list[tuple[float, float]] | None] = {i: None for i in range(n_edges)}
+
+    # ------------------------------------------------------------------
+    # 3-pass iterative side selection
+    # ------------------------------------------------------------------
+    for _pass in range(3):
+        for idx in process_order:
+            src, tgt = edges[idx]
+            if src == tgt:
+                selected_sides[idx] = None
+                paths[idx] = None
+                continue
+
+            context_paths: list[list[tuple[float, float]]] = [
+                p for i, p in paths.items()
+                if i != idx and p is not None
+            ]
+
+            best_score = float("inf")
+            best_pair: tuple[str, str] = ("bottom", "top")
+            best_path: list[tuple[float, float]] = []
+
+            for exit_side in _SIDES:
+                for entry_side in _SIDES:
+                    # Use center of side for scoring pass
+                    ax, ay = _anchor_point(src, exit_side, 0.5, positions, node_widths, node_heights)
+                    bx, by = _anchor_point(tgt, entry_side, 0.5, positions, node_widths, node_heights)
+
+                    wps, box_cross = _route_path(
+                        ax, ay, bx, by, src, tgt,
+                        positions, node_widths, node_heights, gap,
+                    )
+
+                    # Build path polyline for edge-crossing detection
+                    path_pts: list[tuple[float, float]] = [(ax, ay)] + wps + [(bx, by)]
+
+                    # Count crossings with already-placed edges
+                    edge_cross = 0
+                    for ctx_path in context_paths:
+                        for ci in range(len(ctx_path) - 1):
+                            for pi in range(len(path_pts) - 1):
+                                if _segments_intersect(
+                                    ctx_path[ci], ctx_path[ci + 1],
+                                    path_pts[pi], path_pts[pi + 1],
+                                ):
+                                    edge_cross += 1
+
+                    path_len = sum(
+                        math.hypot(path_pts[i + 1][0] - path_pts[i][0],
+                                   path_pts[i + 1][1] - path_pts[i][1])
+                        for i in range(len(path_pts) - 1)
+                    )
+
+                    score = W_BOX * box_cross + W_EDGE * edge_cross + W_LEN * path_len
+                    if score < best_score:
+                        best_score = score
+                        best_pair = (exit_side, entry_side)
+                        best_path = path_pts
+
+            selected_sides[idx] = best_pair
+            paths[idx] = best_path
+
+    # ------------------------------------------------------------------
+    # Anchor spreading pass — same pooled logic as _assign_edge_ports
+    # ------------------------------------------------------------------
+    def side_coords(side: str, k: int, n: int) -> tuple[float, float]:
+        t = (k + 1) / (n + 1)
+        if side == "top":
+            return t, 0.0
+        elif side == "bottom":
+            return t, 1.0
+        elif side == "left":
+            return 0.0, t
+        else:  # right
+            return 1.0, t
+
+    port_data: list[dict] = [
+        {"exitX": 0.5, "exitY": 1.0, "entryX": 0.5, "entryY": 0.0}
+        for _ in edges
+    ]
+
+    # Pool all connections on a (vertex, side) together
+    side_slots: dict[tuple, list[tuple[int, str]]] = {}
+    for idx, (src, tgt) in enumerate(edges):
+        if src == tgt or selected_sides.get(idx) is None:
+            continue
+        exit_side, entry_side = selected_sides[idx]  # type: ignore[misc]
+        side_slots.setdefault((src, exit_side), []).append((idx, "exit"))
+        side_slots.setdefault((tgt, entry_side), []).append((idx, "entry"))
+
+    for (vertex, side), slot_list in side_slots.items():
+        n = len(slot_list)
+        dim = 0 if side in ("top", "bottom") else 1
+        sorted_slots = sorted(
+            slot_list,
+            key=lambda item: positions[edges[item[0]][1 if item[1] == "exit" else 0]][dim],
+        )
+        for k, (idx, direction) in enumerate(sorted_slots):
+            x, y = side_coords(side, k, n)
+            if direction == "exit":
+                port_data[idx]["exitX"] = x
+                port_data[idx]["exitY"] = y
+            else:
+                port_data[idx]["entryX"] = x
+                port_data[idx]["entryY"] = y
+
+    # ------------------------------------------------------------------
+    # Build port suffix strings
+    # ------------------------------------------------------------------
+    port_suffixes: list[str] = []
+    for idx, (src, tgt) in enumerate(edges):
+        if src == tgt:
+            port_suffixes.append("")
+            continue
+        pd = port_data[idx]
+        suffix = (
+            f"exitX={round(pd['exitX'], 4)};exitY={round(pd['exitY'], 4)};"
+            f"exitDx=0;exitDy=0;"
+            f"entryX={round(pd['entryX'], 4)};entryY={round(pd['entryY'], 4)};"
+            f"entryDx=0;entryDy=0;"
+        )
+        port_suffixes.append(suffix)
+
+    # ------------------------------------------------------------------
+    # Final waypoint pass using spread anchors
+    # ------------------------------------------------------------------
+    edge_waypoints: list[list[tuple[float, float]]] = []
+    for idx, (src, tgt) in enumerate(edges):
+        if src == tgt:
+            edge_waypoints.append([])
+            continue
+        pd = port_data[idx]
+        ax = positions[src][0] + pd["exitX"] * node_widths[src]
+        ay = positions[src][1] + pd["exitY"] * node_heights[src]
+        bx = positions[tgt][0] + pd["entryX"] * node_widths[tgt]
+        by = positions[tgt][1] + pd["entryY"] * node_heights[tgt]
+        wps, _ = _route_path(ax, ay, bx, by, src, tgt, positions, node_widths, node_heights, gap)
+        edge_waypoints.append(wps)
+
+    return port_suffixes, edge_waypoints
+
+
 def _layout_for_canvas(
     n_vertices: int,
     edges: list[tuple[int, int]],
     min_dist: float,
     margin: int = MARGIN,
     method: str = "sugiyama",
+    weights: list[float] | None = None,
 ) -> list[tuple[float, float]]:
     """Run a graph layout and return (x, y) per vertex with guaranteed minimum spacing.
 
@@ -365,7 +870,7 @@ def _layout_for_canvas(
 
     g = ig.Graph(n=n_vertices, edges=edges, directed=True)
     if method == "kamada_kawai":
-        raw = g.layout_kamada_kawai()
+        raw = g.layout_kamada_kawai(weights=weights)
     else:
         raw = g.layout_sugiyama()
     # Sugiyama may inflate vertex count with dummy nodes — slice back to original
@@ -532,38 +1037,33 @@ def _build_class_diagram_xml(
                 all_edges.append((sub_idx, sup_idx))
                 layout_edges.append((sub_idx, sup_idx))
 
-    # Reserve space so no box overflows: layout positions are top-left corners,
-    # so the canvas must extend CLASS_W beyond the rightmost position and
-    # max_height beyond the bottommost position.
-    max_height = max(
-        (_class_height(len(cls.attributes), len(cls.methods)) for cls in classes),
-        default=HEADER_H + ROW_H + SEP_H + ROW_H,
-    )
+    # Per-node dimensions: all classes share CLASS_W; height varies
+    node_widths:  list[int] = [CLASS_W] * n
+    node_heights: list[int] = [_class_height(len(cls.attributes), len(cls.methods)) for cls in classes]
 
-    # Node spacing: guarantee that for ANY pair orientation, at least one axis
-    # clears H_GAP pixels.  Euclidean-only scaling fails when boxes are tall and
-    # nodes are positioned diagonally — the correct bound is the hypotenuse of
-    # (CLASS_W + H_GAP) and (max_height + H_GAP), i.e. the worst-case diagonal.
     H_GAP = 40
-    min_dist = math.hypot(CLASS_W + H_GAP, max_height + H_GAP)
+    avg_h = sum(node_heights) / max(len(node_heights), 1)
+    min_dist = math.hypot(CLASS_W + H_GAP, avg_h + H_GAP)
 
     if use_layout:
         positions = _layout_for_canvas(n, layout_edges, min_dist, method=layout)
     else:
         positions = _grid_layout(n)
+    positions = _remove_overlaps(positions, node_widths, node_heights, gap=H_GAP)
 
-    max_x = max((x for x, _ in positions), default=0)
-    max_y = max((y for _, y in positions), default=0)
-    canvas_w = int(max_x) + CLASS_W + MARGIN
-    canvas_h = int(max_y) + max_height + MARGIN
+    max_x = max((positions[i][0] + node_widths[i]  for i in range(n)), default=0)
+    max_y = max((positions[i][1] + node_heights[i] for i in range(n)), default=0)
+    canvas_w = int(max_x) + MARGIN
+    canvas_h = int(max_y) + MARGIN
 
-    port_suffixes = _assign_edge_ports(all_edges, positions) if route_edges else [""] * len(all_edges)
+    if route_edges:
+        port_suffixes, edge_waypoints = _optimize_edge_routing(all_edges, positions, node_widths, node_heights, gap=H_GAP)
+    else:
+        port_suffixes = [""] * len(all_edges)
+        edge_waypoints = [[] for _ in all_edges]
 
-    # Pre-compute per-class heights for self-loop waypoint calculation
-    class_heights = {
-        i: _class_height(len(cls.attributes), len(cls.methods))
-        for i, cls in enumerate(classes)
-    }
+    # Derive class_heights from node_heights (still needed for self-loop waypoints)
+    class_heights = {i: node_heights[i] for i in range(n)}
 
     # Build XML
     mxfile = etree.Element("mxfile", compressed="false", version="24.0.0")
@@ -574,7 +1074,7 @@ def _build_class_diagram_xml(
         guides="1", tooltips="1", connect="1", arrows="1",
         fold="1", page="1", pageScale="1",
         pageWidth=str(canvas_w), pageHeight=str(canvas_h),
-        math="0", shadow="0",
+        math="0", shadow="0", background="#FFFFFF",
     )
     model_el = diagram[0]
     root_el = etree.SubElement(model_el, "root")
@@ -690,9 +1190,11 @@ def _build_class_diagram_xml(
             assoc_cell, "mxGeometry",
             attrib={"relative": "1", "as": "geometry"},
         )
-        if waypoints:
+        route_wps = edge_waypoints[assoc_edge_idx[i]] if assoc_edge_idx[i] is not None else []
+        all_wps = waypoints if waypoints else route_wps
+        if all_wps:
             arr = etree.SubElement(geo, "Array", attrib={"as": "points"})
-            for wx, wy in waypoints:
+            for wx, wy in all_wps:
                 etree.SubElement(arr, "mxPoint", x=str(int(wx)), y=str(int(wy)))
 
         # Multiplicity + verb phrase labels: split into 4 separate cells.
@@ -826,17 +1328,35 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
         else:
             trans_edge_idx.append(None)
 
-    max_state_h = max((_state_height(st.entry_action) for st in sd.states), default=STATE_H)
-    S_GAP = 40
-    min_dist = math.hypot(STATE_W + S_GAP, max_state_h + S_GAP)
+    # Per-node dimensions: vertex 0 = initial pseudostate, vertices 1..N = states
+    node_widths:  list[int] = [INIT_SIZE] + [_state_width(st.name, st.entry_action) for st in sd.states]
+    node_heights: list[int] = [INIT_SIZE] + [_state_height(st.entry_action)          for st in sd.states]
 
-    positions = _layout_for_canvas(n_vertices, edges, min_dist)
-    port_suffixes = _assign_edge_ports(edges, positions)
+    # Compact initial scaling using average box diagonal (not max)
+    S_GAP = 100
+    avg_w = sum(node_widths)  / len(node_widths)
+    avg_h = sum(node_heights) / len(node_heights)
+    min_dist = math.hypot(avg_w + S_GAP, avg_h + S_GAP)
 
-    max_x = max((x for x, _ in positions), default=0)
-    max_y = max((y for _, y in positions), default=0)
-    canvas_w = int(max_x) + STATE_W + MARGIN
-    canvas_h = int(max_y) + max_state_h + MARGIN
+    # Per-edge weights: ideal center-to-center distance for each endpoint pair.
+    # Larger boxes get larger weights → Kamada-Kawai places them further apart.
+    edge_weights = [
+        math.hypot(
+            (node_widths[src]  + node_widths[tgt])  / 2 + S_GAP,
+            (node_heights[src] + node_heights[tgt]) / 2 + S_GAP,
+        )
+        for src, tgt in edges
+    ]
+
+    positions = _layout_for_canvas(n_vertices, edges, min_dist, method="kamada_kawai", weights=edge_weights)
+    positions = _remove_overlaps(positions, node_widths, node_heights, gap=S_GAP)
+    port_suffixes, edge_waypoints = _optimize_edge_routing(edges, positions, node_widths, node_heights, gap=S_GAP)
+
+    # Canvas from actual extents
+    max_x = max(positions[i][0] + node_widths[i]  for i in range(n_vertices))
+    max_y = max(positions[i][1] + node_heights[i] for i in range(n_vertices))
+    canvas_w = int(max_x) + MARGIN
+    canvas_h = int(max_y) + MARGIN
 
     # Build XML
     mxfile = etree.Element("mxfile", compressed="false", version="24.0.0")
@@ -847,7 +1367,7 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
         guides="1", tooltips="1", connect="1", arrows="1",
         fold="1", page="1", pageScale="1",
         pageWidth=str(canvas_w), pageHeight=str(canvas_h),
-        math="0", shadow="0",
+        math="0", shadow="0", background="#FFFFFF",
     )
     model_el = diagram[0]
     root_el = etree.SubElement(model_el, "root")
@@ -869,9 +1389,10 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
         attrib={"as": "geometry"},
     )
 
-    # Pre-compute per-state heights for self-loop waypoint calculation
-    # vertex index 1+i maps to sd.states[i]
-    state_heights = {1 + i: _state_height(st.entry_action) for i, st in enumerate(sd.states)}
+    # Pre-compute per-state dimensions for rendering and self-loop waypoints
+    # vertex index 1+i maps to sd.states[i]; derived from node_* lists
+    state_heights = {1 + i: node_heights[1 + i] for i in range(len(sd.states))}
+    state_widths  = {1 + i: node_widths[1 + i]  for i in range(len(sd.states))}
 
     # State nodes
     for i, st in enumerate(sd.states):
@@ -881,7 +1402,7 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
         sid = state_id(domain, class_name, st.name)
         value = st.name
         if st.entry_action:
-            action_html = st.entry_action.replace('\n', '<br>')
+            action_html = html.escape(st.entry_action).replace('\n', '<br>')
             value = f"{st.name}<br>──────────────────<br><i>entry /</i><br>{action_html}"
         state_cell = etree.SubElement(
             root_el, "mxCell",
@@ -890,7 +1411,7 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
         )
         etree.SubElement(
             state_cell, "mxGeometry",
-            x=str(x), y=str(y), width=str(STATE_W), height=str(state_heights[vertex_idx]),
+            x=str(x), y=str(y), width=str(state_widths[vertex_idx]), height=str(state_heights[vertex_idx]),
             attrib={"as": "geometry"},
         )
 
@@ -903,7 +1424,11 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
         style=STYLE_TRANSITION + port_suffixes[0], edge="1",
         source=init_cid, target=init_target_sid, parent="1",
     )
-    etree.SubElement(init_trans, "mxGeometry", attrib={"relative": "1", "as": "geometry"})
+    geo = etree.SubElement(init_trans, "mxGeometry", attrib={"relative": "1", "as": "geometry"})
+    if edge_waypoints[0]:
+        arr = etree.SubElement(geo, "Array", attrib={"as": "points"})
+        for wx, wy in edge_waypoints[0]:
+            etree.SubElement(arr, "mxPoint", x=str(int(wx)), y=str(int(wy)))
 
     # Transition edges
     # Build event lookup map for param sigs
@@ -931,6 +1456,7 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
         tgt_v = state_name_to_idx.get(trans.to)
 
         trans_waypoints: list[tuple[float, float]] = []
+        route_wps: list[tuple[float, float]] = []
         if src_v is not None and src_v == tgt_v:
             # Self-loop: density-aware corner + 3-point exterior path
             loop_idx = trans_self_loop_count.get(src_v, 0)
@@ -942,9 +1468,10 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
                 f"entryX={nx};entryY={ny};entryDx=0;entryDy=0;"
             )
             bx, by = positions[src_v]
-            trans_waypoints = _self_loop_waypoints(corner, bx, by, STATE_W, state_heights[src_v])
+            trans_waypoints = _self_loop_waypoints(corner, bx, by, state_widths[src_v], state_heights[src_v])
         else:
             port_suffix = port_suffixes[edge_idx] if edge_idx is not None else ""
+            route_wps = edge_waypoints[edge_idx] if edge_idx is not None else []
 
         trans_cell = etree.SubElement(
             root_el, "mxCell",
@@ -957,9 +1484,10 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
             x=LABEL_OFFSET_X, y=LABEL_OFFSET_Y,
             attrib={"relative": "1", "as": "geometry"},
         )
-        if trans_waypoints:
+        all_wps = trans_waypoints if trans_waypoints else route_wps
+        if all_wps:
             arr = etree.SubElement(geo, "Array", attrib={"as": "points"})
-            for wx, wy in trans_waypoints:
+            for wx, wy in all_wps:
                 etree.SubElement(arr, "mxPoint", x=str(int(wx)), y=str(int(wy)))
 
     etree.indent(mxfile, space="  ")
