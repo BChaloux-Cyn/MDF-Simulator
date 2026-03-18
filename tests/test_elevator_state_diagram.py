@@ -233,3 +233,57 @@ def test_initial_state_is_target_of_init_transition(diagram_xml):
     assert init_trans.get("target") == expected_target, (
         f"Init transition targets {init_trans.get('target')!r}, expected {expected_target!r}"
     )
+
+
+def test_initial_transition_enters_from_top(diagram_xml):
+    """The pseudostate → initial-state transition must enter the state from the top (entryY=0.0).
+
+    Regression: the old direction heuristic assigned entryX=0.0 (left side) when
+    the pseudostate was placed slightly to the side of the initial state by the
+    layout engine, regardless of which entry direction produced a shorter path.
+    The optimizer must consistently choose top-entry (entryY=0.0) because the
+    pseudostate is placed above the initial state and the vertical path is shorter.
+    """
+    cells = _cells_by_id(diagram_xml)
+    init_trans = next(
+        (el for cid, el in cells.items() if ":trans:" in cid and "__initial__" in cid),
+        None,
+    )
+    assert init_trans is not None, "Initial transition cell not found"
+    style = init_trans.get("style", "")
+    ports = _port_vals(style)
+    assert "entryY" in ports, f"Initial transition has no entryY port in style: {style!r}"
+    assert ports["entryY"] == pytest.approx(0.0), (
+        f"Initial transition should enter initial state from the top (entryY=0.0), "
+        f"got entryY={ports['entryY']} — the optimizer may be regressing to left/right routing"
+    )
+
+
+def test_minimum_state_spacing_100px(diagram_xml):
+    """All pairs of state boxes must have at least 100 px clearance on at least one axis.
+
+    Regression: S_GAP was 10 px, which allowed Moving_Up to be placed directly
+    adjacent to At_Floor, cluttering the routing corridor.  After raising S_GAP to
+    100 the overlap-removal pass enforces a minimum 100 px gap.
+    """
+    cells = _cells_by_id(diagram_xml)
+    boxes = []
+    for cid, el in cells.items():
+        if f":state:{CLASS_NAME}:" in cid and "__initial__" not in cid:
+            geo = el.find("mxGeometry")
+            if geo is not None:
+                boxes.append((
+                    int(geo.get("x", 0)), int(geo.get("y", 0)),
+                    int(geo.get("width", STATE_W)), int(geo.get("height", STATE_H)),
+                    cid,
+                ))
+
+    MIN_GAP = 100
+    for i, (x1, y1, w1, h1, id1) in enumerate(boxes):
+        for x2, y2, w2, h2, id2 in boxes[i + 1:]:
+            h_sep = (x2 - (x1 + w1)) if x2 >= x1 else (x1 - (x2 + w2))
+            v_sep = (y2 - (y1 + h1)) if y2 >= y1 else (y1 - (y2 + h2))
+            assert h_sep >= MIN_GAP or v_sep >= MIN_GAP, (
+                f"{id1} and {id2} are too close: h_sep={h_sep}px, v_sep={v_sep}px "
+                f"(need {MIN_GAP}px on at least one axis)"
+            )

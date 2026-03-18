@@ -18,6 +18,10 @@ try:
         sync_from_drawio,
         _remove_overlaps,
         _route_edges_around_boxes,
+        _anchor_point,
+        _segments_intersect,
+        _route_path,
+        _optimize_edge_routing,
         MARGIN,
     )
 except ImportError:
@@ -28,6 +32,10 @@ except ImportError:
     sync_from_drawio = None
     _remove_overlaps = None
     _route_edges_around_boxes = None
+    _anchor_point = None
+    _segments_intersect = None
+    _route_path = None
+    _optimize_edge_routing = None
     MARGIN = 120
 
 
@@ -802,3 +810,116 @@ def test_route_edges_blocked():
     bx1, by1 = positions[1][0] + W + gap, positions[1][1] + H + gap
     inside_b = bx0 <= wx <= bx1 and by0 <= wy <= by1
     assert not inside_b, f"Waypoint {wps[0]} is still inside blocker B's expanded AABB"
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for routing geometry helpers
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(_anchor_point is None, reason="tools.drawio not importable")
+def test_anchor_point_all_sides():
+    """_anchor_point returns the correct pixel coordinate for each side at t=0.5."""
+    positions = [(100.0, 200.0)]
+    widths  = [80]
+    heights = [60]
+    assert _anchor_point(0, "top",    0.5, positions, widths, heights) == (140.0, 200.0)
+    assert _anchor_point(0, "bottom", 0.5, positions, widths, heights) == (140.0, 260.0)
+    assert _anchor_point(0, "left",   0.5, positions, widths, heights) == (100.0, 230.0)
+    assert _anchor_point(0, "right",  0.5, positions, widths, heights) == (180.0, 230.0)
+
+
+@pytest.mark.skipif(_segments_intersect is None, reason="tools.drawio not importable")
+def test_segments_intersect_crossing():
+    """Two segments that form a classic X shape are detected as crossing."""
+    assert _segments_intersect((0.0, 0.0), (2.0, 2.0), (2.0, 0.0), (0.0, 2.0))
+
+
+@pytest.mark.skipif(_segments_intersect is None, reason="tools.drawio not importable")
+def test_segments_intersect_parallel_no_crossing():
+    """Two parallel horizontal segments do not intersect."""
+    assert not _segments_intersect((0.0, 0.0), (2.0, 0.0), (0.0, 1.0), (2.0, 1.0))
+
+
+@pytest.mark.skipif(_segments_intersect is None, reason="tools.drawio not importable")
+def test_segments_intersect_shared_endpoint_no_crossing():
+    """Two segments that meet at a shared endpoint are not counted as a proper crossing.
+
+    This matters for edge-crossing scoring: a shared endpoint (T-junction or elbow)
+    should not inflate the crossing count and bias the optimizer toward longer routes.
+    """
+    # p1→p2 and p3→p4 share the point (1, 1)
+    assert not _segments_intersect((0.0, 0.0), (1.0, 1.0), (1.0, 1.0), (2.0, 0.0))
+
+
+@pytest.mark.skipif(_route_path is None, reason="tools.drawio not importable")
+def test_route_path_clear_no_waypoints():
+    """Path between two nodes with no blocker in the corridor → 0 crossings, no waypoints."""
+    # A at (0,0) w=40 h=40, B at (300,0) w=40 h=40, C at (0,300) — well off to the side
+    positions = [(0.0, 0.0), (300.0, 0.0), (0.0, 300.0)]
+    widths  = [40, 40, 40]
+    heights = [40, 40, 40]
+    # Path runs right across the top; C is far below
+    wps, crossings = _route_path(40.0, 20.0, 300.0, 20.0, 0, 1, positions, widths, heights, gap=10)
+    assert crossings == 0, f"Expected 0 box crossings, got {crossings}"
+    assert wps == [], f"Expected no waypoints, got {wps}"
+
+
+@pytest.mark.skipif(_route_path is None, reason="tools.drawio not importable")
+def test_route_path_blocker_returns_waypoint_and_crossing_count():
+    """Path crossing a third box: 1 crossing reported and one avoidance waypoint placed."""
+    # A at (0,0), B at (400,0), blocker at (160,−5) spanning x=[160,240] y=[−5,45]
+    # Direct horizontal path at y=20 passes through the blocker
+    positions = [(0.0, 0.0), (400.0, 0.0), (160.0, -5.0)]
+    widths  = [40, 40, 80]
+    heights = [40, 40, 50]
+    ax, ay = 40.0, 20.0    # right edge of A at its vertical centre
+    bx, by = 400.0, 20.0   # left edge of B at its vertical centre
+    wps, crossings = _route_path(ax, ay, bx, by, 0, 1, positions, widths, heights, gap=10)
+    assert crossings == 1, f"Expected 1 box crossing, got {crossings}"
+    assert len(wps) == 1, f"Expected 1 avoidance waypoint, got {wps}"
+    wx, wy = wps[0]
+    # Waypoint must not be inside the blocker's bounding box (with gap)
+    bx0 = positions[2][0] - 10
+    bx1 = positions[2][0] + widths[2] + 10
+    by0 = positions[2][1] - 10
+    by1 = positions[2][1] + heights[2] + 10
+    assert not (bx0 <= wx <= bx1 and by0 <= wy <= by1), (
+        f"Avoidance waypoint {wps[0]} is still inside the blocker AABB"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for _optimize_edge_routing
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(_optimize_edge_routing is None, reason="tools.drawio not importable")
+def test_optimize_routing_avoids_box_via_side_selection():
+    """Optimizer picks top/top over right/left when the horizontal corridor is blocked.
+
+    Layout (y increases downward):
+
+        src (0,100) 40×40 ·········· [blocker (90,110) 80×40] ·········· tgt (200,100) 40×40
+
+    The direct horizontal path (right-exit at y=120, left-entry at y=120) passes
+    through the blocker [y=110..150].  The top path (exit top of src at y=100,
+    enter top of tgt at y=100) clears the blocker which starts at y=110.
+
+    The old direction heuristic would have chosen right/left unconditionally
+    (dx=200 > dy=0).  The optimizer must score box_crossings × W_BOX and
+    prefer the clear top/top path.
+    """
+    edges = [(0, 1)]
+    positions = [(0.0, 100.0), (200.0, 100.0), (90.0, 110.0)]  # vertex 2 = blocker
+    widths  = [40, 40, 80]
+    heights = [40, 40, 40]
+    suffixes, waypoints = _optimize_edge_routing(edges, positions, widths, heights, gap=5)
+    ports = {k: float(v) for k, v in _extract_ports(suffixes[0]).items()}
+    assert ports.get("exitY") == pytest.approx(0.0), (
+        f"Expected top exit (exitY=0.0) to avoid blocker, got exitY={ports.get('exitY')}"
+    )
+    assert ports.get("entryY") == pytest.approx(0.0), (
+        f"Expected top entry (entryY=0.0) to avoid blocker, got entryY={ports.get('entryY')}"
+    )
+    assert waypoints[0] == [], (
+        f"Top path is clear — expected no waypoints, got {waypoints[0]}"
+    )
