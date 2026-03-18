@@ -434,10 +434,35 @@ class as the new "self" context for the next hop.
 
 ## 5. Referential Attributes (Relvars)
 
-Referential attributes are **not declared by the modeler**. They are
-derived automatically by the compiler from the associations in
+Referential attributes are **normally not declared by the modeler**. They
+are derived automatically by the compiler from the associations in
 `class-diagram.yaml`. Both sides of every association receive a relvar;
 the data structure depends on the multiplicity.
+
+**Exception — explicit relvars:** When a modeler declares an attribute
+with a `referential` field (e.g., `referential: R16`), the compiler
+must recognize that this attribute *is* the relvar for that relationship
+and avoid generating a duplicate. This is used when the referential
+attribute participates in the class's identifier (compound key) or
+needs to be referenced by name in action code.
+
+```yaml
+# ShaftFloor is identified by (shaft, floor) — both are relvars
+- name: r16_shaft_id
+  type: UniqueID
+  identifier: 1
+  referential: R16
+- name: r17_floor_num
+  type: FloorNumber
+  identifier: 1
+  referential: R17
+```
+
+**TODO:** When an explicit relvar is declared, the compiler must also
+verify that the attribute's type matches the identifier type of the
+related class (e.g., `r16_shaft_id: UniqueID` must match `Shaft.shaft_id:
+UniqueID`). The exact type-matching rules depend on how association
+multiplicities translate to storage types, which is not yet defined.
 
 ### 5.1 Formalization Rules
 

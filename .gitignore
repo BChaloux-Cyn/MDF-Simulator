@@ -11,3 +11,4 @@ tests/output/
 # Local Settings
 settings.local.json
 .claude/settings.local.json
+examples/elevator/.design/model-archive-v1/

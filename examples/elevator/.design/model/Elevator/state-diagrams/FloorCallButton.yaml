@@ -1,0 +1,17 @@
+schema_version: "1.0.0"
+domain: Elevator
+class: FloorCallButton
+initial_state: Idle
+events:
+  - name: Activated
+  - name: Call_served
+states:
+  - name: Idle
+  - name: Lit
+transitions:
+  - from: Idle
+    to: Lit
+    event: Activated
+  - from: Lit
+    to: Idle
+    event: Call_served

@@ -3,6 +3,12 @@ domains:
   - name: Building
     type: realized
     description: Represents the physical building infrastructure (floor count, elevator count)
+  - name: Transport
+    type: realized
+    description: Motor control and position sensing — detects when an elevator car reaches a floor
+  - name: Clock
+    type: realized
+    description: Provides monotonic timestamps for event ordering
   - name: Elevator
     type: application
     description: Core elevator control logic — movement, doors, dispatch, calls, requests
@@ -20,3 +26,15 @@ bridges:
           - name: floor_num
             type: Integer
         return: Boolean
+  - from: Elevator
+    to: Clock
+    operations:
+      - name: Now
+        return: Integer
+  - from: Transport
+    to: Elevator
+    operations:
+      - name: ElevatorDetected
+        params:
+          - name: sensor_id
+            type: Integer

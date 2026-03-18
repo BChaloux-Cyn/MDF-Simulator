@@ -325,11 +325,20 @@ def _check_bridge_operations_vs_domains(
     for bridge_stanza in cd.bridges:
         to_domain = bridge_stanza.to_domain
         # Find bridge declaration in DOMAINS.yaml
-        bridge_entry = next(
-            (b for b in domains_file.bridges
-             if b.from_domain == domain and b.to == to_domain),
-            None,
-        )
+        # Required: this domain calls out → from: domain, to: to_domain
+        # Provided: other domain calls in → from: to_domain, to: domain
+        if bridge_stanza.direction == "required":
+            bridge_entry = next(
+                (b for b in domains_file.bridges
+                 if b.from_domain == domain and b.to == to_domain),
+                None,
+            )
+        else:
+            bridge_entry = next(
+                (b for b in domains_file.bridges
+                 if b.from_domain == to_domain and b.to == domain),
+                None,
+            )
         declared_ops = (
             {op.name for op in bridge_entry.operations}
             if bridge_entry is not None

@@ -3,105 +3,87 @@ domain: Elevator
 class: Elevator
 initial_state: Idle
 events:
-  - name: Request_assigned
+  - name: Floor_assigned
     params:
-      - name: target_floor
+      - name: floor_num
         type: FloorNumber
   - name: Floor_reached
     params:
-      - name: current_floor
+      - name: floor_num
         type: FloorNumber
-  - name: Stopped
-  - name: Service_complete
-  - name: Elevator_available
+  - name: Ready
+  - name: At_Destination
+  - name: Continue
+  - name: Arrived
   - name: Door_closed
 states:
   - name: Idle
-    entry_action: |-
-      self.direction = Stopped;
-      self.next_stop_floor = 0;
-      select any req from instances of Request where request_id == self.r14_request_id;
-      if (req != empty) {
-        generate Request_assigned(target_floor: req.destination_floor) to self;
+  - name: Departing
+    entry_action: |
+      if (self.next_stop_floor > self.current_floor) {
+          self.direction = Up;
       } else {
-        select any disp from instances of Dispatcher;
-        generate Elevator_available(queue_length: 0) to disp;
+          self.direction = Down;
       }
-  - name: Moving_Up
-    entry_action: |-
-      self.direction = Up;
-      select any shaft related by self->R11;
-      generate Move_up to shaft;
-  - name: Moving_Down
-    entry_action: |-
-      self.direction = Down;
-      select any shaft related by self->R11;
-      generate Move_down to shaft;
-  - name: Stopping
-    entry_action: |-
-      self.direction = Stopped;
-      select any shaft related by self->R11;
-      generate Stop to shaft;
-  - name: At_Floor
-    entry_action: |-
-      select any next_req from instances of Request where request_id == self.r14_request_id;
-      if (next_req != empty) {
-        if (next_req.destination_floor > self.current_floor) { self.next_direction = Up; }
-        if (next_req.destination_floor < self.current_floor) { self.next_direction = Down; }
+      generate Ready to self;
+  - name: Moving
+  - name: Floor_Updating
+    entry_action: |
+      self.current_floor = rcvd_evt.floor_num;
+      if (self.current_floor == self.next_stop_floor) {
+          generate At_Destination to self;
       } else {
-        select any fc from instances of FloorCall where floor_num == self.current_floor;
-        if (fc != empty) { self.next_direction = fc.direction; }
-        else { self.next_direction = Stopped; }
+          generate Continue to self;
       }
-      select any floor_inst from instances of Floor where floor_num == self.current_floor;
-      select any indicator related by self->R10;
-      generate Direction_set(direction: self.next_direction) to indicator;
-      generate Elevator_arrived to floor_inst;
-      generate Open_door to self;
+  - name: Arriving
+    entry_action: |
+      self.direction = None;
+      select many buttons related by self->R4;
+      generate Floor_served(floor_num: self.current_floor) to buttons;
+      generate Arrived to self;
+  - name: Exchanging
 transitions:
+  # From Idle — only way out is a floor assignment
   - from: Idle
-    to: Moving_Up
-    event: Request_assigned
-    guard: "rcvd_evt.target_floor > self.current_floor"
-    action: "self.next_stop_floor = rcvd_evt.target_floor;"
-  - from: Idle
-    to: Moving_Down
-    event: Request_assigned
-    guard: "rcvd_evt.target_floor < self.current_floor"
-    action: "self.next_stop_floor = rcvd_evt.target_floor;"
-  - from: Idle
-    to: At_Floor
-    event: Request_assigned
-    guard: "rcvd_evt.target_floor == self.current_floor"
-  - from: Moving_Up
-    to: Stopping
+    to: Departing
+    event: Floor_assigned
+    action: "self.next_stop_floor = rcvd_evt.floor_num;"
+
+  # Departing sets direction and indicators, enters Moving
+  - from: Departing
+    to: Moving
+    event: Ready
+
+  # Moving receives floor updates
+  - from: Moving
+    to: Floor_Updating
     event: Floor_reached
-    guard: "rcvd_evt.current_floor == self.next_stop_floor"
-    action: "self.current_floor = rcvd_evt.current_floor;"
-  - from: Moving_Up
-    to: Moving_Up
-    event: Floor_reached
-    guard: "rcvd_evt.current_floor != self.next_stop_floor"
-    action: "self.current_floor = rcvd_evt.current_floor;"
-  - from: Moving_Down
-    to: Stopping
-    event: Floor_reached
-    guard: "rcvd_evt.current_floor == self.next_stop_floor"
-    action: "self.current_floor = rcvd_evt.current_floor;"
-  - from: Moving_Down
-    to: Moving_Down
-    event: Floor_reached
-    guard: "rcvd_evt.current_floor != self.next_stop_floor"
-    action: "self.current_floor = rcvd_evt.current_floor;"
-  - from: Stopping
-    to: At_Floor
-    event: Stopped
-  - from: At_Floor
+
+  # Floor_Updating decides: keep going or stop
+  - from: Floor_Updating
+    to: Arriving
+    event: At_Destination
+  - from: Floor_Updating
+    to: Moving
+    event: Continue
+
+  # Arriving notifies buttons and indicators, enters Exchanging
+  - from: Arriving
+    to: Exchanging
+    event: Arrived
+
+  # Exchanging can receive new destinations while parked
+  - from: Exchanging
+    to: Exchanging
+    event: Floor_assigned
+    action: "self.next_stop_floor = rcvd_evt.floor_num;"
+
+  # Door closes — check if we have work
+  - from: Exchanging
+    to: Departing
+    event: Door_closed
+    guard: "self.next_stop_floor != self.current_floor"
+  - from: Exchanging
     to: Idle
     event: Door_closed
-    action: |-
-      select any req related by self->R2;
-      if (req != empty) { generate Door_closed to req; }
-  - from: At_Floor
-    to: Idle
-    event: Service_complete
+    guard: "self.next_stop_floor == self.current_floor"

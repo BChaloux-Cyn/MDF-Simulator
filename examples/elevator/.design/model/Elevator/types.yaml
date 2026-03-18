@@ -6,8 +6,8 @@ types:
     values:
       - Up
       - Down
-      - Stopped
-    description: Current or intended direction of elevator travel
+      - None
+    description: Current direction of elevator travel (None when stationary)
   - name: CallDirection
     base: enum
     values:
@@ -18,3 +18,6 @@ types:
     base: Integer
     range: [1, 100]
     description: A valid floor number in the building
+  - name: Timestamp
+    base: Integer
+    description: Monotonic time value for ordering events (from Clock bridge)

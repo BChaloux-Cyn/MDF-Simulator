@@ -16,26 +16,15 @@ classes:
       - name: next_direction
         type: Direction
 
-  - name: Door
-    stereotype: active
+  - name: Shaft
+    stereotype: entity
     attributes:
-      - name: door_id
+      - name: shaft_id
         type: UniqueID
         identifier: 1
-
-  - name: Dispatcher
-    stereotype: active
-    attributes:
-      - name: dispatcher_id
-        type: UniqueID
-        identifier: 1
-      - name: has_idle_elevator
-        type: Boolean
-      - name: queue_length
-        type: Integer
 
   - name: Floor
-    stereotype: active
+    stereotype: entity
     attributes:
       - name: floor_num
         type: FloorNumber
@@ -45,173 +34,62 @@ classes:
       - name: is_bottom_floor
         type: Boolean
 
-  - name: Call
+  - name: ShaftFloor
     stereotype: entity
-    partitions:
-      - name: R5
-        subtypes:
-          - ElevatorCall
-          - FloorCall
     attributes:
-      - name: call_id
+      - name: r2_shaft_id
         type: UniqueID
         identifier: 1
-
-  - name: ElevatorCall
-    stereotype: active
-    specializes: R5
-    attributes:
-      - name: destination_floor
+        referential: R2
+      - name: r3_floor_num
         type: FloorNumber
+        identifier: 1
+        referential: R3
+      - name: sensor_id
+        type: Integer
 
-  - name: FloorCall
-    stereotype: active
-    specializes: R5
-    attributes:
-      - name: floor_num
-        type: FloorNumber
-      - name: direction
-        type: CallDirection
-
-  - name: Request
+  - name: DestFloorButton
     stereotype: active
     attributes:
-      - name: request_id
+      - name: r4_elevator_id
         type: UniqueID
         identifier: 1
-      - name: destination_floor
+        referential: R4
+      - name: r5_floor_num
         type: FloorNumber
+        identifier: 1
+        referential: R5
+      - name: pressed_at
+        type: Timestamp
+    methods:
+      - name: press
+        visibility: public
+        scope: instance
+        action: |
+          self.pressed_at = Clock::Now();
+          generate Activated to self;
 
-  - name: CallButton
-    stereotype: entity
-    partitions:
-      - name: R6
-        subtypes:
-          - DestFloorButton
-          - FloorCallButton
+  - name: FloorCallButton
+    stereotype: active
     attributes:
       - name: button_id
         type: UniqueID
         identifier: 1
-
-  - name: DestFloorButton
-    stereotype: entity
-    specializes: R6
-    attributes:
-      - name: floor_num
-        type: FloorNumber
-
-  - name: FloorCallButton
-    stereotype: entity
-    specializes: R6
-    attributes:
       - name: direction
         type: CallDirection
-      - name: r3_floor_num
-        type: FloorNumber
-        referential: R3
-
-  - name: Shaft
-    stereotype: active
-    attributes:
-      - name: shaft_id
-        type: UniqueID
-        identifier: 1
-      - name: current_floor
-        type: FloorNumber
-
-  - name: ElevatorIndicator
-    stereotype: active
-    attributes:
-      - name: indicator_id
-        type: UniqueID
-        identifier: 1
-      - name: displayed_floor
-        type: FloorNumber
-
-  - name: FloorIndicator
-    stereotype: active
-    attributes:
-      - name: indicator_id
-        type: UniqueID
-        identifier: 1
-      - name: direction
-        type: Direction
+      - name: pressed_at
+        type: Timestamp
+    methods:
+      - name: press
+        visibility: public
+        scope: instance
+        action: |
+          self.pressed_at = Clock::Now();
+          generate Activated to self;
 
 associations:
+  # Elevator moves within a Shaft
   - name: R1
-    point_1: Elevator
-    point_2: Door
-    1_mult_2: "1"
-    2_mult_1: "1"
-    1_phrase_2: is controlled by
-    2_phrase_1: controls
-
-  - name: R2
-    point_1: Elevator
-    point_2: Request
-    1_mult_2: "0..*"
-    2_mult_1: "1"
-    1_phrase_2: has pending
-    2_phrase_1: is pending for
-
-  - name: R3
-    point_1: Floor
-    point_2: FloorCallButton
-    1_mult_2: "0..2"
-    2_mult_1: "1"
-    1_phrase_2: has buttons at
-    2_phrase_1: is located on
-
-  - name: R4
-    point_1: Elevator
-    point_2: DestFloorButton
-    1_mult_2: "0..*"
-    2_mult_1: "1"
-    1_phrase_2: has destination buttons for
-    2_phrase_1: is inside
-
-  - name: R5
-    point_1: Call
-    point_2: ElevatorCall
-    1_mult_2: "1"
-    2_mult_1: "1"
-    1_phrase_2: is specialized as
-    2_phrase_1: specializes
-
-  - name: R6
-    point_1: CallButton
-    point_2: DestFloorButton
-    1_mult_2: "1"
-    2_mult_1: "1"
-    1_phrase_2: is specialized as
-    2_phrase_1: specializes
-
-  - name: R7
-    point_1: CallButton
-    point_2: Call
-    1_mult_2: "0..1"
-    2_mult_1: "1"
-    1_phrase_2: submitted
-    2_phrase_1: was submitted by
-
-  - name: R8
-    point_1: Call
-    point_2: Request
-    1_mult_2: "0..1"
-    2_mult_1: "0..1"
-    1_phrase_2: is being served by
-    2_phrase_1: serves
-
-  - name: R9
-    point_1: Request
-    point_2: Request
-    1_mult_2: "0..1"
-    2_mult_1: "0..1"
-    1_phrase_2: is followed by
-    2_phrase_1: follows
-
-  - name: R11
     point_1: Elevator
     point_2: Shaft
     1_mult_2: "1"
@@ -219,37 +97,50 @@ associations:
     1_phrase_2: moves within
     2_phrase_1: carries
 
-  - name: R12
-    point_1: Elevator
-    point_2: ElevatorIndicator
-    1_mult_2: "1"
-    2_mult_1: "1"
-    1_phrase_2: displays floor on
-    2_phrase_1: shows floor for
-
-  - name: R10
-    point_1: Elevator
-    point_2: FloorIndicator
+  # Shaft has stops at ShaftFloors
+  - name: R2
+    point_1: Shaft
+    point_2: ShaftFloor
     1_mult_2: "0..*"
     2_mult_1: "1"
-    1_phrase_2: has indicator at
-    2_phrase_1: shows floor for
+    1_phrase_2: has stops at
+    2_phrase_1: is a stop in
 
-  - name: R13
+  # Floor is served by ShaftFloors
+  - name: R3
     point_1: Floor
-    point_2: FloorIndicator
+    point_2: ShaftFloor
     1_mult_2: "0..*"
     2_mult_1: "1"
-    1_phrase_2: has indicator
-    2_phrase_1: is located on
+    1_phrase_2: is served by
+    2_phrase_1: serves
 
-  - name: R14
+  # Elevator has DestFloorButtons
+  - name: R4
     point_1: Elevator
-    point_2: Request
-    1_mult_2: "0..1"
-    2_mult_1: "0..1"
-    1_phrase_2: has as queue head
-    2_phrase_1: is queue head for
+    point_2: DestFloorButton
+    1_mult_2: "2..*"
+    2_mult_1: "1"
+    1_phrase_2: has destination buttons for
+    2_phrase_1: is inside
+
+  # DestFloorButton represents a Floor
+  - name: R5
+    point_1: Floor
+    point_2: DestFloorButton
+    1_mult_2: "0..*"
+    2_mult_1: "1"
+    1_phrase_2: is a destination on
+    2_phrase_1: represents
+
+  # Floor has FloorCallButtons
+  - name: R6
+    point_1: Floor
+    point_2: FloorCallButton
+    1_mult_2: "0..2"
+    2_mult_1: "1"
+    1_phrase_2: has buttons at
+    2_phrase_1: is located on
 
 bridges:
   - to_domain: Building
@@ -257,3 +148,18 @@ bridges:
     operations:
       - IsTopFloor
       - IsBottomFloor
+  - to_domain: Clock
+    direction: required
+    operations:
+      - Now
+  - to_domain: Transport
+    direction: provided
+    implementations:
+      - name: ElevatorDetected
+        action: |
+          select any sf from instances of ShaftFloor
+              where self.sensor_id == arg.sensor_id;
+          select any shaft related by sf->R2;
+          select any elev related by shaft->R1;
+          select any floor related by sf->R3;
+          generate Floor_reached(floor_num: floor.floor_num) to elev;
