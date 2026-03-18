@@ -12,7 +12,7 @@ transitions:
   - from: Unlit
     to: Lit
     event: Button_pushed
-    action: >-
+    action: |-
       create ec of ElevatorCall;
       relate ec to self across R7;
       select any disp from instances of Dispatcher;

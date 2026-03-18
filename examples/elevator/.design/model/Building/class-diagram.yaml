@@ -6,7 +6,7 @@ classes:
     attributes:
       - name: spec_id
         type: UniqueID
-        identifier: true
+        identifier: 1
       - name: floor_count
         type: Integer
       - name: elevator_count

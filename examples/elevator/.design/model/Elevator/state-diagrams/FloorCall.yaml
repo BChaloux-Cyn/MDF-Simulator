@@ -10,7 +10,7 @@ states:
   - name: Assigned
   - name: Fulfilled
     terminal: true
-    entry_action: >-
+    entry_action: |-
       generate Call_fulfilled to self.r7_button_id;
       select any req from instances of Request where request_id == self.r8_request_id;
       if (req != empty) { generate Request_cancelled to req; }

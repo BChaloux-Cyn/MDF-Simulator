@@ -168,7 +168,7 @@ def _get_effective_attributes(cls, class_map: dict) -> list:
         for partition in (candidate.partitions or []):
             if partition.name == cls.specializes:
                 # Return supertype identifiers + subtype attributes
-                supertype_ids = [a for a in candidate.attributes if a.identifier]
+                supertype_ids = [a for a in candidate.attributes if a.identifier is not None]
                 return supertype_ids + list(cls.attributes)
     return list(cls.attributes)
 
@@ -237,7 +237,7 @@ def _check_referential_integrity_class_diagram(
             effective_attrs = _get_effective_attributes(cls, class_map)
             subtype_attr_names = {a.name for a in cls.attributes}
             for supertype_attr in effective_attrs:
-                if supertype_attr.identifier and supertype_attr.name in subtype_attr_names:
+                if supertype_attr.identifier is not None and supertype_attr.name in subtype_attr_names:
                     issues.append(_make_issue(
                         issue=(
                             f"Subtype '{cls.name}' re-declares identifier attribute "
@@ -259,6 +259,32 @@ def _check_referential_integrity_class_diagram(
                     location=f"{loc_cd}::classes.{cls.name}.attributes.{attr.name}.type",
                     value=attr.type,
                     fix=f"Add type '{attr.type}' to types.yaml or use a primitive type",
+                ))
+            # UniqueID non-identifier warning (likely explicit relvar)
+            if attr.type == "UniqueID" and attr.identifier is None:
+                issues.append(_make_issue(
+                    issue=(
+                        f"Attribute '{cls.name}.{attr.name}' has type UniqueID but is not an identifier — "
+                        f"this is likely an explicit relvar that should be derived from the relationship"
+                    ),
+                    location=f"{loc_cd}::classes.{cls.name}.attributes.{attr.name}",
+                    value=attr.name,
+                    fix=f"Remove '{attr.name}' and let the compiler derive it from the relationship",
+                    severity="warning",
+                ))
+
+        # Every non-subtype class must have at least one identifier 1 attribute
+        if cls.specializes is None:
+            has_id1 = any(
+                a.identifier is not None and 1 in a.identifier
+                for a in cls.attributes
+            )
+            if not has_id1:
+                issues.append(_make_issue(
+                    issue=f"Class '{cls.name}' has no identifier 1 attribute",
+                    location=f"{loc_cd}::classes.{cls.name}",
+                    value=cls.name,
+                    fix=f"Add 'identifier: 1' to at least one attribute of '{cls.name}'",
                 ))
 
         # Methods: return_type and param types must be valid

@@ -8,7 +8,7 @@ events:
 states:
   - name: Available
   - name: Serving
-    entry_action: >-
+    entry_action: |-
       select any fc from instances of FloorCall where floor_num == self.floor_num;
       if (fc != empty) { generate Elevator_arrived to fc; }
 transitions:

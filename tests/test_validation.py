@@ -16,6 +16,7 @@ classes:
     attributes:
       - name: valve_id
         type: UniqueID
+        identifier: 1
 associations: []
 bridges: []
 """
@@ -488,6 +489,7 @@ classes:
     attributes:
       - name: valve_id
         type: UniqueID
+        identifier: 1
 associations: []
 bridges: []
 """
@@ -860,3 +862,133 @@ transitions:
     ]
     assert len(complex_issues) >= 1, f"Expected complex guard warning, got: {result}"
     assert complex_issues[0]["severity"] == "warning"
+
+
+# ---------------------------------------------------------------------------
+# Identifier checks
+# ---------------------------------------------------------------------------
+
+def test_missing_identifier_1_error(tmp_path, monkeypatch):
+    """Class with no identifier 1 attribute produces an error."""
+    monkeypatch.chdir(tmp_path)
+    bad_class_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: Valve
+    stereotype: entity
+    attributes:
+      - name: status
+        type: Boolean
+associations: []
+bridges: []
+"""
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(bad_class_yaml)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    id_issues = [i for i in result if "no identifier 1" in i["issue"].lower()]
+    assert len(id_issues) >= 1, f"Expected missing identifier 1 error, got: {result}"
+    assert id_issues[0]["severity"] == "error"
+
+
+def test_uniqueid_non_identifier_warning(tmp_path, monkeypatch):
+    """UniqueID attribute without identifier set produces a warning."""
+    monkeypatch.chdir(tmp_path)
+    bad_class_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: Valve
+    stereotype: entity
+    attributes:
+      - name: valve_id
+        type: UniqueID
+        identifier: 1
+      - name: r1_timer_id
+        type: UniqueID
+associations: []
+bridges: []
+"""
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(bad_class_yaml)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    relvar_warnings = [
+        i for i in result
+        if "relvar" in i["issue"].lower() or "not an identifier" in i["issue"].lower()
+    ]
+    assert len(relvar_warnings) >= 1, f"Expected UniqueID non-identifier warning, got: {result}"
+    assert relvar_warnings[0]["severity"] == "warning"
+
+
+def test_subtype_inherits_identifier_no_error(tmp_path, monkeypatch):
+    """Subtype without own identifier 1 is OK (inherited from supertype)."""
+    monkeypatch.chdir(tmp_path)
+    class_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: Shape
+    stereotype: entity
+    partitions:
+      - name: R1
+        subtypes:
+          - Circle
+    attributes:
+      - name: shape_id
+        type: UniqueID
+        identifier: 1
+  - name: Circle
+    stereotype: entity
+    specializes: R1
+    attributes:
+      - name: radius
+        type: Real
+associations:
+  - name: R1
+    point_1: Shape
+    point_2: Circle
+    1_mult_2: "1"
+    2_mult_1: "1"
+    1_phrase_2: is specialized as
+    2_phrase_1: specializes
+bridges: []
+"""
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(class_yaml)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    id_issues = [i for i in result if "no identifier 1" in i["issue"].lower()]
+    assert id_issues == [], f"Subtype should not need own identifier, got: {id_issues}"
+
+
+def test_compound_identifier_valid(tmp_path, monkeypatch):
+    """Two attributes both with identifier [1] is a valid compound key."""
+    monkeypatch.chdir(tmp_path)
+    class_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: FloorButton
+    stereotype: entity
+    attributes:
+      - name: floor_num
+        type: Integer
+        identifier: 1
+      - name: direction
+        type: Integer
+        identifier: 1
+associations: []
+bridges: []
+"""
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(class_yaml)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    id_issues = [i for i in result if "no identifier 1" in i["issue"].lower()]
+    assert id_issues == [], f"Compound identifier should be valid, got: {id_issues}"

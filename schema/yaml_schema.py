@@ -135,8 +135,30 @@ class Attribute(BaseModel):
     type: str
     visibility: Literal["public", "private"] = "private"
     scope: Literal["instance", "class"] = "instance"
-    identifier: bool = False
+    identifier: list[int] | None = None
     referential: str | None = None
+
+    @field_validator("identifier", mode="before")
+    @classmethod
+    def normalize_identifier(cls, v: object) -> list[int] | None:
+        if v is None or v is False:
+            return None
+        if v is True:
+            return [1]
+        if isinstance(v, int):
+            if v < 1:
+                raise ValueError(f"identifier values must be positive integers, got {v}")
+            return [v]
+        if isinstance(v, list):
+            if len(v) == 0:
+                raise ValueError("identifier list must not be empty")
+            for item in v:
+                if not isinstance(item, int) or isinstance(item, bool):
+                    raise ValueError(f"identifier list items must be integers, got {item!r}")
+                if item < 1:
+                    raise ValueError(f"identifier values must be positive integers, got {item}")
+            return v
+        raise ValueError(f"identifier must be bool, int, list[int], or None, got {type(v).__name__}")
 
 
 class MethodParam(BaseModel):

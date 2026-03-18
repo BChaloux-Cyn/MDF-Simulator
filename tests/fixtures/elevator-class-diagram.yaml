@@ -6,7 +6,7 @@ classes:
     attributes:
       - name: elevator_id
         type: UniqueID
-        identifier: true
+        identifier: 1
       - name: current_floor
         type: FloorNumber
       - name: direction
@@ -15,26 +15,20 @@ classes:
         type: FloorNumber
       - name: next_direction
         type: Direction
-      - name: r14_request_id
-        type: UniqueID
-        referential: R14
 
   - name: Door
     stereotype: active
     attributes:
       - name: door_id
         type: UniqueID
-        identifier: true
-      - name: r1_elevator_id
-        type: UniqueID
-        referential: R1
+        identifier: 1
 
   - name: Dispatcher
     stereotype: active
     attributes:
       - name: dispatcher_id
         type: UniqueID
-        identifier: true
+        identifier: 1
       - name: has_idle_elevator
         type: Boolean
       - name: queue_length
@@ -45,7 +39,7 @@ classes:
     attributes:
       - name: floor_num
         type: FloorNumber
-        identifier: true
+        identifier: 1
       - name: is_top_floor
         type: Boolean
       - name: is_bottom_floor
@@ -61,13 +55,7 @@ classes:
     attributes:
       - name: call_id
         type: UniqueID
-        identifier: true
-      - name: r7_button_id
-        type: UniqueID
-        referential: R7
-      - name: r8_request_id
-        type: UniqueID
-        referential: R8
+        identifier: 1
 
   - name: ElevatorCall
     stereotype: active
@@ -90,15 +78,9 @@ classes:
     attributes:
       - name: request_id
         type: UniqueID
-        identifier: true
+        identifier: 1
       - name: destination_floor
         type: FloorNumber
-      - name: r2_elevator_id
-        type: UniqueID
-        referential: R2
-      - name: r9_next_id
-        type: UniqueID
-        referential: R9
 
   - name: CallButton
     stereotype: entity
@@ -110,7 +92,7 @@ classes:
     attributes:
       - name: button_id
         type: UniqueID
-        identifier: true
+        identifier: 1
 
   - name: DestFloorButton
     stereotype: entity
@@ -118,9 +100,6 @@ classes:
     attributes:
       - name: floor_num
         type: FloorNumber
-      - name: r4_elevator_id
-        type: UniqueID
-        referential: R4
 
   - name: FloorCallButton
     stereotype: entity
@@ -137,7 +116,7 @@ classes:
     attributes:
       - name: shaft_id
         type: UniqueID
-        identifier: true
+        identifier: 1
       - name: current_floor
         type: FloorNumber
 
@@ -146,7 +125,7 @@ classes:
     attributes:
       - name: indicator_id
         type: UniqueID
-        identifier: true
+        identifier: 1
       - name: displayed_floor
         type: FloorNumber
 
@@ -155,15 +134,9 @@ classes:
     attributes:
       - name: indicator_id
         type: UniqueID
-        identifier: true
+        identifier: 1
       - name: direction
         type: Direction
-      - name: r10_elevator_id
-        type: UniqueID
-        referential: R10
-      - name: r13_floor_num
-        type: FloorNumber
-        referential: R13
 
 associations:
   - name: R1

@@ -161,7 +161,7 @@ def test_valid_class_diagram_accepted():
     valve = result.classes[0]
     assert valve.name == "Valve"
     assert valve.stereotype == "entity"
-    id_attr = next(a for a in valve.attributes if a.identifier)
+    id_attr = next(a for a in valve.attributes if a.identifier is not None)
     assert id_attr.name == "valve_id"
     assert len(result.associations) == 1
     assoc = result.associations[0]
@@ -377,3 +377,40 @@ def test_attribute_visibility_scope_explicit():
     method = result.classes[0].methods[0]
     assert method.visibility == "public"
     assert method.scope == "class"
+
+
+# ---------------------------------------------------------------------------
+# Test 11: Identifier coercion — valid inputs
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("input_val, expected", [
+    (1, [1]),              # bare int → single-element list
+    ([1], [1]),            # explicit list
+    ([1, 2], [1, 2]),      # multi-set
+    (3, [3]),              # bare int > 1
+    (True, [1]),           # backward compat
+    (None, None),          # omitted
+    (False, None),         # explicit false → None
+])
+def test_identifier_coercion(input_val, expected):
+    """Attribute.identifier normalizes various input forms."""
+    from schema.yaml_schema import Attribute
+    attr = Attribute(name="x", type="UniqueID", identifier=input_val)
+    assert attr.identifier == expected
+
+
+# ---------------------------------------------------------------------------
+# Test 12: Identifier coercion — invalid inputs
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("input_val", [
+    [0],       # zero not allowed
+    [-1],      # negative not allowed
+    [],        # empty list not allowed
+    [1, 0],    # zero in list not allowed
+])
+def test_identifier_rejects_invalid(input_val):
+    """Attribute.identifier rejects zero, negative, and empty lists."""
+    from schema.yaml_schema import Attribute
+    with pytest.raises(ValidationError):
+        Attribute(name="x", type="UniqueID", identifier=input_val)

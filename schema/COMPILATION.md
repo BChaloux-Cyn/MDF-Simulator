@@ -30,7 +30,7 @@ private attributes.
 ### 1.2 Mutability
 
 All attributes are mutable except:
-- **Identifiers** (`identifier: true`) — constant after creation.
+- **Identifiers** (`identifier: 1` or any set) — constant after creation.
   Set once at creation time and never reassigned.
 - **`curr_state`** — read-only in pycca code. Only changes through
   event propagation (see section 3).
@@ -80,10 +80,57 @@ self.curr_state = Idle;           // ERROR — curr_state is read-only
 
 ## 2. Identifier Attributes
 
-Attributes with `identifier: true` serve as the unique key for an instance.
-They **must** be set at creation time and are immutable thereafter.
+Identifier attributes mark the unique key(s) for an instance. The
+`identifier` field accepts an integer or list of integers indicating
+which identifier set(s) the attribute belongs to. Every non-subtype
+class **must** have at least one attribute in identifier set 1.
 
-### 2.1 UniqueID Identifiers
+**Accepted forms (all equivalent for a single I1 attribute):**
+```yaml
+identifier: 1          # bare int — coerced to [1]
+identifier: true       # backward compat — coerced to [1]
+identifier: [1]        # explicit list
+```
+
+**Omitted or false means "not an identifier":**
+```yaml
+identifier: false      # coerced to None
+# or simply omit the field
+```
+
+### 2.1 Identifier Sets
+
+Each positive integer represents a distinct identifier set. Identifier
+set 1 (`I1`) is the **primary** identifier — it is mandatory on every
+non-subtype class.
+
+**Single identifier (most common):**
+```yaml
+- name: elevator_id
+  type: UniqueID
+  identifier: 1
+```
+
+**Compound identifier** — multiple attributes sharing the same set number
+form a composite key:
+```yaml
+- name: floor_num
+  type: FloorNumber
+  identifier: 1
+- name: direction
+  type: CallDirection
+  identifier: 1
+```
+
+**Multiple identifier sets** — an attribute can participate in more than
+one set:
+```yaml
+- name: floor_num
+  type: FloorNumber
+  identifier: [1, 2]    # participates in I1 and I2
+```
+
+### 2.2 UniqueID Identifiers
 
 When the identifier type is `UniqueID`, the runtime auto-generates the
 value at creation. No explicit assignment is needed in pycca.
@@ -92,7 +139,7 @@ value at creation. No explicit assignment is needed in pycca.
 ```yaml
 - name: elevator_id
   type: UniqueID
-  identifier: true
+  identifier: 1
 ```
 
 **Pycca:**
@@ -101,7 +148,7 @@ create elev of Elevator;
 // elev.elevator_id is auto-assigned by runtime — do not set manually
 ```
 
-### 2.2 Non-UniqueID Identifiers
+### 2.3 Non-UniqueID Identifiers
 
 When the identifier type is anything other than `UniqueID`, the value
 **must** be provided as a parameter during creation. The runtime cannot
@@ -113,7 +160,7 @@ generate a meaningful value for domain-specific types.
   attributes:
     - name: floor_num
       type: FloorNumber
-      identifier: true
+      identifier: 1
 ```
 
 **Pycca:**
@@ -121,7 +168,7 @@ generate a meaningful value for domain-specific types.
 create f of Floor(floor_num: 3);
 ```
 
-### 2.3 Identifiers Are Constants
+### 2.4 Identifiers Are Constants
 
 Identifier attributes are **constants after creation**. They are set
 exactly once — either auto-generated (UniqueID) or provided as a
@@ -141,6 +188,7 @@ if (self.floor_num == rcvd_evt.target_floor) {   // OK — read access
 ```
 
 The compiler validates:
+- Every non-subtype class has at least one attribute in identifier set 1
 - All non-UniqueID identifier attributes have values provided in the
   `create` parameter list
 - UniqueID identifiers are **not** provided (auto-generated)
@@ -612,7 +660,7 @@ from its supertype (the other endpoint of the subtype/supertype partition).
   attributes:
     - name: call_id
       type: UniqueID
-      identifier: true
+      identifier: 1
 
 - name: ElevatorCall
   specializes: R5
@@ -945,6 +993,7 @@ The compiler should validate the following at compile time:
 | Attribute exists on class (or inherited) | class-diagram.yaml | `self.<attr>` |
 | Attribute on other instance exists | class-diagram.yaml | `var.<attr>` |
 | Visibility: private attr not accessed externally | class-diagram.yaml | `var.<private_attr>` → error |
+| Every non-subtype class has identifier set 1 | class-diagram.yaml | `identifier: [1]` on at least one attr |
 | Identifier not assigned after creation | class-diagram.yaml | `self.<id> = ...` → error |
 | Non-UniqueID identifier provided at create | class-diagram.yaml | `create var of Class(id: val)` |
 | `curr_state` not assigned in pycca | compiler-derived | `self.curr_state = ...` → error |

@@ -27,6 +27,25 @@ access). The pycca compiler expands them during compilation.
 - Method bodies (instance and class)
 - Bridge operation implementations
 
+**YAML scalar style:** Always use the literal block scalar (`|-`) for
+multi-line action bodies in YAML. Do **not** use the folded scalar (`>-`),
+which collapses newlines into spaces and destroys statement boundaries.
+Single-line actions may use plain quoted strings.
+
+```yaml
+# Correct — preserves newlines between statements
+entry_action: |-
+  self.direction = Stopped;
+  select any req from instances of Request where request_id == self.r14_request_id;
+  generate Request_assigned(target_floor: req.destination_floor) to self;
+
+# Wrong — folds into one long line
+entry_action: >-
+  self.direction = Stopped;
+  select any req from instances of Request where request_id == self.r14_request_id;
+  generate Request_assigned(target_floor: req.destination_floor) to self;
+```
+
 ---
 
 ## 1. Pycca Statements

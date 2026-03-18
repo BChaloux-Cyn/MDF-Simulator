@@ -20,7 +20,7 @@ transitions:
     to: Idle
     event: Call_submitted
     guard: "rcvd_evt.has_idle_elevator == True"
-    action: >-
+    action: |-
       select any fc from instances of FloorCall where floor_num != 0;
       create req of Request;
       req.destination_floor = fc.floor_num;
@@ -37,7 +37,7 @@ transitions:
     to: Waiting
     event: Elevator_available
     guard: "rcvd_evt.queue_length > 1"
-    action: >-
+    action: |-
       select any fc from instances of FloorCall where floor_num != 0;
       create req of Request;
       req.destination_floor = fc.floor_num;
@@ -47,7 +47,7 @@ transitions:
     to: Idle
     event: Elevator_available
     guard: "rcvd_evt.queue_length == 1"
-    action: >-
+    action: |-
       select any fc from instances of FloorCall where floor_num != 0;
       create req of Request;
       req.destination_floor = fc.floor_num;

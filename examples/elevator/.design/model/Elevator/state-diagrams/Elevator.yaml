@@ -17,7 +17,7 @@ events:
   - name: Door_closed
 states:
   - name: Idle
-    entry_action: >-
+    entry_action: |-
       self.direction = Stopped;
       self.next_stop_floor = 0;
       select any req from instances of Request where request_id == self.r14_request_id;
@@ -28,22 +28,22 @@ states:
         generate Elevator_available(queue_length: 0) to disp;
       }
   - name: Moving_Up
-    entry_action: >-
+    entry_action: |-
       self.direction = Up;
       select any shaft related by self->R11;
       generate Move_up to shaft;
   - name: Moving_Down
-    entry_action: >-
+    entry_action: |-
       self.direction = Down;
       select any shaft related by self->R11;
       generate Move_down to shaft;
   - name: Stopping
-    entry_action: >-
+    entry_action: |-
       self.direction = Stopped;
       select any shaft related by self->R11;
       generate Stop to shaft;
   - name: At_Floor
-    entry_action: >-
+    entry_action: |-
       select any next_req from instances of Request where request_id == self.r14_request_id;
       if (next_req != empty) {
         if (next_req.destination_floor > self.current_floor) { self.next_direction = Up; }
@@ -99,7 +99,7 @@ transitions:
   - from: At_Floor
     to: Idle
     event: Door_closed
-    action: >-
+    action: |-
       select any req related by self->R2;
       if (req != empty) { generate Door_closed to req; }
   - from: At_Floor

@@ -878,10 +878,14 @@ def _layout_for_canvas(
     return _scale_for_min_spacing(coords, min_dist, margin)
 
 
-def _attr_label(vis: str, scope: str, name: str, type_: str) -> str:
+def _attr_label(vis: str, scope: str, name: str, type_: str,
+                identifier: list[int] | None = None) -> str:
     """Format a UML attribute label. Class-scope names are HTML-underlined."""
     sym = _VIS.get(vis, "-")
     text = f"{name}: {type_}"
+    if identifier:
+        tag = ", ".join(f"I{i}" for i in sorted(identifier))
+        text += f" {{{tag}}}"
     if scope == "class":
         text = f"<u>{text}</u>"
     return f"{sym} {text}"
@@ -984,7 +988,7 @@ def _build_class_diagram_xml(
     domain: str,
     cd: ClassDiagramFile,
     use_layout: bool = True,
-    layout: str = "sugiyama",
+    layout: str = "kamada_kawai",
     include_edges: bool = True,
     route_edges: bool = True,
 ) -> bytes:
@@ -1103,7 +1107,7 @@ def _build_class_diagram_xml(
         # Attributes cell
         attrs_h = max(len(cls.attributes), 1) * ROW_H
         attr_text = "<br>".join(
-            _attr_label(a.visibility, a.scope, a.name, a.type)
+            _attr_label(a.visibility, a.scope, a.name, a.type, a.identifier)
             for a in cls.attributes
         ) if cls.attributes else ""
         attrs_cell = etree.SubElement(
@@ -1499,7 +1503,7 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
 # ---------------------------------------------------------------------------
 
 
-def render_to_drawio_class(domain: str) -> list[dict]:
+def render_to_drawio_class(domain: str, *, force: bool = False) -> list[dict]:
     """Render class-diagram.yaml to class-diagram.drawio.
 
     Returns a list of per-file result dicts with 'file' and 'status' keys.
@@ -1535,7 +1539,7 @@ def render_to_drawio_class(domain: str) -> list[dict]:
     diagrams_dir.mkdir(parents=True, exist_ok=True)
     drawio_path = diagrams_dir / f"{domain}-class-diagram.drawio"
 
-    if _structure_matches_class(domain_path, domain, cd):
+    if not force and _structure_matches_class(domain_path, domain, cd):
         return [{"file": str(drawio_path), "status": "skipped"}]
 
     xml_bytes = _build_class_diagram_xml(domain, cd)
@@ -1543,7 +1547,7 @@ def render_to_drawio_class(domain: str) -> list[dict]:
     return [{"file": str(drawio_path), "status": "written"}]
 
 
-def render_to_drawio_state(domain: str, class_name: str) -> list[dict]:
+def render_to_drawio_state(domain: str, class_name: str, *, force: bool = False) -> list[dict]:
     """Render state-diagrams/<class_name>.yaml to state-diagrams/<class_name>.drawio.
 
     Returns a list of per-file result dicts with 'file' and 'status' keys.
@@ -1579,7 +1583,7 @@ def render_to_drawio_state(domain: str, class_name: str) -> list[dict]:
     drawio_dir.mkdir(parents=True, exist_ok=True)
     drawio_path = drawio_dir / f"{domain}-{class_name}.drawio"
 
-    if _structure_matches_state(domain_path, domain, class_name, sd):
+    if not force and _structure_matches_state(domain_path, domain, class_name, sd):
         return [{"file": str(drawio_path), "status": "skipped"}]
 
     xml_bytes = _build_state_diagram_xml(domain, sd)
@@ -1587,7 +1591,7 @@ def render_to_drawio_state(domain: str, class_name: str) -> list[dict]:
     return [{"file": str(drawio_path), "status": "written"}]
 
 
-def render_to_drawio(domain: str) -> list[dict]:
+def render_to_drawio(domain: str, *, force: bool = False) -> list[dict]:
     """Render all diagrams for a domain: class diagram + all active-class state diagrams.
 
     Returns combined list of per-file result dicts (class diagram first,
@@ -1597,7 +1601,7 @@ def render_to_drawio(domain: str) -> list[dict]:
     results: list[dict] = []
 
     # Render class diagram
-    class_results = render_to_drawio_class(domain)
+    class_results = render_to_drawio_class(domain, force=force)
     results.extend(class_results)
 
     # Check if any errors were returned from the class diagram render
@@ -1622,7 +1626,7 @@ def render_to_drawio(domain: str) -> list[dict]:
     # Render state diagram for each active class
     for cls in cd.classes:
         if cls.stereotype == "active":
-            state_results = render_to_drawio_state(domain, cls.name)
+            state_results = render_to_drawio_state(domain, cls.name, force=force)
             results.extend(state_results)
 
     return results

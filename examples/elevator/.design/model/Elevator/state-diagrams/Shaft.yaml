@@ -24,7 +24,7 @@ transitions:
   - from: Moving_Up
     to: Moving_Up
     event: Floor_sensor_triggered
-    action: >-
+    action: |-
       self.current_floor = rcvd_evt.floor_num;
       select any elev related by self->R11;
       generate Floor_reached(floor_num: self.current_floor) to elev;
@@ -36,7 +36,7 @@ transitions:
   - from: Moving_Down
     to: Moving_Down
     event: Floor_sensor_triggered
-    action: >-
+    action: |-
       self.current_floor = rcvd_evt.floor_num;
       select any elev related by self->R11;
       generate Floor_reached(floor_num: self.current_floor) to elev;

@@ -22,6 +22,7 @@ try:
         _segments_intersect,
         _route_path,
         _optimize_edge_routing,
+        _attr_label,
         MARGIN,
     )
 except ImportError:
@@ -36,6 +37,7 @@ except ImportError:
     _segments_intersect = None
     _route_path = None
     _optimize_edge_routing = None
+    _attr_label = None
     MARGIN = 120
 
 
@@ -923,3 +925,31 @@ def test_optimize_routing_avoids_box_via_side_selection():
     assert waypoints[0] == [], (
         f"Top path is clear — expected no waypoints, got {waypoints[0]}"
     )
+
+
+# ---------------------------------------------------------------------------
+# _attr_label identifier rendering
+# ---------------------------------------------------------------------------
+
+def test_attr_label_single_identifier():
+    """_attr_label renders {I1} suffix for a single identifier set."""
+    assert _attr_label("private", "instance", "id", "UniqueID", [1]) == \
+        "- id: UniqueID {I1}"
+
+
+def test_attr_label_multi_identifier():
+    """_attr_label renders {I1, I2} suffix for multiple identifier sets."""
+    assert _attr_label("private", "instance", "x", "Int", [1, 2]) == \
+        "- x: Int {I1, I2}"
+
+
+def test_attr_label_no_identifier():
+    """_attr_label renders no suffix when identifier is None."""
+    assert _attr_label("private", "instance", "x", "Int", None) == \
+        "- x: Int"
+
+
+def test_attr_label_identifier_with_class_scope():
+    """_attr_label renders identifier suffix inside underline for class scope."""
+    assert _attr_label("public", "class", "count", "Int", [2]) == \
+        "+ <u>count: Int {I2}</u>"
