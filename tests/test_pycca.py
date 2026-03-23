@@ -295,3 +295,18 @@ def test_chained_method_double():
     STATEMENT_PARSER.parse(
         "self.x = sorted_btns.peek_front().value().r5_floor_num;"
     )
+
+
+# ---------------------------------------------------------------------------
+# For-each loop
+# ---------------------------------------------------------------------------
+
+def test_for_each_simple():
+    STATEMENT_PARSER.parse(
+        "for (DestFloorButton btn : my_list) { generate Foo to btn; }"
+    )
+
+def test_for_each_with_method_call():
+    STATEMENT_PARSER.parse(
+        "for (Floor f : floors) { self.x = f.floor_num; }"
+    )

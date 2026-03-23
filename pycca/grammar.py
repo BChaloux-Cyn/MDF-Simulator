@@ -44,6 +44,7 @@ PYCCA_GRAMMAR = r"""
              | if_stmt
              | return_stmt
              | method_call_stmt
+             | for_each_stmt
 
     // --- Standalone method call statement ---
     // var.method(args);
@@ -121,6 +122,10 @@ PYCCA_GRAMMAR = r"""
     // --- If / else ---
     // if (expr) { stmts } [else { stmts }]
     if_stmt: "if" "(" expr ")" "{" statement* "}" ("else" "{" statement* "}")?
+
+    // --- For-each loop ---
+    // for (Type var : expr) { stmts }
+    for_each_stmt: "for" "(" NAME NAME ":" expr ")" "{" statement* "}"
 
     // --- Expressions (precedence tower: lowest to highest) ---
     ?expr: or_expr
