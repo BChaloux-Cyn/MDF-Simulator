@@ -34,6 +34,7 @@ PYCCA_GRAMMAR = r"""
              | assignment
              | var_assignment
              | generate_stmt
+             | cancel_stmt
              | bridge_call
              | create_stmt
              | delete_stmt
@@ -82,10 +83,18 @@ PYCCA_GRAMMAR = r"""
     // generate Event to NAME;
     // generate Event to access_chain;  (e.g. door.value())
     // generate Event(param: expr, ...) to NAME;
+    // generate Event to NAME delay expr;
+    // generate Event(param: expr, ...) to NAME delay expr;
     generate_stmt: "generate" NAME "to" NAME ";"
                  | "generate" NAME "to" access_chain ";"
                  | "generate" NAME "(" param_list ")" "to" NAME ";"
                  | "generate" NAME "(" param_list ")" "to" access_chain ";"
+                 | "generate" NAME "to" NAME "delay" expr ";"
+                 | "generate" NAME "(" param_list ")" "to" NAME "delay" expr ";"
+
+    // --- Cancel ---
+    // cancel Event from sender to target;
+    cancel_stmt: "cancel" NAME "from" NAME "to" NAME ";"
 
     param_list: NAME ":" expr ("," NAME ":" expr)*
 
@@ -177,6 +186,7 @@ PYCCA_GRAMMAR = r"""
         | ESCAPED_STRING -> string
         | access_chain
         | NAME "." NAME -> dotted_name
+        | NAME "(" arglist? ")" -> func_call
         | NAME -> name
         | "(" expr ")"
         | "cardinality" NAME -> cardinality_expr

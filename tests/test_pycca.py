@@ -353,3 +353,22 @@ def test_select_related_chained():
     STATEMENT_PARSER.parse(
         "Optional<Floor> f = select any related by self->R2->R3;"
     )
+
+
+# ---------------------------------------------------------------------------
+# Delayed generate and cancel
+# ---------------------------------------------------------------------------
+
+def test_delayed_generate():
+    STATEMENT_PARSER.parse("generate Door_close to self delay duration_s(5);")
+
+def test_delayed_generate_with_params():
+    STATEMENT_PARSER.parse(
+        "generate Open_reminder(floor: self.current_floor) to door delay duration_ms(500);"
+    )
+
+def test_cancel():
+    STATEMENT_PARSER.parse("cancel Door_close from self to self;")
+
+def test_cancel_different_targets():
+    STATEMENT_PARSER.parse("cancel Timer_expired from controller to door;")
