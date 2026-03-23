@@ -46,6 +46,7 @@ Summary of the process:
 
 ## Key References
 
+- **[`COMMANDS.md`](COMMANDS.md)** — Setup, test, and tool invocation recipes
 - **Upstream pycca manual:** <https://tcl-cm3.sourceforge.net/pycca.html>
   The original pycca code generator for Shlaer-Mellor models. Our MDF action language
   is inspired by (but not derived from) this tool. Useful for reference on storage
