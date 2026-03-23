@@ -37,9 +37,65 @@ states:
       }
   - name: Arriving
     entry_action: |
+      // Save previous travel direction before clearing
+      Direction prev_direction = self.direction;
       self.direction = None;
+      FloorNumber my_floor = self.current_floor;
+      UniqueID my_id = self.elevator_id;
+
+      // Notify all DestFloorButtons — current floor's button transitions Lit→Idle
+      // (async: hasn't fired yet when we check below, but current floor is excluded
+      // by the != my_floor filter so it doesn't matter)
       select many buttons related by self->R4;
-      generate Floor_served(floor_num: self.current_floor) to buttons;
+      generate Floor_served(floor_num: my_floor) to buttons;
+
+      // Collect all lit DestFloorButtons for this elevator (excluding current
+      // floor, which was just served), sorted ascending by floor number
+      select many lit_btns from instances of DestFloorButton
+          where self.r4_elevator_id == my_id
+          and self.curr_state == Lit
+          and self.r5_floor_num != my_floor
+          order by self.r5_floor_num ascending;
+
+      if (cardinality lit_btns == 0) {
+          // Priorities 3-4: FloorCallButton logic deferred until Dispatcher
+          // Priority 5: No work — go Idle when door closes
+          self.next_stop_floor = my_floor;
+          generate Arrived to self;
+          return;
+      }
+
+      DestFloorButton first_btn = first of lit_btns;
+      DestFloorButton last_btn = last of lit_btns;
+
+      // Priority 1: Continue in same direction if lit buttons exist that way
+      if (prev_direction == Down and first_btn.r5_floor_num < my_floor) {
+          // Lit buttons below — continue down to nearest
+          select many below_btns from instances of DestFloorButton
+              where self.r4_elevator_id == my_id
+              and self.curr_state == Lit
+              and self.r5_floor_num < my_floor
+              order by self.r5_floor_num descending;
+          self.next_stop_floor = (first of below_btns).r5_floor_num;
+      } else if (prev_direction == Up and last_btn.r5_floor_num > my_floor) {
+          // Lit buttons above — continue up to nearest
+          select many above_btns from instances of DestFloorButton
+              where self.r4_elevator_id == my_id
+              and self.curr_state == Lit
+              and self.r5_floor_num > my_floor
+              order by self.r5_floor_num ascending;
+          self.next_stop_floor = (first of above_btns).r5_floor_num;
+      } else {
+          // Priority 2: Reverse — all lit buttons are in opposite direction
+          // In a sorted ascending list, first_btn is nearest above and
+          // last_btn is nearest below when all are on one side
+          if (first_btn.r5_floor_num > my_floor) {
+              self.next_stop_floor = first_btn.r5_floor_num;
+          } else {
+              self.next_stop_floor = last_btn.r5_floor_num;
+          }
+      }
+
       generate Arrived to self;
   - name: Exchanging
 transitions:
