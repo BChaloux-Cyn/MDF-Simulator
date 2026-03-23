@@ -883,6 +883,32 @@ def _html_escape_type(t: str) -> str:
     return t.replace("<", "&lt;").replace(">", "&gt;")
 
 
+# Approximate px per character for label width estimation (11px font, left padding)
+_LABEL_CHAR_PX = 7.5
+_LABEL_PAD_PX = 20  # spacingLeft + spacingRight + symbol
+
+
+def _estimate_class_width(cls) -> int:
+    """Estimate minimum width for a class box based on longest label text."""
+    lines: list[str] = []
+    # Class header
+    lines.append(f"<<{cls.stereotype}>> {cls.name}")
+    # Attribute labels (strip HTML tags for width estimation)
+    for a in cls.attributes:
+        label = f"- {a.name}: {a.type}"
+        if a.identifier:
+            tag = ", ".join(f"I{i}" for i in sorted(a.identifier))
+            label += f" {{{tag}}}"
+        lines.append(label)
+    # Method labels
+    for m in cls.methods:
+        param_sig = ", ".join(f"{p.name}: {p.type}" for p in m.params)
+        ret = f": {m.return_type}" if m.return_type else ""
+        lines.append(f"- {m.name}({param_sig}){ret}")
+    max_chars = max((len(l) for l in lines), default=10)
+    return max(CLASS_W, int(max_chars * _LABEL_CHAR_PX + _LABEL_PAD_PX))
+
+
 def _attr_label(vis: str, scope: str, name: str, type_: str,
                 identifier: list[int] | None = None) -> str:
     """Format a UML attribute label. Class-scope names are HTML-underlined."""
@@ -1047,12 +1073,13 @@ def _build_class_diagram_xml(
                 layout_edges.append((sub_idx, sup_idx))
 
     # Per-node dimensions: all classes share CLASS_W; height varies
-    node_widths:  list[int] = [CLASS_W] * n
+    node_widths:  list[int] = [_estimate_class_width(cls) for cls in cd.classes]
     node_heights: list[int] = [_class_height(len(cls.attributes), len(cls.methods)) for cls in classes]
 
     H_GAP = 40
     avg_h = sum(node_heights) / max(len(node_heights), 1)
-    min_dist = math.hypot(CLASS_W + H_GAP, avg_h + H_GAP)
+    avg_w = sum(node_widths) / max(len(node_widths), 1)
+    min_dist = math.hypot(avg_w + H_GAP, avg_h + H_GAP)
 
     if use_layout:
         positions = _layout_for_canvas(n, layout_edges, min_dist, method=layout)
@@ -1093,6 +1120,7 @@ def _build_class_diagram_xml(
     for i, cls in enumerate(classes):
         x = int(positions[i][0])
         y = int(positions[i][1])
+        w = node_widths[i]
         height = _class_height(len(cls.attributes), len(cls.methods))
         cid = class_id(domain, cls.name)
 
@@ -1105,7 +1133,7 @@ def _build_class_diagram_xml(
         )
         etree.SubElement(
             cls_cell, "mxGeometry",
-            x=str(x), y=str(y), width=str(CLASS_W), height=str(height),
+            x=str(x), y=str(y), width=str(w), height=str(height),
             attrib={"as": "geometry"},
         )
 
@@ -1122,7 +1150,7 @@ def _build_class_diagram_xml(
         )
         etree.SubElement(
             attrs_cell, "mxGeometry",
-            y=str(HEADER_H), width=str(CLASS_W), height=str(attrs_h),
+            y=str(HEADER_H), width=str(w), height=str(attrs_h),
             attrib={"as": "geometry"},
         )
 
@@ -1135,7 +1163,7 @@ def _build_class_diagram_xml(
         )
         etree.SubElement(
             sep_cell, "mxGeometry",
-            y=str(sep_y), width=str(CLASS_W), height=str(SEP_H),
+            y=str(sep_y), width=str(w), height=str(SEP_H),
             attrib={"as": "geometry"},
         )
 
@@ -1152,7 +1180,7 @@ def _build_class_diagram_xml(
         )
         etree.SubElement(
             methods_cell, "mxGeometry",
-            y=str(sep_y + SEP_H), width=str(CLASS_W), height=str(methods_h),
+            y=str(sep_y + SEP_H), width=str(w), height=str(methods_h),
             attrib={"as": "geometry"},
         )
 
@@ -1184,7 +1212,7 @@ def _build_class_diagram_xml(
                 f"entryX={nx};entryY={ny};entryDx=0;entryDy=0;"
             )
             bx, by = positions[src_v]
-            waypoints = _self_loop_waypoints(corner, bx, by, CLASS_W, class_heights[src_v])
+            waypoints = _self_loop_waypoints(corner, bx, by, node_widths[src_v], class_heights[src_v])
         else:
             edge_idx = assoc_edge_idx[i]
             port_suffix = port_suffixes[edge_idx] if edge_idx is not None else ""
