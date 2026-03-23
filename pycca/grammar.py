@@ -43,6 +43,11 @@ PYCCA_GRAMMAR = r"""
              | unrelate_stmt
              | if_stmt
              | return_stmt
+             | method_call_stmt
+
+    // --- Standalone method call statement ---
+    // var.method(args);
+    method_call_stmt: NAME "." NAME "(" arglist? ")" ";"
 
     // --- Return ---
     // return expr;
@@ -74,9 +79,12 @@ PYCCA_GRAMMAR = r"""
 
     // --- Generate ---
     // generate Event to NAME;
+    // generate Event to access_chain;  (e.g. door.value())
     // generate Event(param: expr, ...) to NAME;
     generate_stmt: "generate" NAME "to" NAME ";"
+                 | "generate" NAME "to" access_chain ";"
                  | "generate" NAME "(" param_list ")" "to" NAME ";"
+                 | "generate" NAME "(" param_list ")" "to" access_chain ";"
 
     param_list: NAME ":" expr ("," NAME ":" expr)*
 
@@ -142,9 +150,18 @@ PYCCA_GRAMMAR = r"""
     lambda_param: NAME ":" NAME
     PIPE: "|"
 
+    // --- Chained method/attribute access ---
+    // NAME.method(args)                    -> method_call
+    // access_chain.method(args)            -> chained_method_call
+    // access_chain.attr                    -> chained_attr_access
+    access_chain: NAME "." NAME "(" arglist? ")"               -> method_call
+                | access_chain "." NAME "(" arglist? ")"        -> chained_method_call
+                | access_chain "." NAME                         -> chained_attr_access
+
     // atom: dotted_name must appear before plain name to ensure longer match
     atom: NUMBER -> number
         | ESCAPED_STRING -> string
+        | access_chain
         | NAME "." NAME -> dotted_name
         | NAME -> name
         | "(" expr ")"

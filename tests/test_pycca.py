@@ -231,3 +231,67 @@ def test_lambda_empty_captures_single_param():
         'Fn(Floor) -> Boolean pred = '
         '[] |f: Floor| -> Boolean { return f.floor_num == 3; };'
     )
+
+
+# ---------------------------------------------------------------------------
+# Method calls on containers
+# ---------------------------------------------------------------------------
+
+def test_method_call_size():
+    STATEMENT_PARSER.parse("Integer count = lit_btns.size();")
+
+def test_method_call_is_empty():
+    STATEMENT_PARSER.parse("if (lit_btns.is_empty()) { generate Idle to self; }")
+
+def test_method_call_has_value():
+    STATEMENT_PARSER.parse("if (door.has_value()) { generate Open to door.value(); }")
+
+def test_method_call_value():
+    STATEMENT_PARSER.parse("if (door.value().curr_state == Closed) { self.x = 1; }")
+
+def test_method_call_filter_with_lambda():
+    STATEMENT_PARSER.parse(
+        'Set<DestFloorButton> lit = btns.filter('
+        '[] |b: DestFloorButton| -> Boolean { return b.curr_state == Lit; });'
+    )
+
+def test_method_call_sort_with_lambda():
+    STATEMENT_PARSER.parse(
+        'btns.sort([] |a: DestFloorButton, b: DestFloorButton| -> Boolean '
+        '{ return a.floor_num < b.floor_num; });'
+    )
+
+def test_method_call_push_back():
+    STATEMENT_PARSER.parse("floors.push_back(3);")
+
+def test_method_call_pop_front():
+    STATEMENT_PARSER.parse("Optional<FloorNumber> next = floors.pop_front();")
+
+def test_method_call_map():
+    STATEMENT_PARSER.parse(
+        'List<FloorNumber> floors = btns.map('
+        '[] |b: DestFloorButton| -> FloorNumber { return b.r5_floor_num; });'
+    )
+
+def test_method_call_find_with_lambda():
+    STATEMENT_PARSER.parse(
+        'Optional<DestFloorButton> btn = btns.find('
+        '[target] |b: DestFloorButton| -> Boolean { return b.r5_floor_num == target; });'
+    )
+
+def test_method_call_get():
+    STATEMENT_PARSER.parse("Optional<FloorNumber> f = floors.get(0);")
+
+def test_method_call_push_front():
+    STATEMENT_PARSER.parse("floors.push_front(1);")
+
+def test_method_call_insert():
+    STATEMENT_PARSER.parse("floors.insert(0, 3);")
+
+def test_method_call_contains():
+    STATEMENT_PARSER.parse("if (my_list.contains(item)) { self.x = 1; }")
+
+def test_chained_method_double():
+    STATEMENT_PARSER.parse(
+        "self.x = sorted_btns.peek_front().value().r5_floor_num;"
+    )
