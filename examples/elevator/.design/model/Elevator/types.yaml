@@ -18,6 +18,3 @@ types:
     base: Integer
     range: [1, 100]
     description: A valid floor number in the building
-  - name: Timestamp
-    base: Integer
-    description: Monotonic time value for ordering events (from Clock bridge)
