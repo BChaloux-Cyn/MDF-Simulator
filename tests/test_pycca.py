@@ -479,3 +479,52 @@ def test_arriving_action_new_syntax():
     generate Arrived to self;
     """
     STATEMENT_PARSER.parse(action)
+
+
+# ---------------------------------------------------------------------------
+# else if chains
+# ---------------------------------------------------------------------------
+
+def test_else_if():
+    """if / else if / else"""
+    STATEMENT_PARSER.parse(
+        "if (x > 3) { self.y = 1; } "
+        "else if (x > 1) { self.y = 2; } "
+        "else { self.y = 0; }"
+    )
+
+
+def test_else_if_no_else():
+    """if / else if without trailing else"""
+    STATEMENT_PARSER.parse(
+        "if (x > 3) { self.y = 1; } "
+        "else if (x > 1) { self.y = 2; }"
+    )
+
+
+def test_else_if_chain():
+    """if / else if / else if / else"""
+    STATEMENT_PARSER.parse(
+        "if (x == 1) { self.y = 1; } "
+        "else if (x == 2) { self.y = 2; } "
+        "else if (x == 3) { self.y = 3; } "
+        "else { self.y = 0; }"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Traversal from non-self variables (var->R)
+# ---------------------------------------------------------------------------
+
+def test_select_related_by_var():
+    """select any related by var->R (not just self->R)"""
+    STATEMENT_PARSER.parse(
+        'Optional<Shaft> shaft = select any related by sf->R2;'
+    )
+
+
+def test_traversal_chain_from_var():
+    """Chained traversal starting from a variable"""
+    STATEMENT_PARSER.parse(
+        'Optional<Floor> floor = select any related by sf->R2->R3;'
+    )

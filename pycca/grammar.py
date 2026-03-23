@@ -132,9 +132,11 @@ PYCCA_GRAMMAR = r"""
     // unrelate var1 from var2 across RN;
     unrelate_stmt: "unrelate" NAME "from" NAME "across" NAME ";"
 
-    // --- If / else ---
-    // if (expr) { stmts } [else { stmts }]
-    if_stmt: "if" "(" expr ")" "{" statement* "}" ("else" "{" statement* "}")?
+    // --- If / else if / else ---
+    // if (expr) { stmts } [else if (expr) { stmts }]* [else { stmts }]
+    if_stmt: "if" "(" expr ")" "{" statement* "}" else_if_chain? ("else" "{" statement* "}")?
+    else_if_chain: else_if_clause+
+    else_if_clause: "else" "if" "(" expr ")" "{" statement* "}"
 
     // --- For-each loop ---
     // for (Type var : expr) { stmts }
