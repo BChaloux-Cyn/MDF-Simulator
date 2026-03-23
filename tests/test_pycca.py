@@ -310,3 +310,46 @@ def test_for_each_with_method_call():
     STATEMENT_PARSER.parse(
         "for (Floor f : floors) { self.x = f.floor_num; }"
     )
+
+
+# ---------------------------------------------------------------------------
+# Select with lambda where
+# ---------------------------------------------------------------------------
+
+def test_select_many_typed_no_where():
+    STATEMENT_PARSER.parse(
+        "Set<DestFloorButton> btns = select many from instances of DestFloorButton;"
+    )
+
+def test_select_any_typed_no_where():
+    STATEMENT_PARSER.parse(
+        "Optional<Floor> f = select any from instances of Floor;"
+    )
+
+def test_select_many_with_lambda_where():
+    STATEMENT_PARSER.parse(
+        'Set<DestFloorButton> lit = select many from instances of DestFloorButton '
+        'where [my_id] |btn: DestFloorButton| -> Boolean { return btn.r4 == my_id; };'
+    )
+
+def test_select_any_with_lambda_where():
+    STATEMENT_PARSER.parse(
+        'Optional<Floor> f = select any from instances of Floor '
+        'where [target] |f: Floor| -> Boolean { return f.floor_num == target; };'
+    )
+
+def test_select_related_typed():
+    STATEMENT_PARSER.parse(
+        "Set<DestFloorButton> btns = select many related by self->R4;"
+    )
+
+def test_select_related_with_where():
+    STATEMENT_PARSER.parse(
+        'Set<DestFloorButton> lit = select many related by self->R4 '
+        'where [] |btn: DestFloorButton| -> Boolean { return btn.curr_state == Lit; };'
+    )
+
+def test_select_related_chained():
+    STATEMENT_PARSER.parse(
+        "Optional<Floor> f = select any related by self->R2->R3;"
+    )

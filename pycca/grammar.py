@@ -146,6 +146,15 @@ PYCCA_GRAMMAR = r"""
     mul_expr: mul_expr "*" atom
             | atom
 
+    // --- Select as expression (for typed_var_decl RHS) ---
+    // select many from instances of Class [where lambda_expr]
+    // select many related by NAME->NAME [where lambda_expr]
+    select_expr: "select" ("any"|"many") "from" "instances" "of" NAME ("where" lambda_expr)?
+               | "select" ("any"|"many") "related" "by" traversal_chain ("where" lambda_expr)?
+
+    // --- Traversal chain: NAME->NAME (->NAME)* ---
+    traversal_chain: NAME "->" NAME ("->" NAME)*
+
     // --- Lambda expressions ---
     // [] |a: T, b: T| -> RetType { stmts }
     // [capture1, capture2] |param: T| -> RetType { stmts }
@@ -172,6 +181,7 @@ PYCCA_GRAMMAR = r"""
         | "(" expr ")"
         | "cardinality" NAME -> cardinality_expr
         | lambda_expr
+        | select_expr
 
     arglist: expr ("," expr)*
 
