@@ -372,3 +372,110 @@ def test_cancel():
 
 def test_cancel_different_targets():
     STATEMENT_PARSER.parse("cancel Timer_expired from controller to door;")
+
+
+# ---------------------------------------------------------------------------
+# Time built-ins (Task 8 — verify these parse via func_call atom)
+# ---------------------------------------------------------------------------
+
+def test_now_builtin():
+    STATEMENT_PARSER.parse("Timestamp t = now();")
+
+def test_duration_s():
+    STATEMENT_PARSER.parse("Duration d = duration_s(5);")
+
+def test_duration_ms():
+    STATEMENT_PARSER.parse("Duration d = duration_ms(500);")
+
+def test_in_s():
+    STATEMENT_PARSER.parse("Integer s = in_s(d);")
+
+def test_in_ms():
+    STATEMENT_PARSER.parse("Integer ms = in_ms(d);")
+
+def test_timestamp_arithmetic():
+    STATEMENT_PARSER.parse("Duration elapsed = now() - start_time;")
+
+def test_duration_arithmetic():
+    STATEMENT_PARSER.parse("Duration total = d1 + d2;")
+
+def test_duration_multiply():
+    STATEMENT_PARSER.parse("Duration scaled = d * 3;")
+
+
+# ---------------------------------------------------------------------------
+# Set operations (Task 9 — verify these parse via method_call)
+# ---------------------------------------------------------------------------
+
+def test_set_union():
+    STATEMENT_PARSER.parse("Set<Floor> all_floors = set_a.union(set_b);")
+
+def test_set_intersection():
+    STATEMENT_PARSER.parse("Set<Floor> common = set_a.intersection(set_b);")
+
+def test_set_difference():
+    STATEMENT_PARSER.parse("Set<Floor> diff = set_a.difference(set_b);")
+
+def test_set_contains():
+    STATEMENT_PARSER.parse("if (my_set.contains(item)) { self.x = 1; }")
+
+def test_set_add():
+    STATEMENT_PARSER.parse("my_set.add(item);")
+
+def test_set_remove():
+    STATEMENT_PARSER.parse("my_set.remove(item);")
+
+
+# ---------------------------------------------------------------------------
+# Integration: full action block with new syntax (Task 10)
+# ---------------------------------------------------------------------------
+
+def test_arriving_action_new_syntax():
+    """Parse a realistic Arriving entry action using new list/lambda syntax."""
+    action = r"""
+    Direction prev_direction = self.direction;
+    self.direction = None;
+    FloorNumber my_floor = self.current_floor;
+    UniqueID my_id = self.elevator_id;
+
+    Set<DestFloorButton> buttons = select many related by self->R4;
+    generate Floor_served(floor_num: my_floor) to buttons;
+
+    Set<DestFloorButton> lit_btns = select many from instances of DestFloorButton
+        where [my_id, my_floor] |btn: DestFloorButton| -> Boolean {
+            return btn.r4_elevator_id == my_id
+                and btn.curr_state == Lit
+                and btn.r5_floor_num != my_floor;
+        };
+
+    if (lit_btns.is_empty()) {
+        self.next_stop_floor = my_floor;
+        generate Arrived to self;
+        return;
+    }
+
+    Fn(DestFloorButton, DestFloorButton) -> Boolean floor_asc =
+        [] |a: DestFloorButton, b: DestFloorButton| -> Boolean {
+            return a.r5_floor_num < b.r5_floor_num;
+        };
+    List<DestFloorButton> sorted_btns = lit_btns.sort(floor_asc);
+    Optional<DestFloorButton> first_btn = sorted_btns.peek_front();
+    Optional<DestFloorButton> last_btn = sorted_btns.peek_back();
+
+    if (prev_direction == Down and first_btn.value().r5_floor_num < my_floor) {
+        Set<DestFloorButton> below = lit_btns.filter(
+            [my_floor] |b: DestFloorButton| -> Boolean {
+                return b.r5_floor_num < my_floor;
+            });
+        List<DestFloorButton> below_sorted = below.sort(
+            [] |a: DestFloorButton, b: DestFloorButton| -> Boolean {
+                return a.r5_floor_num > b.r5_floor_num;
+            });
+        self.next_stop_floor = below_sorted.peek_front().value().r5_floor_num;
+    } else {
+        self.next_stop_floor = first_btn.value().r5_floor_num;
+    }
+
+    generate Arrived to self;
+    """
+    STATEMENT_PARSER.parse(action)
