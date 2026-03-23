@@ -883,9 +883,9 @@ def _html_escape_type(t: str) -> str:
     return t.replace("<", "&lt;").replace(">", "&gt;")
 
 
-# Approximate px per character for label width estimation (11px font, left padding)
-_LABEL_CHAR_PX = 7.5
-_LABEL_PAD_PX = 20  # spacingLeft + spacingRight + symbol
+# Approximate px per character for label width estimation (11px default font)
+_LABEL_CHAR_PX = 6.0
+_LABEL_PAD_PX = 16  # spacingLeft + spacingRight + symbol
 
 
 def _estimate_class_width(cls) -> int:
