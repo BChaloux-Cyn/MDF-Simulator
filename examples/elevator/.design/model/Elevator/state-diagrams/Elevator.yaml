@@ -43,21 +43,22 @@ states:
       FloorNumber my_floor = self.current_floor;
       UniqueID my_id = self.elevator_id;
 
-      // Notify all DestFloorButtons — current floor's button transitions Lit→Idle
+      // Notify all DestFloorButtons — current floor's button transitions Lit->Idle
       // (async: hasn't fired yet when we check below, but current floor is excluded
       // by the != my_floor filter so it doesn't matter)
-      select many buttons related by self->R4;
+      Set<DestFloorButton> buttons = select many related by self->R4;
       generate Floor_served(floor_num: my_floor) to buttons;
 
       // Collect all lit DestFloorButtons for this elevator (excluding current
-      // floor, which was just served), sorted ascending by floor number
-      select many lit_btns from instances of DestFloorButton
-          where self.r4_elevator_id == my_id
-          and self.curr_state == Lit
-          and self.r5_floor_num != my_floor
-          order by self.r5_floor_num ascending;
+      // floor, which was just served)
+      Set<DestFloorButton> lit_btns = select many from instances of DestFloorButton
+          where [my_id, my_floor] |btn: DestFloorButton| -> Boolean {
+              return btn.r4_elevator_id == my_id
+                  and btn.curr_state == Lit
+                  and btn.r5_floor_num != my_floor;
+          };
 
-      if (cardinality lit_btns == 0) {
+      if (lit_btns.is_empty()) {
           // Priorities 3-4: FloorCallButton logic deferred until Dispatcher
           // Priority 5: No work — go Idle when door closes
           self.next_stop_floor = my_floor;
@@ -65,34 +66,41 @@ states:
           return;
       }
 
-      DestFloorButton first_btn = first of lit_btns;
-      DestFloorButton last_btn = last of lit_btns;
+      // Sort ascending by floor number
+      List<DestFloorButton> sorted_btns = lit_btns.sort(
+          [] |a: DestFloorButton, b: DestFloorButton| -> Boolean {
+              return a.r5_floor_num < b.r5_floor_num;
+          });
+      Optional<DestFloorButton> first_btn = sorted_btns.peek_front();
+      Optional<DestFloorButton> last_btn = sorted_btns.peek_back();
 
       // Priority 1: Continue in same direction if lit buttons exist that way
-      if (prev_direction == Down and first_btn.r5_floor_num < my_floor) {
-          // Lit buttons below — continue down to nearest
-          select many below_btns from instances of DestFloorButton
-              where self.r4_elevator_id == my_id
-              and self.curr_state == Lit
-              and self.r5_floor_num < my_floor
-              order by self.r5_floor_num descending;
-          self.next_stop_floor = (first of below_btns).r5_floor_num;
-      } else if (prev_direction == Up and last_btn.r5_floor_num > my_floor) {
-          // Lit buttons above — continue up to nearest
-          select many above_btns from instances of DestFloorButton
-              where self.r4_elevator_id == my_id
-              and self.curr_state == Lit
-              and self.r5_floor_num > my_floor
-              order by self.r5_floor_num ascending;
-          self.next_stop_floor = (first of above_btns).r5_floor_num;
+      if (prev_direction == Down and first_btn.value().r5_floor_num < my_floor) {
+          // Lit buttons below — continue down, nearest first
+          List<DestFloorButton> below_sorted = lit_btns.filter(
+              [my_floor] |b: DestFloorButton| -> Boolean {
+                  return b.r5_floor_num < my_floor;
+              }).sort(
+              [] |a: DestFloorButton, b: DestFloorButton| -> Boolean {
+                  return a.r5_floor_num > b.r5_floor_num;
+              });
+          self.next_stop_floor = below_sorted.peek_front().value().r5_floor_num;
+      } else if (prev_direction == Up and last_btn.value().r5_floor_num > my_floor) {
+          // Lit buttons above — continue up, nearest first
+          List<DestFloorButton> above_sorted = lit_btns.filter(
+              [my_floor] |b: DestFloorButton| -> Boolean {
+                  return b.r5_floor_num > my_floor;
+              }).sort(
+              [] |a: DestFloorButton, b: DestFloorButton| -> Boolean {
+                  return a.r5_floor_num < b.r5_floor_num;
+              });
+          self.next_stop_floor = above_sorted.peek_front().value().r5_floor_num;
       } else {
           // Priority 2: Reverse — all lit buttons are in opposite direction
-          // In a sorted ascending list, first_btn is nearest above and
-          // last_btn is nearest below when all are on one side
-          if (first_btn.r5_floor_num > my_floor) {
-              self.next_stop_floor = first_btn.r5_floor_num;
+          if (first_btn.value().r5_floor_num > my_floor) {
+              self.next_stop_floor = first_btn.value().r5_floor_num;
           } else {
-              self.next_stop_floor = last_btn.r5_floor_num;
+              self.next_stop_floor = last_btn.value().r5_floor_num;
           }
       }
 

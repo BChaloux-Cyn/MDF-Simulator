@@ -13,8 +13,6 @@ classes:
         type: Direction
       - name: next_stop_floor
         type: FloorNumber
-      - name: next_direction
-        type: Direction
 
   - name: Shaft
     stereotype: entity
@@ -153,9 +151,11 @@ bridges:
     implementations:
       - name: ElevatorDetected
         action: |
-          select any sf from instances of ShaftFloor
-              where self.sensor_id == arg.sensor_id;
-          select any shaft related by sf->R2;
-          select any elev related by shaft->R1;
-          select any floor related by sf->R3;
-          generate Floor_reached(floor_num: floor.floor_num) to elev;
+          Optional<ShaftFloor> sf = select any from instances of ShaftFloor
+              where [arg.sensor_id] |s: ShaftFloor| -> Boolean {
+                  return s.sensor_id == arg.sensor_id;
+              };
+          Optional<Shaft> shaft = select any related by sf.value()->R2;
+          Optional<Elevator> elev = select any related by shaft.value()->R1;
+          Optional<Floor> floor = select any related by sf.value()->R3;
+          generate Floor_reached(floor_num: floor.value().floor_num) to elev.value();
