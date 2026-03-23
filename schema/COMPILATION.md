@@ -63,18 +63,36 @@ self.direction = Up;
 
 **Cross-instance access (requires public visibility):**
 ```
-select any req related by self->R2;
-req.destination_floor             // OK if destination_floor is public
-req.destination_floor = 5;        // OK if public
+Optional<Request> req = select any related by self->R2;
+req.value().destination_floor             // OK if destination_floor is public
+req.value().destination_floor = 5;        // OK if public
 ```
 
 **Compile errors:**
 ```
-req.some_private_attr             // ERROR — private attribute
-req.some_private_attr = 5;        // ERROR — private attribute
-self.elevator_id = 42;            // ERROR — identifier is constant
-self.curr_state = Idle;           // ERROR — curr_state is read-only
+req.value().some_private_attr             // ERROR — private attribute
+req.value().some_private_attr = 5;        // ERROR — private attribute
+self.elevator_id = 42;                    // ERROR — identifier is constant
+self.curr_state = Idle;                   // ERROR — curr_state is read-only
 ```
+
+### 1.4 Container Attributes
+
+Classes may declare attributes with container types:
+
+```yaml
+classes:
+  - name: Dispatcher
+    attributes:
+      - name: pending_floors
+        type: List<FloorNumber>
+      - name: active_elevators
+        type: Set<Elevator>
+```
+
+Container attributes follow the same visibility rules as scalar
+attributes. They are **not** allowed as event parameters or method
+return types.
 
 ---
 
@@ -194,6 +212,13 @@ The compiler validates:
 - UniqueID identifiers are **not** provided (auto-generated)
 - Identifier attributes are never the target of an assignment after creation
 
+### 2.5 Identifiers and Set Uniqueness
+
+When instances are stored in a `Set<T>`, uniqueness is determined by the
+class's identifier attributes. Two instances are considered equal if all
+their identifier attributes match. For value types (scalars, structs),
+bitwise equality is used.
+
 ---
 
 ## 3. Current State
@@ -227,8 +252,8 @@ if (self.curr_state == Idle) {
 
 **Pycca (reading another instance's state):**
 ```c
-select any door related by self->R1;
-if (door.curr_state == Closed) {
+Optional<Door> door = select any related by self->R1;
+if (door.has_value() and door.value().curr_state == Closed) {
     // door is closed
 }
 ```
@@ -301,12 +326,12 @@ associations:
 
 **Pycca (from Elevator context):**
 ```
-select any door related by self->R1;
+Optional<Door> door = select any related by self->R1;
 ```
 
 **Pycca (from Door context):**
 ```
-select any elev related by self->R1;
+Optional<Elevator> elev = select any related by self->R1;
 ```
 
 The compiler resolves `R1` by:
@@ -328,13 +353,13 @@ The compiler resolves `R1` by:
 
 **Pycca (from Elevator — one-to-many side):**
 ```
-select many reqs related by self->R2;
-select any req related by self->R2;    // picks one arbitrarily
+Set<Request> reqs = select many related by self->R2;
+Optional<Request> req = select any related by self->R2;    // picks one arbitrarily
 ```
 
 **Pycca (from Request — many-to-one side):**
 ```
-select any elev related by self->R2;  // always exactly one
+Optional<Elevator> elev = select any related by self->R2;  // always exactly one
 ```
 
 ### 4.3 Decomposing Associative Classes
@@ -385,11 +410,11 @@ two endpoints:
 
 ```c
 // From FloorIndicator
-select any elev related by self->R10;
-select any floor related by self->R13;
+Optional<Elevator> elev = select any related by self->R10;
+Optional<Floor> floor = select any related by self->R13;
 
 // From Elevator to all FloorIndicators
-select many indicators related by self->R10;
+Set<FloorIndicator> indicators = select many related by self->R10;
 ```
 
 ### 4.4 Self-Referential Traversal
@@ -411,7 +436,7 @@ as any other relationship:
 
 **Pycca:**
 ```
-select any next_req related by self->R9;
+Optional<Request> next_req = select any related by self->R9;
 ```
 
 If bidirectional traversal is needed (e.g., doubly-linked list),
@@ -424,7 +449,7 @@ Multiple hops can be chained in a single select:
 
 **Pycca:**
 ```
-select any button related by self->R8->R7;
+Optional<FloorCallButton> button = select any related by self->R8->R7;
 ```
 
 The compiler resolves each hop left-to-right, using the intermediate
@@ -496,32 +521,33 @@ returns, the runtime raises an error.
 create req of Request;
 req.destination_floor = rcvd_evt.floor_num;
 relate req to self across R2;   // R2 is mandatory on Request side
-// end of function — R2 is satisfied ✓
+// end of function — R2 is satisfied
 
 // This is a runtime error — mandatory R2 not satisfied
 create req of Request;
 req.destination_floor = rcvd_evt.floor_num;
-// end of function — R2 not related ✗
+// end of function — R2 not related
 ```
 
 Optional relationships (`0..1`, `0..*`) have no such constraint.
 
 ### 5.3 Storage Strategy
 
-The concrete storage strategy (pointer, array, linked list) is an
-implementation detail of the runtime — the modeler and pycca code
-only ever reference the relationship label.
+The concrete storage strategy is an implementation detail of the
+runtime — the modeler and pycca code only ever reference the
+relationship label. Traversals return `Set<T>` (for `many`) or
+`Optional<T>` (for `any`).
 
 **Example — R1: Elevator 1---1 Door:**
 
 Both `Elevator` and `Door` have a relvar identified as `R1`.
-From Elevator, `R1` resolves to a single Door. From Door, `R1`
-resolves to a single Elevator.
+From Elevator, `R1` resolves to a single Door (`Optional<Door>`).
+From Door, `R1` resolves to a single Elevator (`Optional<Elevator>`).
 
 **Example — R2: Elevator 1---0..* Request:**
 
-From Elevator, `R2` resolves to a set of Requests.
-From Request, `R2` resolves to a single Elevator.
+From Elevator, `R2` resolves to a set of Requests (`Set<Request>`).
+From Request, `R2` resolves to a single Elevator (`Optional<Elevator>`).
 
 **Example — R9: Request 0..1---0..1 Request (self-referential):**
 
@@ -530,21 +556,21 @@ another instance of the same class. Each instance has at most one R9
 link. Traversal works the same as any other relationship:
 
 ```
-select any next_req related by self->R9;
+Optional<Request> next_req = select any related by self->R9;
 ```
 
 If bidirectional traversal is needed (e.g., a doubly-linked list),
 model it as two separate associations — one for forward, one for
 reverse. Each relationship is a single directed link.
 
-### 5.2 Decomposed M:M Relationships
+### 5.4 Decomposed M:M Relationships
 
 M:M relationships are decomposed into two 1:M relationships via a
 linking class (see section 4.3). Because each relationship is a
 standard two-endpoint association, relvars follow the standard rules
 from section 5.1 — no special handling is needed.
 
-### 5.3 Relvars in Pycca Code
+### 5.5 Relvars in Pycca Code
 
 Relvars are not directly accessible in pycca code. All navigation
 goes through relationship traversal (`select ... related by`)
@@ -552,11 +578,11 @@ and all link management goes through `relate`/`unrelate`.
 
 ```c
 // Navigate a relationship
-select any door related by self->R1;
+Optional<Door> door = select any related by self->R1;
 
 // Check if a link exists
-select any next_req related by self->R9;
-if (next_req == empty) {
+Optional<Request> next_req = select any related by self->R9;
+if (!next_req.has_value()) {
     // no next request in queue
 }
 
@@ -617,7 +643,8 @@ within an action block does not affect the source attribute:
 
 ```
 // Shaft entry action
-generate Floor_reached(floor_num: self.current_floor) to elev;
+Optional<Elevator> elev = select any related by self->R11;
+generate Floor_reached(floor_num: self.current_floor) to elev.value();
 // self.current_floor is copied into the event — not referenced
 
 // Elevator transition action
@@ -634,11 +661,12 @@ Allowed types:
 - Domain-defined scalars (e.g., `FloorNumber`, `Direction`)
 - Enum types
 - `UniqueID` (identifiers are basic types and may be passed as event data)
+- `Timestamp`, `Duration` (opaque time types are value types)
 
 **Not allowed as event parameters:**
 - Instance references (use relationship traversal instead)
-- Sets / collections
-- Struct types (pass individual fields instead)
+- `List<T>`, `Set<T>`, `Optional<T>` (container types)
+- `Fn` types (function references)
 
 ---
 
@@ -657,8 +685,18 @@ events:
 
 **Pycca:**
 ```
-select any elev related by self->R11;
-generate Floor_reached(floor_num: self.current_floor) to elev;
+Optional<Elevator> elev = select any related by self->R11;
+generate Floor_reached(floor_num: self.current_floor) to elev.value();
+```
+
+**Delayed generate:**
+```
+generate Door_close to self delay duration_s(5);
+```
+
+**Cancel a pending delayed event:**
+```
+cancel Door_close from self to self;
 ```
 
 The compiler validates:
@@ -666,6 +704,8 @@ The compiler validates:
 - All required parameters are provided
 - Parameter names match the event definition
 - Parameter types are compatible
+- Delay expression is of type `Duration`
+- Cancel sender and target are bound instance variables
 
 ---
 
@@ -717,7 +757,7 @@ r8_request          (inherited — Call's R8 relvar)
 **Pycca (inside ElevatorCall action):**
 ```
 // Traverse inherited relationship — compiler resolves through supertype
-select any button related by self->R7;
+Optional<CallButton> button = select any related by self->R7;
 
 // Access inherited attribute
 self.call_id
@@ -732,8 +772,8 @@ Subtypes use **reference-based** generalization: the subtype and
 supertype are separate instances linked by a relvar. This means:
 - The supertype instance always exists alongside the subtype instance
 - The supertype's identifier is shared (same `call_id` value)
-- Traversal from subtype to supertype: `select any call related by self->R5;`
-- Traversal from supertype to subtype: `select any ec related by self->R5;`
+- Traversal from subtype to supertype: `Optional<Call> call = select any related by self->R5;`
+- Traversal from supertype to subtype: `Optional<ElevatorCall> ec = select any related by self->R5;`
 
 ### 8.4 Compiler Resolution Order
 
@@ -840,7 +880,7 @@ bridges:
 
 **Pycca:**
 ```
-is_top = Building::IsTopFloor(self.current_floor);
+Boolean is_top = Building::IsTopFloor(self.current_floor);
 ```
 
 The compiler validates:
@@ -867,19 +907,16 @@ classes:
     methods:
       - name: GetIdleCount
         scope: class
-        return: uint8_t
-        action: >-
-          uint8_t count = 0;
-          select many elevs from instances of Elevator
-              where self.curr_state == Idle;
-          count = cardinality elevs;
+        return: Integer
+        action: |
+          Set<Elevator> idle_elevs = select many from instances of Elevator
+              where [] |e: Elevator| -> Boolean { return e.curr_state == Idle; };
+          Integer count = idle_elevs.size();
 ```
-
-Note: In `select ... from instances of ... where`, `self.` refers to each candidate instance being tested, not the caller. Class methods have no caller instance.
 
 **Pycca (calling):**
 ```
-uint8_t count = Elevator::GetIdleCount();
+Integer count = Elevator::GetIdleCount();
 ```
 
 ### 11.2 Instance Methods
@@ -892,10 +929,10 @@ the instance the method is called on.
       - name: PeekNextFloor
         scope: instance
         return: FloorNumber
-        action: >-
-          select any next_req related by self->R2;
-          if (next_req != empty) {
-              return next_req.destination_floor;
+        action: |
+          Optional<Request> next_req = select any related by self->R2;
+          if (next_req.has_value()) {
+              return next_req.value().destination_floor;
           }
           return self.current_floor;
 ```
@@ -903,11 +940,11 @@ the instance the method is called on.
 **Pycca (calling):**
 ```
 // On self
-uint8_t next = self.PeekNextFloor();
+FloorNumber next = self.PeekNextFloor();
 
 // On another instance
-select any elev related by self->R11;
-uint8_t next = elev.PeekNextFloor();
+Optional<Elevator> elev = select any related by self->R11;
+FloorNumber next = elev.value().PeekNextFloor();
 ```
 
 ### 11.3 Method Arguments
@@ -964,7 +1001,7 @@ classes:
 **Pycca:**
 ```
 Elevator::total_count = Elevator::total_count + 1;
-uint8_t n = Elevator::total_count;
+Integer n = Elevator::total_count;
 ```
 
 Class variables follow the same visibility rules as instance attributes.
@@ -1016,13 +1053,14 @@ The compiler should validate the following at compile time:
 | Check | Source | Pycca construct |
 |-------|--------|-----------------|
 | Attribute exists on class (or inherited) | class-diagram.yaml | `self.<attr>` |
-| Attribute on other instance exists | class-diagram.yaml | `var.<attr>` |
-| Visibility: private attr not accessed externally | class-diagram.yaml | `var.<private_attr>` → error |
+| Attribute on other instance exists | class-diagram.yaml | `var.value().<attr>` |
+| Visibility: private attr not accessed externally | class-diagram.yaml | `var.value().<private_attr>` → error |
 | Every non-subtype class has identifier set 1 | class-diagram.yaml | `identifier: [1]` on at least one attr |
 | Identifier not assigned after creation | class-diagram.yaml | `self.<id> = ...` → error |
 | Non-UniqueID identifier provided at create | class-diagram.yaml | `create var of Class(id: val)` |
 | `curr_state` not assigned in pycca | compiler-derived | `self.curr_state = ...` → error |
 | `curr_state` only on active classes | state-diagram YAML | entity class has no `curr_state` |
+| Container attribute types are valid | class-diagram.yaml | `List<T>`, `Set<T>` only |
 
 ### 13.2 Relationship Checks
 
@@ -1030,7 +1068,7 @@ The compiler should validate the following at compile time:
 |-------|--------|-----------------|
 | Relationship label exists | class-diagram.yaml | `related by self->R<N>` |
 | Target class is valid endpoint of R<N> | class-diagram.yaml | `select ... ->R<N>` |
-| Multiplicity matches select cardinality | class-diagram.yaml | `any` vs `many` |
+| Multiplicity matches select cardinality | class-diagram.yaml | `any` → `Optional<T>`, `many` → `Set<T>` |
 | Chained traversal types are consistent | class-diagram.yaml | each hop resolves correctly |
 | Relate endpoints match association | class-diagram.yaml | `relate a to b across R<N>` |
 | Relate endpoints match association | class-diagram.yaml | both vars must be endpoints of R<N> |
@@ -1044,6 +1082,8 @@ The compiler should validate the following at compile time:
 | Event params in scope | state-diagram YAML | guards, transition actions, entry actions |
 | Generate target is bound variable | select in same action block | `generate E to var` |
 | Generate target is not bare class name | class-diagram.yaml | `generate E to ClassName` → error |
+| Delay expression is `Duration` type | type check | `generate E to var delay <expr>` |
+| Cancel sender/target are bound variables | action block scope | `cancel E from a to b` |
 
 ### 13.4 Type Checks
 
@@ -1053,3 +1093,12 @@ The compiler should validate the following at compile time:
 | Bridge operation exists | DOMAINS.yaml + class-diagram.yaml | `Domain::Op(...)` |
 | Bridge param count and types match | DOMAINS.yaml | `Domain::Op(a, b)` |
 | Assignment type compatibility | types.yaml + class-diagram.yaml | `self.attr = expr` |
+| Container element type is valid | type system | `List<T>`, `Set<T>` |
+| Lambda param types match container element type | type system | `.filter(lambda)`, `.sort(lambda)` |
+| Lambda return type matches expected | type system | `where` → `Boolean`, `sort` → `Boolean` |
+| `Fn` variable type matches lambda signature | type system | `Fn(T) -> R var = lambda` |
+| No containers as event params | type system | event param type check |
+| No containers as method return types | type system | method return type check |
+| `Timestamp`/`Duration` arithmetic is valid | type system | `Timestamp - Timestamp` → `Duration` |
+| `now()` returns `Timestamp` | built-in | type inference |
+| `duration_s()`/`duration_ms()` return `Duration` | built-in | type inference |
