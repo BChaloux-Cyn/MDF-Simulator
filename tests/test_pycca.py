@@ -176,3 +176,28 @@ def test_guard_simple_compare():
 def test_guard_not_empty():
     """GUARD_PARSER: req != empty"""
     GUARD_PARSER.parse("req != empty")
+
+
+# ---------------------------------------------------------------------------
+# Typed variable declarations
+# ---------------------------------------------------------------------------
+
+
+def test_typed_var_decl_simple():
+    """FloorNumber my_floor = self.current_floor;"""
+    STATEMENT_PARSER.parse("FloorNumber my_floor = self.current_floor;")
+
+
+def test_typed_var_decl_integer_literal():
+    """Integer count = 0;"""
+    STATEMENT_PARSER.parse("Integer count = 0;")
+
+
+def test_var_assignment():
+    """var = expr; (non-self assignment)"""
+    STATEMENT_PARSER.parse("count = count + 1;")
+
+
+def test_var_dot_attr_assignment():
+    """var.attr = expr; (cross-instance write)"""
+    STATEMENT_PARSER.parse("req.destination_floor = 5;")

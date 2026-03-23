@@ -4,7 +4,7 @@ pycca/grammar.py — MDF action language grammar (lark).
 Exports:
   PYCCA_GRAMMAR  — raw grammar string (importable by Phase 5 transformer)
   GUARD_PARSER   — pre-compiled Earley parser, start="expr" (guard expressions)
-  STATEMENT_PARSER — pre-compiled LALR parser, start="start" (full action blocks)
+  STATEMENT_PARSER — pre-compiled Earley parser, start="start" (full action blocks)
 
 Grammar covers all MDF action language constructs defined in SYNTAX.md.
 NOT derived from upstream pycca compiler (which uses plain C + macros).
@@ -18,13 +18,21 @@ Extensions added in Phase 04.1-04:
   - delete <var> (variable form alongside delete object of ...)
   - create <var> of <Class> and create <var> of <Class>(<params>)
   - if_stmt with brace syntax and optional else clause
+
+Extensions added in Task 1 (grammar extension plan):
+  - typed_var_decl: Type var = expr;
+  - var_assignment: var = expr; and var.attr = expr;
+  - arithmetic precedence tower: or > and > compare > add > mul > atom
+  - Both parsers switched to Earley (NAME NAME ambiguity requires it)
 """
 from lark import Lark
 
 PYCCA_GRAMMAR = r"""
     start: statement+
 
-    statement: assignment
+    statement: typed_var_decl
+             | assignment
+             | var_assignment
              | generate_stmt
              | bridge_call
              | create_stmt
@@ -38,6 +46,16 @@ PYCCA_GRAMMAR = r"""
     // --- Assignment ---
     // self.attr = expr;
     assignment: "self" "." NAME "=" expr ";"
+
+    // --- Typed variable declaration ---
+    // Type var = expr;
+    typed_var_decl: NAME NAME "=" expr ";"
+
+    // --- Variable assignment (non-self) ---
+    // var = expr;
+    // var.attr = expr;
+    var_assignment: NAME "=" expr ";"
+                 | NAME "." NAME "=" expr ";"
 
     // --- Generate ---
     // generate Event to NAME;
@@ -81,24 +99,32 @@ PYCCA_GRAMMAR = r"""
     // if (expr) { stmts } [else { stmts }]
     if_stmt: "if" "(" expr ")" "{" statement* "}" ("else" "{" statement* "}")?
 
-    // --- Expressions ---
-    ?expr: simple_compare
-         | and_expr
-         | or_expr
-         | cardinality_expr
-         | atom
+    // --- Expressions (precedence tower: lowest to highest) ---
+    ?expr: or_expr
 
-    simple_compare: atom OP atom
-    and_expr: expr "and" expr
-    or_expr: expr "or" expr
-    cardinality_expr: "cardinality" NAME
+    or_expr: and_expr "or" or_expr
+           | and_expr
 
-    // atom: dotted_name must appear before plain name to ensure LALR picks the longer match
+    and_expr: compare_expr "and" and_expr
+            | compare_expr
+
+    compare_expr: add_expr OP add_expr
+                | add_expr
+
+    add_expr: add_expr "+" mul_expr
+            | add_expr "-" mul_expr
+            | mul_expr
+
+    mul_expr: mul_expr "*" atom
+            | atom
+
+    // atom: dotted_name must appear before plain name to ensure longer match
     atom: NUMBER -> number
         | ESCAPED_STRING -> string
         | NAME "." NAME -> dotted_name
         | NAME -> name
         | "(" expr ")"
+        | "cardinality" NAME -> cardinality_expr
 
     arglist: expr ("," expr)*
 
@@ -112,8 +138,4 @@ PYCCA_GRAMMAR = r"""
 """
 
 GUARD_PARSER = Lark(PYCCA_GRAMMAR, start="expr", parser="earley")
-try:
-    STATEMENT_PARSER = Lark(PYCCA_GRAMMAR, start="start", parser="lalr")
-except Exception:
-    # Fall back to Earley if LALR has grammar conflicts
-    STATEMENT_PARSER = Lark(PYCCA_GRAMMAR, start="start", parser="earley")
+STATEMENT_PARSER = Lark(PYCCA_GRAMMAR, start="start", parser="earley")

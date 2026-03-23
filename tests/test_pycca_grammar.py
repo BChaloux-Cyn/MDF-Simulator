@@ -12,7 +12,11 @@ def test_grammar_module_imports():
 def test_guard_simple_compare():
     from pycca.grammar import GUARD_PARSER
     tree = GUARD_PARSER.parse("pressure >= 100")
-    assert tree.data == "simple_compare"
+    # With the arithmetic precedence tower, ?expr is transparent so the root
+    # is or_expr; the compare_expr node is nested within it.
+    assert tree.data == "or_expr"
+    compare = tree.children[0].children[0]
+    assert compare.data == "compare_expr"
 
 
 def test_guard_inequality_lt():
