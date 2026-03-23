@@ -201,3 +201,33 @@ def test_var_assignment():
 def test_var_dot_attr_assignment():
     """var.attr = expr; (cross-instance write)"""
     STATEMENT_PARSER.parse("req.destination_floor = 5;")
+
+
+# ---------------------------------------------------------------------------
+# Lambda expressions
+# ---------------------------------------------------------------------------
+
+def test_lambda_no_captures():
+    STATEMENT_PARSER.parse(
+        'Fn(DestFloorButton, DestFloorButton) -> Boolean cmp = '
+        '[] |a: DestFloorButton, b: DestFloorButton| -> Boolean { return a.x < b.x; };'
+    )
+
+def test_lambda_with_captures():
+    STATEMENT_PARSER.parse(
+        'Fn(DestFloorButton) -> Boolean pred = '
+        '[my_floor] |btn: DestFloorButton| -> Boolean { return btn.x > my_floor; };'
+    )
+
+def test_lambda_multi_capture():
+    STATEMENT_PARSER.parse(
+        'Fn(DestFloorButton) -> Boolean pred = '
+        '[my_floor, my_id] |btn: DestFloorButton| -> Boolean '
+        '{ if (btn.r4 != my_id) { return 0; } return btn.x > my_floor; };'
+    )
+
+def test_lambda_empty_captures_single_param():
+    STATEMENT_PARSER.parse(
+        'Fn(Floor) -> Boolean pred = '
+        '[] |f: Floor| -> Boolean { return f.floor_num == 3; };'
+    )

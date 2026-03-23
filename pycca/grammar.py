@@ -42,14 +42,29 @@ PYCCA_GRAMMAR = r"""
              | relate_stmt
              | unrelate_stmt
              | if_stmt
+             | return_stmt
+
+    // --- Return ---
+    // return expr;
+    // return;
+    return_stmt: "return" expr ";"
+               | "return" ";"
 
     // --- Assignment ---
     // self.attr = expr;
     assignment: "self" "." NAME "=" expr ";"
 
+    // --- Type expressions (simple, generic, or function types) ---
+    // Name | Name<T> | Name<T,U> | Fn(T,...) -> R
+    type_expr: NAME "<" NAME ("," NAME)* ">"  -> generic_type
+             | NAME "(" NAME ("," NAME)* ")" "->" NAME  -> fn_type
+             | NAME  -> simple_type
+
     // --- Typed variable declaration ---
     // Type var = expr;
-    typed_var_decl: NAME NAME "=" expr ";"
+    // List<T> var = expr;
+    // Fn(T)->R var = expr;
+    typed_var_decl: type_expr NAME "=" expr ";"
 
     // --- Variable assignment (non-self) ---
     // var = expr;
@@ -118,6 +133,15 @@ PYCCA_GRAMMAR = r"""
     mul_expr: mul_expr "*" atom
             | atom
 
+    // --- Lambda expressions ---
+    // [] |a: T, b: T| -> RetType { stmts }
+    // [capture1, capture2] |param: T| -> RetType { stmts }
+    lambda_expr: "[" capture_list? "]" PIPE lambda_params PIPE "->" NAME "{" statement+ "}"
+    capture_list: NAME ("," NAME)*
+    lambda_params: lambda_param ("," lambda_param)*
+    lambda_param: NAME ":" NAME
+    PIPE: "|"
+
     // atom: dotted_name must appear before plain name to ensure longer match
     atom: NUMBER -> number
         | ESCAPED_STRING -> string
@@ -125,6 +149,7 @@ PYCCA_GRAMMAR = r"""
         | NAME -> name
         | "(" expr ")"
         | "cardinality" NAME -> cardinality_expr
+        | lambda_expr
 
     arglist: expr ("," expr)*
 
