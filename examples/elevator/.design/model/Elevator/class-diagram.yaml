@@ -13,6 +13,67 @@ classes:
         type: Direction
       - name: next_stop_floor
         type: FloorNumber
+    methods:
+      - name: _get_lit_buttons
+        visibility: private
+        scope: instance
+        return: Set<DestFloorButton>
+        action: |
+          UniqueID my_id = self.elevator_id;
+          FloorNumber my_floor = self.current_floor;
+          Set<DestFloorButton> lit = select many from instances of DestFloorButton
+              where [my_id, my_floor] |btn: DestFloorButton| -> Boolean {
+                  return btn.r4_elevator_id == my_id
+                      and btn.curr_state == Lit
+                      and btn.r5_floor_num != my_floor;
+              };
+          return lit;
+      - name: _pick_next_stop
+        visibility: private
+        scope: instance
+        params:
+          - name: lit_btns
+            type: Set<DestFloorButton>
+          - name: prev_direction
+            type: Direction
+        return: FloorNumber
+        action: |
+          FloorNumber my_floor = self.current_floor;
+
+          // Sort ascending by floor number
+          List<DestFloorButton> sorted_btns = lit_btns.sort(
+              [] |a: DestFloorButton, b: DestFloorButton| -> Boolean {
+                  return a.r5_floor_num < b.r5_floor_num;
+              });
+          Optional<DestFloorButton> first_btn = sorted_btns.peek_front();
+          Optional<DestFloorButton> last_btn = sorted_btns.peek_back();
+
+          // Priority 1: Continue in same direction if lit buttons exist that way
+          if (prev_direction == Down and first_btn.value().r5_floor_num < my_floor) {
+              List<DestFloorButton> below_sorted = lit_btns.filter(
+                  [my_floor] |b: DestFloorButton| -> Boolean {
+                      return b.r5_floor_num < my_floor;
+                  }).sort(
+                  [] |a: DestFloorButton, b: DestFloorButton| -> Boolean {
+                      return a.r5_floor_num > b.r5_floor_num;
+                  });
+              return below_sorted.peek_front().value().r5_floor_num;
+          } else if (prev_direction == Up and last_btn.value().r5_floor_num > my_floor) {
+              List<DestFloorButton> above_sorted = lit_btns.filter(
+                  [my_floor] |b: DestFloorButton| -> Boolean {
+                      return b.r5_floor_num > my_floor;
+                  }).sort(
+                  [] |a: DestFloorButton, b: DestFloorButton| -> Boolean {
+                      return a.r5_floor_num < b.r5_floor_num;
+                  });
+              return above_sorted.peek_front().value().r5_floor_num;
+          }
+
+          // Priority 2: Reverse — all lit buttons are in opposite direction
+          if (first_btn.value().r5_floor_num > my_floor) {
+              return first_btn.value().r5_floor_num;
+          }
+          return last_btn.value().r5_floor_num;
 
   - name: Shaft
     stereotype: entity
