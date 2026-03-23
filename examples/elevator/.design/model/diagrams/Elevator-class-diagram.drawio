@@ -13,7 +13,7 @@
         <mxCell id="elevator:sep:Elevator" value="" style="line;strokeColor=inherit;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingBottom=-1;spacingLeft=3;spacingRight=3;rotatable=0;" vertex="1" parent="elevator:class:Elevator">
           <mxGeometry y="106" width="220" height="8" as="geometry"/>
         </mxCell>
-        <mxCell id="elevator:class:Elevator:methods" value="- _get_lit_buttons(): Set&lt;DestFloorButton&gt;&lt;br&gt;- _pick_next_stop(lit_btns: Set&lt;DestFloorButton&gt;, prev_direction: Direction): FloorNumber" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;html=1;overflow=hidden;rotatable=0;" vertex="1" parent="elevator:class:Elevator">
+        <mxCell id="elevator:class:Elevator:methods" value="- _get_lit_buttons(): Set&amp;lt;DestFloorButton&amp;gt;&lt;br&gt;- _pick_next_stop(lit_btns: Set&amp;lt;DestFloorButton&amp;gt;, prev_direction: Direction): FloorNumber" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;html=1;overflow=hidden;rotatable=0;" vertex="1" parent="elevator:class:Elevator">
           <mxGeometry y="114" width="220" height="40" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:Shaft" value="&lt;&lt;entity&gt;&gt;&#10;Shaft" style="swimlane;fontStyle=1;horizontal=1;startSize=26;fillColor=#dae8fc;strokeColor=#6c8ebf;rounded=0;" vertex="1" parent="1">

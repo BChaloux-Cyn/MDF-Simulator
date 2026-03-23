@@ -878,11 +878,16 @@ def _layout_for_canvas(
     return _scale_for_min_spacing(coords, min_dist, margin)
 
 
+def _html_escape_type(t: str) -> str:
+    """Escape < and > in type names for Draw.io HTML cell values."""
+    return t.replace("<", "&lt;").replace(">", "&gt;")
+
+
 def _attr_label(vis: str, scope: str, name: str, type_: str,
                 identifier: list[int] | None = None) -> str:
     """Format a UML attribute label. Class-scope names are HTML-underlined."""
     sym = _VIS.get(vis, "-")
-    text = f"{name}: {type_}"
+    text = f"{name}: {_html_escape_type(type_)}"
     if identifier:
         tag = ", ".join(f"I{i}" for i in sorted(identifier))
         text += f" {{{tag}}}"
@@ -900,8 +905,8 @@ def _method_label(
 ) -> str:
     """Format a UML method label. Class-scope names are HTML-underlined."""
     sym = _VIS.get(vis, "-")
-    param_sig = ", ".join(f"{p.name}: {p.type}" for p in params)
-    ret = f": {return_type}" if return_type else ""
+    param_sig = ", ".join(f"{p.name}: {_html_escape_type(p.type)}" for p in params)
+    ret = f": {_html_escape_type(return_type)}" if return_type else ""
     sig = f"{name}({param_sig}){ret}"
     if scope == "class":
         sig = f"<u>{sig}</u>"
