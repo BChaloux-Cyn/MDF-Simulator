@@ -8,22 +8,26 @@ Exports:
 
 Grammar covers all MDF action language constructs defined in SYNTAX.md.
 NOT derived from upstream pycca compiler (which uses plain C + macros).
-This is an MDF-project-specific DSL.
+This is an MDF-project-specific DSL. Both parsers use Earley (the grammar
+has inherent ambiguities that LALR cannot resolve).
 
-Extensions added in Phase 04.1-04:
-  - dotted_name in atom (var.attr, self.attr, rcvd_evt.param)
-  - generate to any NAME variable; generate with param_list
-  - select_related_stmt (relationship traversal)
-  - relate_stmt, unrelate_stmt
-  - delete <var> (variable form alongside delete object of ...)
-  - create <var> of <Class> and create <var> of <Class>(<params>)
-  - if_stmt with brace syntax and optional else clause
-
-Extensions added in Task 1 (grammar extension plan):
-  - typed_var_decl: Type var = expr;
-  - var_assignment: var = expr; and var.attr = expr;
-  - arithmetic precedence tower: or > and > compare > add > mul > atom
-  - Both parsers switched to Earley (NAME NAME ambiguity requires it)
+Supported constructs:
+  - Typed variable declarations (type_expr NAME = expr;)
+  - Assignments (self.attr, var, var.attr)
+  - Arithmetic with precedence tower (or > and > compare > add > mul > atom)
+  - Container types: List<T>, Set<T>, Optional<T>, Fn(T,...)->R
+  - Lambda expressions with capture lists ([captures] |params| -> R { body })
+  - Method calls and recursive chained access (a.b().c().d)
+  - For-each loops (for (Type var : expr) { stmts })
+  - Select as expression with lambda where clause
+  - Chained relationship traversal (self->R1->R2->R3)
+  - Generate with delay (generate Event to target delay duration;)
+  - Cancel statement (cancel Event from sender to target;)
+  - Function calls (now(), duration_s(5), etc.)
+  - Return statements
+  - All Phase 04.1-04 constructs (relate, unrelate, create, delete, bridge, if/else)
+  - Legacy select with bare boolean where (backward compat)
+  - Deprecated cardinality keyword (use .size() instead)
 """
 from lark import Lark
 
