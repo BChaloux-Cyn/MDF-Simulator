@@ -47,6 +47,10 @@ The JSON is a semantic snapshot of diagram content, stripped of all
 geometry (positions, sizes, waypoints, anchor points). It uses sorted
 keys and deterministic ordering so string comparison is reliable.
 
+All models use `model_dump(by_alias=True)` for serialization so the
+JSON keys match the field aliases (e.g., `"from"` not `"from_state"`,
+`"class"` not `"class_name"`).
+
 ### State Diagram Canonical JSON
 
 ```json
@@ -71,8 +75,7 @@ keys and deterministic ordering so string comparison is reliable.
       "to": "Departing",
       "event": "Floor_assigned",
       "params": "floor_num: FloorNumber",
-      "guard": null,
-      "action": "self.next_stop_floor = rcvd_evt.floor_num;"
+      "guard": null
     }
   ]
 }
@@ -83,7 +86,12 @@ keys and deterministic ordering so string comparison is reliable.
 - `transitions` sorted by `(from, event, to)` tuple
 - `entry_action`: raw text from YAML, or null
 - `params`: comma-separated `name: type` string, or null if no params
-- `guard` and `action`: raw text, or null
+- `guard`: raw text, or null
+- Transition actions are **not included** — the drawio renderer does not
+  render transition actions into the diagram labels, so they cannot be
+  extracted from the drawio side. Changes to transition actions alone
+  will not trigger a redraw (this is consistent with them not being
+  visible in the diagram).
 
 ### Class Diagram Canonical JSON
 
@@ -130,14 +138,20 @@ keys and deterministic ordering so string comparison is reliable.
 - `classes` sorted by `name`
 - `attributes` and `methods` are formatted label strings (using `_attr_label`
   and `_method_label` output), preserving the exact text that appears in drawio
-- `associations` sorted by `name`
+- `associations` sorted by `name` — only non-generalization associations
+  (i.e., those whose R-number does not appear in any class's `partitions`)
 - `generalizations` sorted by `name`, `subtypes` sorted alphabetically
+- The YAML→JSON builder uses the same `gen_map` logic as `_build_class_diagram_xml`
+  (built from `cls.specializes` and `cls.partitions`) to separate associations
+  from generalizations
 
 ## Pydantic Models
 
 The canonical JSON structures are defined as Pydantic models in
-`schema/drawio_schema.py`. These serve as the single source of truth
-for the intermediate representation and provide runtime validation.
+`schema/drawio_canonical.py` (separate from `drawio_schema.py` which
+holds rendering constants and ID functions). These serve as the single
+source of truth for the intermediate representation and provide runtime
+validation.
 
 ### State Diagram Models
 
@@ -147,14 +161,17 @@ class CanonicalState(BaseModel):
     entry_action: str | None
 
 class CanonicalTransition(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     from_state: str = Field(alias="from")
     to: str
     event: str
     params: str | None
     guard: str | None
-    action: str | None
 
 class CanonicalStateDiagram(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     type: Literal["state_diagram"]
     domain: str
     class_name: str = Field(alias="class")
@@ -174,6 +191,8 @@ class CanonicalClassEntry(BaseModel):
     methods: list[str]
 
 class CanonicalAssociation(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     name: str
     point_1: str
     point_2: str
@@ -199,28 +218,34 @@ class CanonicalClassDiagram(BaseModel):
 
 ### New Functions (tools/drawio.py)
 
-1. **`_yaml_to_canonical_state(domain, sd) -> str`**
-   Build canonical JSON string from a `StateDiagramFile`.
+1. **`_yaml_to_canonical_state(domain: str, sd: StateDiagramFile) -> str`**
+   Build canonical JSON string from a `StateDiagramFile`. Uses
+   `model_dump(by_alias=True)` and `json.dumps(sort_keys=True)`.
 
-2. **`_yaml_to_canonical_class(domain, cd) -> str`**
-   Build canonical JSON string from a `ClassDiagramFile`.
+2. **`_yaml_to_canonical_class(domain: str, cd: ClassDiagramFile) -> str`**
+   Build canonical JSON string from a `ClassDiagramFile`. Uses the same
+   `_attr_label` and `_method_label` functions as the renderer to produce
+   attribute/method strings. Uses `gen_map` logic to separate associations
+   from generalizations.
 
-3. **`_drawio_to_canonical_state(drawio_path) -> str | None`**
+3. **`_drawio_to_canonical_state(drawio_path: Path) -> str | None`**
    Parse existing state diagram drawio XML, extract semantic content
    into canonical JSON. Returns None if file missing or malformed.
 
-4. **`_drawio_to_canonical_class(drawio_path) -> str | None`**
+4. **`_drawio_to_canonical_class(drawio_path: Path) -> str | None`**
    Parse existing class diagram drawio XML, extract semantic content
    into canonical JSON. Returns None if file missing or malformed.
 
 ### Modified Functions
 
-5. **`_structure_matches_state`** → renamed to `_content_matches_state`.
-   Replaces ID comparison with:
+5. **`_content_matches_state(domain_path: Path, domain: str, class_name: str, sd: StateDiagramFile) -> bool`**
+   Replaces `_structure_matches_state` (same signature). Computes
+   `drawio_path` from `domain_path` and `class_name`, then compares:
    `_yaml_to_canonical_state(domain, sd) == _drawio_to_canonical_state(drawio_path)`
 
-6. **`_structure_matches_class`** → renamed to `_content_matches_class`.
-   Replaces ID comparison with:
+6. **`_content_matches_class(domain_path: Path, domain: str, cd: ClassDiagramFile) -> bool`**
+   Replaces `_structure_matches_class` (same signature). Computes
+   `drawio_path` from `domain_path`, then compares:
    `_yaml_to_canonical_class(domain, cd) == _drawio_to_canonical_class(drawio_path)`
 
 ### Removed Functions
@@ -232,16 +257,31 @@ class CanonicalClassDiagram(BaseModel):
 ### Drawio→JSON Extraction Strategy
 
 **State diagrams:**
-- State names: from `mxCell` `value` where ID matches `*:state:*` (exclude `__initial__`)
-- Entry actions: parsed from the state cell's HTML `value` — content after the `entry /` separator
-- Transitions: from edge cells where ID matches `*:trans:*` — `value` contains event, params, guard
+- State names: from `mxCell` `value` where ID matches `*:state:*`
+  pattern (exclude `__initial__` pseudostate)
+- Entry actions: parsed from the state cell's HTML `value` — the
+  content after the `<i>entry /</i>` separator line. States with no
+  entry action have a simple name-only value.
+- Transitions: from edge cells where ID matches `*:trans:*`. The
+  `value` attribute contains a multi-segment label separated by `<br>`.
+  **The first segment is the transition ID and must be stripped.**
+  Remaining segments contain the event signature and optional guard
+  (in `[brackets]`).
 
 **Class diagrams:**
-- Class headers: `value` of swimlane cells (stereotype + name)
-- Attributes: `value` of `:attrs` child cells (HTML `<br>`-joined labels)
-- Methods: `value` of `:methods` child cells
-- Associations: edge `value` (R-number) plus child label cells for multiplicities and phrases
-- Generalizations: edges with open-arrow style matching partition patterns
+- Class headers: `value` of swimlane cells — format is
+  `<<stereotype>>\nname`
+- Attributes: `value` of `:attrs` child cells — HTML `<br>`-joined
+  attribute labels
+- Methods: `value` of `:methods` child cells — HTML `<br>`-joined
+  method labels
+- Associations: edge `value` (R-number) plus child `edgeLabel` cells
+  for multiplicities (`src_mult`, `tgt_mult`) and phrases
+  (`src_phrase`, `tgt_phrase`)
+- Generalizations: edges whose style contains `endArrow=block;endFill=0`
+  (the `STYLE_GENERALIZATION` constant). Edge IDs follow the pattern
+  `{domain}:assoc:{rname}:{subtype}`. Only the first subtype edge
+  carries the R-name label in its value.
 
 ### Unchanged
 
