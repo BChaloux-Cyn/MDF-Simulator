@@ -19,13 +19,12 @@ classes:
         scope: instance
         return: Set<DestFloorButton>
         action: |
-          UniqueID my_id = self.elevator_id;
           FloorNumber my_floor = self.current_floor;
-          Set<DestFloorButton> lit = select many from instances of DestFloorButton
-              where [my_id, my_floor] |btn: DestFloorButton| -> Boolean {
-                  return btn.r4_elevator_id == my_id
-                      and btn.curr_state == Lit
-                      and btn.r5_floor_num != my_floor;
+          Set<DestFloorButton> lit = select many related by self->R4
+              where [my_floor] |btn: DestFloorButton| -> Boolean {
+                  Floor floor = btn->R5;
+                  return btn.curr_state == Lit
+                      and floor.floor_num != my_floor;
               };
           return lit;
       - name: _pick_next_stop
@@ -40,40 +39,54 @@ classes:
         action: |
           FloorNumber my_floor = self.current_floor;
 
-          // Sort ascending by floor number
+          // Sort ascending by floor number (traverse R5 to get floor_num)
           List<DestFloorButton> sorted_btns = lit_btns.sort(
               [] |a: DestFloorButton, b: DestFloorButton| -> Boolean {
-                  return a.r5_floor_num < b.r5_floor_num;
+                  Floor a_floor = a->R5;
+                  Floor b_floor = b->R5;
+                  return a_floor.floor_num < b_floor.floor_num;
               });
-          Optional<DestFloorButton> first_btn = sorted_btns.peek_front();
-          Optional<DestFloorButton> last_btn = sorted_btns.peek_back();
+          DestFloorButton first_btn = sorted_btns.peek_front();
+          DestFloorButton last_btn = sorted_btns.peek_back();
+          Floor first_floor = first_btn->R5;
+          Floor last_floor = last_btn->R5;
 
           // Priority 1: Continue in same direction if lit buttons exist that way
-          if (prev_direction == Down and first_btn.value().r5_floor_num < my_floor) {
+          if (prev_direction == Down and first_floor.floor_num < my_floor) {
               List<DestFloorButton> below_sorted = lit_btns.filter(
                   [my_floor] |b: DestFloorButton| -> Boolean {
-                      return b.r5_floor_num < my_floor;
+                      Floor f = b->R5;
+                      return f.floor_num < my_floor;
                   }).sort(
                   [] |a: DestFloorButton, b: DestFloorButton| -> Boolean {
-                      return a.r5_floor_num > b.r5_floor_num;
+                      Floor a_floor = a->R5;
+                      Floor b_floor = b->R5;
+                      return a_floor.floor_num > b_floor.floor_num;
                   });
-              return below_sorted.peek_front().value().r5_floor_num;
-          } else if (prev_direction == Up and last_btn.value().r5_floor_num > my_floor) {
+              DestFloorButton nearest = below_sorted.peek_front();
+              Floor nearest_floor = nearest->R5;
+              return nearest_floor.floor_num;
+          } else if (prev_direction == Up and last_floor.floor_num > my_floor) {
               List<DestFloorButton> above_sorted = lit_btns.filter(
                   [my_floor] |b: DestFloorButton| -> Boolean {
-                      return b.r5_floor_num > my_floor;
+                      Floor f = b->R5;
+                      return f.floor_num > my_floor;
                   }).sort(
                   [] |a: DestFloorButton, b: DestFloorButton| -> Boolean {
-                      return a.r5_floor_num < b.r5_floor_num;
+                      Floor a_floor = a->R5;
+                      Floor b_floor = b->R5;
+                      return a_floor.floor_num < b_floor.floor_num;
                   });
-              return above_sorted.peek_front().value().r5_floor_num;
+              DestFloorButton nearest = above_sorted.peek_front();
+              Floor nearest_floor = nearest->R5;
+              return nearest_floor.floor_num;
           }
 
           // Priority 2: Reverse — all lit buttons are in opposite direction
-          if (first_btn.value().r5_floor_num > my_floor) {
-              return first_btn.value().r5_floor_num;
+          if (first_floor.floor_num > my_floor) {
+              return first_floor.floor_num;
           }
-          return last_btn.value().r5_floor_num;
+          return last_floor.floor_num;
 
   - name: Shaft
     stereotype: entity
@@ -146,6 +159,24 @@ classes:
           self.pressed_at = now();
           generate Activated to self;
 
+  - name: Door
+    stereotype: entity
+    partitions:
+      - name: R9
+        subtypes: [CarDoor, ShaftDoor]
+    attributes:
+      - name: door_id
+        type: UniqueID
+        identifier: 1
+
+  - name: CarDoor
+    stereotype: active
+    specializes: R9
+
+  - name: ShaftDoor
+    stereotype: active
+    specializes: R9
+
 associations:
   # Elevator moves within a Shaft
   - name: R1
@@ -201,6 +232,24 @@ associations:
     1_phrase_2: has buttons at
     2_phrase_1: is located on
 
+  # Elevator has a CarDoor
+  - name: R7
+    point_1: Elevator
+    point_2: CarDoor
+    1_mult_2: "1"
+    2_mult_1: "1"
+    1_phrase_2: has
+    2_phrase_1: belongs to
+
+  # ShaftFloor has a ShaftDoor
+  - name: R8
+    point_1: ShaftFloor
+    point_2: ShaftDoor
+    1_mult_2: "1"
+    2_mult_1: "1"
+    1_phrase_2: has
+    2_phrase_1: is installed at
+
 bridges:
   - to_domain: Building
     direction: required
@@ -212,11 +261,13 @@ bridges:
     implementations:
       - name: ElevatorDetected
         action: |
-          Optional<ShaftFloor> sf = select any from instances of ShaftFloor
+          Optional<ShaftFloor> maybe_sf = select any from instances of ShaftFloor
               where [arg.sensor_id] |s: ShaftFloor| -> Boolean {
                   return s.sensor_id == arg.sensor_id;
               };
-          Optional<Shaft> shaft = select any related by sf.value()->R2;
-          Optional<Elevator> elev = select any related by shaft.value()->R1;
-          Optional<Floor> floor = select any related by sf.value()->R3;
-          generate Floor_reached(floor_num: floor.value().floor_num) to elev.value();
+          if (maybe_sf.has_value()) {
+              ShaftFloor sf = maybe_sf.value();
+              Elevator elev = sf->R2->R1;
+              Floor floor = sf->R3;
+              generate Floor_reached(floor_num: floor.floor_num) to elev;
+          }

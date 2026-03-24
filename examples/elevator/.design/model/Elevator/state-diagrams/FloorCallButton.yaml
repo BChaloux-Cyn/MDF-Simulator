@@ -8,6 +8,17 @@ events:
 states:
   - name: Idle
   - name: Lit
+    entry_action: |
+      // If the elevator is idle, wake it up
+      Floor floor = self->R6;
+      Optional<ShaftFloor> sf = select any related by floor->R3;
+      if (sf.has_value()) {
+          ShaftFloor shaft_floor = sf.value();
+          Elevator elev = shaft_floor->R2->R1;
+          if (elev.curr_state == Idle) {
+              generate Floor_assigned(floor_num: floor.floor_num) to elev;
+          }
+      }
 transitions:
   - from: Idle
     to: Lit

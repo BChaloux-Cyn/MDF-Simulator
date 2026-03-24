@@ -1,6 +1,6 @@
 <mxfile compressed="false" version="24.0.0">
   <diagram name="Page-1" id="page1">
-    <mxGraphModel dx="1034" dy="546" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="983" pageHeight="290" math="0" shadow="0" background="#FFFFFF">
+    <mxGraphModel dx="1034" dy="546" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1846" pageHeight="777" math="0" shadow="0" background="#FFFFFF">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
@@ -8,12 +8,12 @@
           <mxGeometry x="120" y="120" width="20" height="20" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:state:FloorCallButton:Idle" value="Idle" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Courier New;" vertex="1" parent="1">
-          <mxGeometry x="375" y="120" width="160" height="50" as="geometry"/>
+          <mxGeometry x="367" y="419" width="160" height="50" as="geometry"/>
         </mxCell>
-        <mxCell id="elevator:state:FloorCallButton:Lit" value="Lit" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Courier New;" vertex="1" parent="1">
-          <mxGeometry x="703" y="120" width="160" height="50" as="geometry"/>
+        <mxCell id="elevator:state:FloorCallButton:Lit" value="Lit&lt;br&gt;──────────────────&lt;br&gt;&lt;i&gt;entry /&lt;/i&gt;&lt;br&gt;// If the elevator is idle, wake it up&lt;br&gt;Floor floor = self-&amp;gt;R6;&lt;br&gt;Optional&amp;lt;ShaftFloor&amp;gt; sf = select any related by floor-&amp;gt;R3;&lt;br&gt;if (sf.has_value()) {&lt;br&gt;    ShaftFloor shaft_floor = sf.value();&lt;br&gt;    Elevator elev = shaft_floor-&amp;gt;R2-&amp;gt;R1;&lt;br&gt;    if (elev.curr_state == Idle) {&lt;br&gt;        generate Floor_assigned(floor_num: floor.floor_num) to elev;&lt;br&gt;    }&lt;br&gt;}&lt;br&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="1237" y="377" width="489" height="280" as="geometry"/>
         </mxCell>
-        <mxCell id="elevator:trans:FloorCallButton:__initial__:__init__:0" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="elevator:state:FloorCallButton:__initial__" target="elevator:state:FloorCallButton:Idle" parent="1">
+        <mxCell id="elevator:trans:FloorCallButton:__initial__:__init__:0" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=0.5;exitY=1.0;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="elevator:state:FloorCallButton:__initial__" target="elevator:state:FloorCallButton:Idle" parent="1">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:trans:FloorCallButton:Idle:Activated:0" value="elevator:trans:FloorCallButton:Idle:Activated:0&lt;br&gt;Activated()" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=1.0;exitY=0.3333;exitDx=0;exitDy=0;entryX=0.0;entryY=0.3333;entryDx=0;entryDy=0;" edge="1" source="elevator:state:FloorCallButton:Idle" target="elevator:state:FloorCallButton:Lit" parent="1">

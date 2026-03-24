@@ -150,8 +150,27 @@ def _load_domain_types(domain_path: Path) -> frozenset[str]:
         return frozenset()
 
 
-def _is_valid_type(type_str: str, domain_types: frozenset[str]) -> bool:
-    return type_str in _SCALAR_PRIMITIVES or type_str in domain_types
+_BUILTIN_TYPES = frozenset({"Timestamp", "Duration"})
+_GENERIC_WRAPPERS = frozenset({"Set", "List", "Optional"})
+
+
+def _is_valid_type(
+    type_str: str,
+    domain_types: frozenset[str],
+    class_names: frozenset[str] | set[str] = frozenset(),
+) -> bool:
+    # Scalar primitives, built-in types, domain-defined types, and class names
+    if type_str in _SCALAR_PRIMITIVES or type_str in _BUILTIN_TYPES:
+        return True
+    if type_str in domain_types or type_str in class_names:
+        return True
+    # Generic wrappers: Set<T>, List<T>, Optional<T>
+    if "<" in type_str and type_str.endswith(">"):
+        wrapper = type_str[: type_str.index("<")]
+        inner = type_str[type_str.index("<") + 1 : -1]
+        if wrapper in _GENERIC_WRAPPERS:
+            return _is_valid_type(inner, domain_types, class_names)
+    return False
 
 
 def _get_effective_attributes(cls, class_map: dict) -> list:
@@ -207,14 +226,17 @@ def _check_referential_integrity_class_diagram(
             for part in cls.partitions:
                 partition_map.setdefault(part.name, set()).update(part.subtypes)
 
-    # Classes: specializes R-numbers must exist in associations
+    # Build set of partition R-numbers (generalization relationships)
+    partition_names = set(partition_map.keys())
+
+    # Classes: specializes R-numbers must exist in associations or partitions
     for cls in cd.classes:
-        if cls.specializes is not None and cls.specializes not in assoc_names:
+        if cls.specializes is not None and cls.specializes not in assoc_names and cls.specializes not in partition_names:
             issues.append(_make_issue(
-                issue=f"Class '{cls.name}' specializes R-number '{cls.specializes}' which is not in associations",
+                issue=f"Class '{cls.name}' specializes R-number '{cls.specializes}' which is not in associations or partitions",
                 location=f"{loc_cd}::classes.{cls.name}.specializes",
                 value=cls.specializes,
-                fix=f"Add association '{cls.specializes}' or correct the specializes field",
+                fix=f"Add association or partition '{cls.specializes}' or correct the specializes field",
             ))
         if cls.specializes is not None:
             listed = partition_map.get(cls.specializes, set())
@@ -253,7 +275,7 @@ def _check_referential_integrity_class_diagram(
 
         # Attributes: type must be primitive or in types.yaml
         for attr in cls.attributes:
-            if not _is_valid_type(attr.type, domain_types):
+            if not _is_valid_type(attr.type, domain_types, class_names):
                 issues.append(_make_issue(
                     issue=f"Attribute '{cls.name}.{attr.name}' has unknown type '{attr.type}'",
                     location=f"{loc_cd}::classes.{cls.name}.attributes.{attr.name}.type",
@@ -289,7 +311,7 @@ def _check_referential_integrity_class_diagram(
 
         # Methods: return_type and param types must be valid
         for method in cls.methods:
-            if method.return_type is not None and not _is_valid_type(method.return_type, domain_types):
+            if method.return_type is not None and not _is_valid_type(method.return_type, domain_types, class_names):
                 issues.append(_make_issue(
                     issue=f"Method '{cls.name}.{method.name}' return type '{method.return_type}' is unknown",
                     location=f"{loc_cd}::classes.{cls.name}.methods.{method.name}.return",
@@ -297,7 +319,7 @@ def _check_referential_integrity_class_diagram(
                     fix=f"Add type '{method.return_type}' to types.yaml or use a primitive type",
                 ))
             for param in method.params:
-                if not _is_valid_type(param.type, domain_types):
+                if not _is_valid_type(param.type, domain_types, class_names):
                     issues.append(_make_issue(
                         issue=f"Method '{cls.name}.{method.name}' param '{param.name}' has unknown type '{param.type}'",
                         location=f"{loc_cd}::classes.{cls.name}.methods.{method.name}.params.{param.name}.type",
@@ -625,8 +647,34 @@ def _check_guard_completeness(
         if parse_failed:
             continue
 
-        # Check for AND/OR at top level
-        has_compound = any(t.data in {"and_expr", "or_expr"} for t in parse_results)
+        # Unwrap precedence tower to find the core comparison node.
+        # The grammar produces: or_expr > and_expr > compare_expr > add_expr > ...
+        # A simple comparison like "x == y" is still wrapped in or_expr/and_expr
+        # with a single child at each level. Only flag as compound if there are
+        # actually multiple children at the or_expr or and_expr level.
+        def _unwrap_to_compare(tree):
+            """Unwrap single-child precedence wrappers. Return (core_tree, is_compound)."""
+            node = tree
+            while node.data in {"or_expr", "and_expr"}:
+                from lark import Tree
+                child_trees = [c for c in node.children if isinstance(c, Tree)]
+                if len(child_trees) > 1:
+                    return node, True  # genuinely compound
+                if len(child_trees) == 1:
+                    node = child_trees[0]
+                else:
+                    break
+            return node, False
+
+        unwrapped = []
+        has_compound = False
+        for tree in parse_results:
+            core, compound = _unwrap_to_compare(tree)
+            if compound:
+                has_compound = True
+                break
+            unwrapped.append(core)
+
         if has_compound:
             issues.append(_make_issue(
                 issue=(
@@ -640,23 +688,40 @@ def _check_guard_completeness(
             ))
             continue
 
-        # Extract (variable, op, value) from simple_compare trees
-        # Only analyze if all guards are simple_compare
-        if not all(t.data == "simple_compare" for t in parse_results):
+        # Extract (variable, op, value) from compare_expr trees
+        # Only analyze if all unwrapped trees are compare_expr
+        if not all(t.data == "compare_expr" for t in unwrapped):
             continue
 
         comparisons = []
-        for tree in parse_results:
-            left_tree = tree.children[0]
+        for tree in unwrapped:
+            # compare_expr children: add_expr OP add_expr
+            # Unwrap add_expr > mul_expr > atom to get the leaf node
+            def _unwrap_atom(node):
+                """Unwrap single-child arithmetic wrappers to reach the atom."""
+                from lark import Tree
+                while isinstance(node, Tree) and node.data in {"add_expr", "mul_expr"}:
+                    child_trees = [c for c in node.children if isinstance(c, Tree)]
+                    if len(child_trees) == 1 and len(node.children) == 1:
+                        node = child_trees[0]
+                    else:
+                        break
+                return node
+
+            left_tree = _unwrap_atom(tree.children[0])
             op_token = str(tree.children[1])
-            right_tree = tree.children[2]
+            right_tree = _unwrap_atom(tree.children[2])
 
-            # Left side should be a name (variable)
-            if left_tree.data != "name":
+            # Left side should be a name or dotted_name (variable)
+            if left_tree.data == "name":
+                var_name = str(left_tree.children[0])
+            elif left_tree.data == "dotted_name":
+                # e.g. rcvd_evt.floor_num — use the param name (second part)
+                var_name = str(left_tree.children[1])
+            else:
                 continue
-            var_name = str(left_tree.children[0])
 
-            # Right side should be a number or name (enum value)
+            # Right side should be a number, name (enum value), or dotted_name
             comparisons.append((var_name, op_token, right_tree))
 
         if not comparisons:
@@ -974,15 +1039,18 @@ def validate_class(
         assoc_names = {a.name for a in cd.associations}
         loc_cd = f"{domain}::class-diagram.yaml"
 
-        if cls_def.specializes is not None and cls_def.specializes not in assoc_names:
+        partition_names = {
+            part.name for c in cd.classes if c.partitions for part in c.partitions
+        }
+        if cls_def.specializes is not None and cls_def.specializes not in assoc_names and cls_def.specializes not in partition_names:
             issues.append(_make_issue(
-                issue=f"Class '{cls_def.name}' specializes R-number '{cls_def.specializes}' which is not in associations",
+                issue=f"Class '{cls_def.name}' specializes R-number '{cls_def.specializes}' which is not in associations or partitions",
                 location=f"{loc_cd}::classes.{cls_def.name}.specializes",
                 value=cls_def.specializes,
-                fix=f"Add association '{cls_def.specializes}' or correct the specializes field",
+                fix=f"Add association or partition '{cls_def.specializes}' or correct the specializes field",
             ))
         for attr in cls_def.attributes:
-            if not _is_valid_type(attr.type, domain_types):
+            if not _is_valid_type(attr.type, domain_types, class_names):
                 issues.append(_make_issue(
                     issue=f"Attribute '{cls_def.name}.{attr.name}' has unknown type '{attr.type}'",
                     location=f"{loc_cd}::classes.{cls_def.name}.attributes.{attr.name}.type",
@@ -990,14 +1058,14 @@ def validate_class(
                     fix=f"Add type '{attr.type}' to types.yaml or use a primitive type",
                 ))
         for method in cls_def.methods:
-            if method.return_type is not None and not _is_valid_type(method.return_type, domain_types):
+            if method.return_type is not None and not _is_valid_type(method.return_type, domain_types, class_names):
                 issues.append(_make_issue(
                     issue=f"Method '{cls_def.name}.{method.name}' return type '{method.return_type}' is unknown",
                     location=f"{loc_cd}::classes.{cls_def.name}.methods.{method.name}.return",
                     value=method.return_type,
                 ))
             for param in method.params:
-                if not _is_valid_type(param.type, domain_types):
+                if not _is_valid_type(param.type, domain_types, class_names):
                     issues.append(_make_issue(
                         issue=f"Method '{cls_def.name}.{method.name}' param '{param.name}' has unknown type '{param.type}'",
                         location=f"{loc_cd}::classes.{cls_def.name}.methods.{method.name}.params.{param.name}.type",

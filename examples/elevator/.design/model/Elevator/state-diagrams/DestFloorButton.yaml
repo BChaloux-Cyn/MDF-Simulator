@@ -5,9 +5,6 @@ initial_state: Idle
 events:
   - name: Activated
   - name: Floor_served
-    params:
-      - name: floor_num
-        type: FloorNumber
 states:
   - name: Idle
   - name: Lit
@@ -18,8 +15,3 @@ transitions:
   - from: Lit
     to: Idle
     event: Floor_served
-    guard: "rcvd_evt.floor_num == self.r5_floor_num"
-  - from: Lit
-    to: Lit
-    event: Floor_served
-    guard: "rcvd_evt.floor_num != self.r5_floor_num"

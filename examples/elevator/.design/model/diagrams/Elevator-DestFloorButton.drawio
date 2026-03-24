@@ -19,17 +19,8 @@
         <mxCell id="elevator:trans:DestFloorButton:Idle:Activated:0" value="elevator:trans:DestFloorButton:Idle:Activated:0&lt;br&gt;Activated()" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=1.0;exitY=0.3333;exitDx=0;exitDy=0;entryX=0.0;entryY=0.3333;entryDx=0;entryDy=0;" edge="1" source="elevator:state:DestFloorButton:Idle" target="elevator:state:DestFloorButton:Lit" parent="1">
           <mxGeometry x="-0.3" y="-15" relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="elevator:trans:DestFloorButton:Lit:Floor_served:1" value="elevator:trans:DestFloorButton:Lit:Floor_served:1&lt;br&gt;Floor_served(floor_num: FloorNumber)&lt;br&gt;[rcvd_evt.floor_num == self.r5_floor_num]" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=0.0;exitY=0.6667;exitDx=0;exitDy=0;entryX=1.0;entryY=0.6667;entryDx=0;entryDy=0;" edge="1" source="elevator:state:DestFloorButton:Lit" target="elevator:state:DestFloorButton:Idle" parent="1">
+        <mxCell id="elevator:trans:DestFloorButton:Lit:Floor_served:1" value="elevator:trans:DestFloorButton:Lit:Floor_served:1&lt;br&gt;Floor_served()" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=0.0;exitY=0.6667;exitDx=0;exitDy=0;entryX=1.0;entryY=0.6667;entryDx=0;entryDy=0;" edge="1" source="elevator:state:DestFloorButton:Lit" target="elevator:state:DestFloorButton:Idle" parent="1">
           <mxGeometry x="-0.3" y="-15" relative="1" as="geometry"/>
-        </mxCell>
-        <mxCell id="elevator:trans:DestFloorButton:Lit:Floor_served:2" value="elevator:trans:DestFloorButton:Lit:Floor_served:2&lt;br&gt;Floor_served(floor_num: FloorNumber)&lt;br&gt;[rcvd_evt.floor_num != self.r5_floor_num]" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=1.0;exitY=0.2;exitDx=0;exitDy=0;entryX=0.8;entryY=0.0;entryDx=0;entryDy=0;" edge="1" source="elevator:state:DestFloorButton:Lit" target="elevator:state:DestFloorButton:Lit" parent="1">
-          <mxGeometry x="-0.3" y="-15" relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="903" y="130"/>
-              <mxPoint x="903" y="80"/>
-              <mxPoint x="831" y="80"/>
-            </Array>
-          </mxGeometry>
         </mxCell>
       </root>
     </mxGraphModel>

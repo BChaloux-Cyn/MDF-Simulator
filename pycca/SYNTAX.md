@@ -152,8 +152,25 @@ Optional<Class> <var> = select any related by self->R<N>;
 ```
 
 **Chained traversal (multi-hop):**
+
+Chains are allowed when every **intermediate** hop has multiplicity
+`1` (direct traversal). The **final** hop determines whether `select`
+is needed. If any intermediate hop is not `1`, the chain must stop
+and the result must be handled before continuing.
+
 ```
-Optional<Class> <var> = select any related by self->R<N1>->R<N2>;
+// All hops are multiplicity 1 — pure direct traversal
+Elevator elev = self->R8->R2->R1;
+
+// Intermediate hops are multiplicity 1, final hop is 0..* — needs select many
+Set<ShaftFloor> stops = select many related by self->R1->R2;
+
+// R3 from Floor is 0..* — cannot chain further, must stop and handle
+Optional<ShaftFloor> sf = select any related by floor->R3;
+if (sf.has_value()) {
+    ShaftFloor shaft_floor = sf.value();
+    Elevator elev = shaft_floor->R2->R1;
+}
 ```
 
 **Traversal with where:**
@@ -162,20 +179,50 @@ Set<DestFloorButton> lit_btns = select many related by self->R4
     where [] |btn: DestFloorButton| -> Boolean { return btn.curr_state == Lit; };
 ```
 
-**Return types:**
-- `select many` returns `Set<T>`
-- `select any` returns `Optional<T>`
+**Return types — determined by relationship multiplicity:**
+
+Traversals (`->R`) are only allowed on concrete instance variables
+(`T`). They are **never** allowed on `Set<T>` or `Optional<T>`.
+
+The traversal form depends on the target multiplicity:
+
+| Target multiplicity | Syntax | Returns |
+|---------------------|--------|---------|
+| `1`                 | `var->R` (direct) | `T` |
+| `0..1`              | `select any related by var->R` | `Optional<T>` |
+| `0..*`              | `select any related by var->R` | `Optional<T>` |
+| `0..*`              | `select many related by var->R` | `Set<T>` |
+| `1..*`              | `select any related by var->R` | `T` |
+| `1..*`              | `select many related by var->R` | `Set<T>` |
+| `2`, `2..*`         | `select many related by var->R` | `Set<T>` |
+
+- **Multiplicity `1`:** No `select` needed — the traversal resolves
+  directly to a concrete instance. Use `var->R` as an expression.
+- **`select any`** is not allowed for `2` or `2..*` (picking an
+  arbitrary instance from a guaranteed collection is meaningless).
+- **`select many`** is not allowed for `1` or `0..1` (at most one
+  instance, use direct traversal or `select any`).
+- The declared variable type must match the resolution type.
 
 Examples:
 ```
-Set<ShaftFloor> stops = select many related by self->R2;
-Optional<Door> door = select any related by self->R1;
+// R1: Elevator 1---1 Shaft — multiplicity 1, direct traversal
+Shaft shaft = self->R1;
 
-UniqueID my_id = self.elevator_id;
-Set<DestFloorButton> lit_btns = select many from instances of DestFloorButton
-    where [my_id] |btn: DestFloorButton| -> Boolean {
-        return btn.r4_elevator_id == my_id and btn.curr_state == Lit;
-    };
+// R5: DestFloorButton 1---1 Floor — multiplicity 1, direct
+Floor floor = btn->R5;
+
+// Chained direct traversal — all intermediate hops are multiplicity 1
+Elevator elev = sf->R2->R1;
+
+// R2: Shaft 1---0..* ShaftFloor — needs select
+Set<ShaftFloor> stops = select many related by shaft->R2;
+
+// R4: Elevator 1---2..* DestFloorButton — select any NOT allowed
+Set<DestFloorButton> btns = select many related by self->R4;
+
+// R3: Floor 1---0..* ShaftFloor — select any returns Optional
+Optional<ShaftFloor> sf = select any related by floor->R3;
 ```
 
 ---

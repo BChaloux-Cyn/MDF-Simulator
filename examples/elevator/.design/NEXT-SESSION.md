@@ -9,47 +9,24 @@ machines, and 4 realized domain bridges (Building, Transport, Clock).
 The elevator state machine has 6 states: Idle, Departing, Moving,
 Floor_Updating, Arriving, Exchanging.
 
-## Immediate Next Step: Arriving Entry Action
+## Immediate Next Step: FloorCallButton ↔ Elevator Relationship
 
-The Arriving state's entry action needs to implement the direction
-priority logic. When the elevator arrives at a floor:
+FloorCallButtons currently exist (R6 ties them to Floor) but have no
+relationship to Elevator. The Arriving entry action's priorities 3–4
+need to find lit FloorCallButtons accessible to this elevator. This
+requires a traversal path from Elevator to FloorCallButton.
 
-1. **Same direction:** Any lit DestFloorButtons (curr_state == Lit) in
-   the direction the elevator was traveling? Keep going that way.
-2. **Opposite direction:** Any lit DestFloorButtons the other way? Reverse.
-3. **Current floor's FloorCallButton:** Earliest `pressed_at` among lit
-   FloorCallButtons at this floor. Service it.
-4. **Any FloorCallButton:** Most recent `pressed_at` among all lit
-   FloorCallButtons accessible to this elevator (via R1→R2→R3→R6
-   traversal). Go there.
-5. **Nothing:** No work → Idle after door closes.
+Design the association(s) that connect FloorCallButton to the elevator's
+reachable floors, then wire the Arriving entry action to use them for
+priorities 3–5.
 
-This requires traversing R4 to scan DestFloorButtons and R1→R2→R3→R6
-to scan accessible FloorCallButtons.
-
-## Classes Still To Add
-
-### Doors (CarDoor, ShaftDoor)
+## Still To Add: Doors (CarDoor, ShaftDoor)
 - **Door** (active, supertype) — state machine: Closed, Opening, Open, Closing
 - **CarDoor** (entity) — specializes Door, belongs to Elevator
 - **ShaftDoor** (entity) — specializes Door, belongs to ShaftFloor
 - When elevator enters Arriving → open CarDoor + ShaftDoor at current floor
 - When doors close → generate `Door_closed` to Elevator
 - Doors must synchronize: both open together, both close together
-
-### Dispatcher
-- Singleton active class, manages FloorCall queue
-- Relationships: Dispatcher → Elevator (1:0..*), Dispatcher → FloorCall queue
-- FloorCall queue uses linked-list pattern (head pointer + self-referential next)
-- Assigns elevators to floor calls based on proximity/direction
-- Generates `Floor_assigned` to the selected Elevator
-- Generates `Call_served` to the FloorCallButton when satisfied
-
-### Indicators (ElevatorIndicator, FloorIndicator)
-- **ElevatorIndicator** — inside the car, shows current floor
-- **FloorIndicator** — on a floor, shows direction of approaching elevator
-- Updated in Departing and Arriving entry actions
-- May need relationships to Elevator and Floor
 
 ## Open Issues Filed
 

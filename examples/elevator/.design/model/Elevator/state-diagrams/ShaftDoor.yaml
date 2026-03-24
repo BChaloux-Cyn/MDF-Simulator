@@ -1,0 +1,39 @@
+schema_version: "1.0.0"
+domain: Elevator
+class: ShaftDoor
+initial_state: Closed
+events:
+  - name: Open_cmd
+  - name: Done_opening
+  - name: Close_cmd
+  - name: Done_closing
+states:
+  - name: Closed
+    entry_action: |
+      // Notify the paired CarDoor that we are closed
+      CarDoor cd = self->R8->R2->R1->R7;
+      generate Closed_now to cd;
+  - name: Opening
+    entry_action: |
+      generate Done_opening to self delay duration_s(10);
+  - name: Open
+    entry_action: |
+      // Notify the paired CarDoor that we are open
+      CarDoor cd = self->R8->R2->R1->R7;
+      generate Opened to cd;
+  - name: Closing
+    entry_action: |
+      generate Done_closing to self delay duration_s(10);
+transitions:
+  - from: Closed
+    to: Opening
+    event: Open_cmd
+  - from: Opening
+    to: Open
+    event: Done_opening
+  - from: Open
+    to: Closing
+    event: Close_cmd
+  - from: Closing
+    to: Closed
+    event: Done_closing

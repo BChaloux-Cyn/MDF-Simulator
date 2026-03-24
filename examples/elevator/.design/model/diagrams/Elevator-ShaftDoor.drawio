@@ -1,0 +1,40 @@
+<mxfile compressed="false" version="24.0.0">
+  <diagram name="Page-1" id="page1">
+    <mxGraphModel dx="1034" dy="546" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2021" pageHeight="1270" math="0" shadow="0" background="#FFFFFF">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="elevator:state:ShaftDoor:__initial__" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#000000;strokeColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="120" y="585" width="20" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="elevator:state:ShaftDoor:Closed" value="Closed&lt;br&gt;──────────────────&lt;br&gt;&lt;i&gt;entry /&lt;/i&gt;&lt;br&gt;// Notify the paired CarDoor that we are closed&lt;br&gt;CarDoor cd = self-&amp;gt;R8-&amp;gt;R2-&amp;gt;R1-&amp;gt;R7;&lt;br&gt;generate Closed_now to cd;&lt;br&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="552" y="585" width="338" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="elevator:state:ShaftDoor:Opening" value="Opening&lt;br&gt;──────────────────&lt;br&gt;&lt;i&gt;entry /&lt;/i&gt;&lt;br&gt;generate Done_opening to self delay duration_s(10);&lt;br&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="1069" y="1050" width="367" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="elevator:state:ShaftDoor:Open" value="Open&lt;br&gt;──────────────────&lt;br&gt;&lt;i&gt;entry /&lt;/i&gt;&lt;br&gt;// Notify the paired CarDoor that we are open&lt;br&gt;CarDoor cd = self-&amp;gt;R8-&amp;gt;R2-&amp;gt;R1-&amp;gt;R7;&lt;br&gt;generate Opened to cd;&lt;br&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="1577" y="585" width="324" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="elevator:state:ShaftDoor:Closing" value="Closing&lt;br&gt;──────────────────&lt;br&gt;&lt;i&gt;entry /&lt;/i&gt;&lt;br&gt;generate Done_closing to self delay duration_s(10);&lt;br&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="1069" y="120" width="367" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="elevator:trans:ShaftDoor:__initial__:__init__:0" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="elevator:state:ShaftDoor:__initial__" target="elevator:state:ShaftDoor:Closed" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="elevator:trans:ShaftDoor:Closed:Open_cmd:0" value="elevator:trans:ShaftDoor:Closed:Open_cmd:0&lt;br&gt;Open_cmd()" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=1.0;exitY=0.6667;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="elevator:state:ShaftDoor:Closed" target="elevator:state:ShaftDoor:Opening" parent="1">
+          <mxGeometry x="-0.3" y="-15" relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="elevator:trans:ShaftDoor:Opening:Done_opening:1" value="elevator:trans:ShaftDoor:Opening:Done_opening:1&lt;br&gt;Done_opening()" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.6667;entryDx=0;entryDy=0;" edge="1" source="elevator:state:ShaftDoor:Opening" target="elevator:state:ShaftDoor:Open" parent="1">
+          <mxGeometry x="-0.3" y="-15" relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="elevator:trans:ShaftDoor:Open:Close_cmd:2" value="elevator:trans:ShaftDoor:Open:Close_cmd:2&lt;br&gt;Close_cmd()" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=0.0;exitY=0.3333;exitDx=0;exitDy=0;entryX=1.0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="elevator:state:ShaftDoor:Open" target="elevator:state:ShaftDoor:Closing" parent="1">
+          <mxGeometry x="-0.3" y="-15" relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="elevator:trans:ShaftDoor:Closing:Done_closing:3" value="elevator:trans:ShaftDoor:Closing:Done_closing:3&lt;br&gt;Done_closing()" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=0.0;exitY=0.5;exitDx=0;exitDy=0;entryX=1.0;entryY=0.3333;entryDx=0;entryDy=0;" edge="1" source="elevator:state:ShaftDoor:Closing" target="elevator:state:ShaftDoor:Closed" parent="1">
+          <mxGeometry x="-0.3" y="-15" relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
