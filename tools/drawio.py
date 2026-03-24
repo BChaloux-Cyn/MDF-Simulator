@@ -896,9 +896,13 @@ def _estimate_class_width(cls) -> int:
     # Attribute labels (strip HTML tags for width estimation)
     for a in cls.attributes:
         label = f"- {a.name}: {a.type}"
+        tags: list[str] = []
         if a.identifier:
-            tag = ", ".join(f"I{i}" for i in sorted(a.identifier))
-            label += f" {{{tag}}}"
+            tags.extend(f"I{i}" for i in sorted(a.identifier))
+        if a.referential:
+            tags.append(a.referential)
+        if tags:
+            label += f" {{{', '.join(tags)}}}"
         lines.append(label)
     # Method labels
     for m in cls.methods:
@@ -910,13 +914,18 @@ def _estimate_class_width(cls) -> int:
 
 
 def _attr_label(vis: str, scope: str, name: str, type_: str,
-                identifier: list[int] | None = None) -> str:
+                identifier: list[int] | None = None,
+                referential: str | None = None) -> str:
     """Format a UML attribute label. Class-scope names are HTML-underlined."""
     sym = _VIS.get(vis, "-")
     text = f"{name}: {_html_escape_type(type_)}"
+    tags: list[str] = []
     if identifier:
-        tag = ", ".join(f"I{i}" for i in sorted(identifier))
-        text += f" {{{tag}}}"
+        tags.extend(f"I{i}" for i in sorted(identifier))
+    if referential:
+        tags.append(referential)
+    if tags:
+        text += f" {{{', '.join(tags)}}}"
     if scope == "class":
         text = f"<u>{text}</u>"
     return f"{sym} {text}"
@@ -1140,7 +1149,7 @@ def _build_class_diagram_xml(
         # Attributes cell
         attrs_h = max(len(cls.attributes), 1) * ROW_H
         attr_text = "<br>".join(
-            _attr_label(a.visibility, a.scope, a.name, a.type, a.identifier)
+            _attr_label(a.visibility, a.scope, a.name, a.type, a.identifier, a.referential)
             for a in cls.attributes
         ) if cls.attributes else ""
         attrs_cell = etree.SubElement(

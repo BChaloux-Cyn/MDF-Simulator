@@ -1,11 +1,11 @@
 <mxfile compressed="false" version="24.0.0">
   <diagram name="Page-1" id="page1">
-    <mxGraphModel dx="1034" dy="546" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1732" pageHeight="1203" math="0" shadow="0" background="#FFFFFF">
+    <mxGraphModel dx="1034" dy="546" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1741" pageHeight="1209" math="0" shadow="0" background="#FFFFFF">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
         <mxCell id="elevator:class:Elevator" value="&lt;&lt;active&gt;&gt;&#10;Elevator" style="swimlane;fontStyle=1;horizontal=1;startSize=26;fillColor=#d5e8d4;strokeColor=#82b366;rounded=0;childLayout=stackLayout;stackFill=1;resizeParent=1;resizeParentMax=0;" vertex="1" parent="1">
-          <mxGeometry x="422" y="274" width="550" height="154" as="geometry"/>
+          <mxGeometry x="424" y="274" width="550" height="154" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:Elevator:attrs" value="- elevator_id: UniqueID {I1}&lt;br&gt;- current_floor: FloorNumber&lt;br&gt;- direction: Direction&lt;br&gt;- next_stop_floor: FloorNumber" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;html=1;overflow=fill;whiteSpace=wrap;rotatable=0;" vertex="1" parent="elevator:class:Elevator">
           <mxGeometry y="26" width="550" height="80" as="geometry"/>
@@ -17,7 +17,7 @@
           <mxGeometry y="114" width="550" height="40" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:Shaft" value="&lt;&lt;entity&gt;&gt;&#10;Shaft" style="swimlane;fontStyle=1;horizontal=1;startSize=26;fillColor=#dae8fc;strokeColor=#6c8ebf;rounded=0;childLayout=stackLayout;stackFill=1;resizeParent=1;resizeParentMax=0;" vertex="1" parent="1">
-          <mxGeometry x="595" y="526" width="220" height="74" as="geometry"/>
+          <mxGeometry x="598" y="529" width="220" height="74" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:Shaft:attrs" value="- shaft_id: UniqueID {I1}" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;html=1;overflow=fill;whiteSpace=wrap;rotatable=0;" vertex="1" parent="elevator:class:Shaft">
           <mxGeometry y="26" width="220" height="20" as="geometry"/>
@@ -29,7 +29,7 @@
           <mxGeometry y="54" width="220" height="20" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:Floor" value="&lt;&lt;entity&gt;&gt;&#10;Floor" style="swimlane;fontStyle=1;horizontal=1;startSize=26;fillColor=#dae8fc;strokeColor=#6c8ebf;rounded=0;childLayout=stackLayout;stackFill=1;resizeParent=1;resizeParentMax=0;" vertex="1" parent="1">
-          <mxGeometry x="1042" y="446" width="220" height="114" as="geometry"/>
+          <mxGeometry x="1049" y="448" width="220" height="114" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:Floor:attrs" value="- floor_num: FloorNumber {I1}&lt;br&gt;- is_top_floor: Boolean&lt;br&gt;- is_bottom_floor: Boolean" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;html=1;overflow=fill;whiteSpace=wrap;rotatable=0;" vertex="1" parent="elevator:class:Floor">
           <mxGeometry y="26" width="220" height="60" as="geometry"/>
@@ -41,31 +41,31 @@
           <mxGeometry y="94" width="220" height="20" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:ShaftFloor" value="&lt;&lt;entity&gt;&gt;&#10;ShaftFloor" style="swimlane;fontStyle=1;horizontal=1;startSize=26;fillColor=#dae8fc;strokeColor=#6c8ebf;rounded=0;childLayout=stackLayout;stackFill=1;resizeParent=1;resizeParentMax=0;" vertex="1" parent="1">
-          <mxGeometry x="837" y="766" width="220" height="114" as="geometry"/>
+          <mxGeometry x="842" y="770" width="232" height="114" as="geometry"/>
         </mxCell>
-        <mxCell id="elevator:class:ShaftFloor:attrs" value="- r2_shaft_id: UniqueID {I1}&lt;br&gt;- r3_floor_num: FloorNumber {I1}&lt;br&gt;- sensor_id: Integer" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;html=1;overflow=fill;whiteSpace=wrap;rotatable=0;" vertex="1" parent="elevator:class:ShaftFloor">
-          <mxGeometry y="26" width="220" height="60" as="geometry"/>
+        <mxCell id="elevator:class:ShaftFloor:attrs" value="- r2_shaft_id: UniqueID {I1, R2}&lt;br&gt;- r3_floor_num: FloorNumber {I1, R3}&lt;br&gt;- sensor_id: Integer" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;html=1;overflow=fill;whiteSpace=wrap;rotatable=0;" vertex="1" parent="elevator:class:ShaftFloor">
+          <mxGeometry y="26" width="232" height="60" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:sep:ShaftFloor" value="" style="line;strokeColor=inherit;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingBottom=-1;spacingLeft=3;spacingRight=3;rotatable=0;" vertex="1" parent="elevator:class:ShaftFloor">
-          <mxGeometry y="86" width="220" height="8" as="geometry"/>
+          <mxGeometry y="86" width="232" height="8" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:ShaftFloor:methods" value="" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;html=1;overflow=fill;whiteSpace=wrap;rotatable=0;" vertex="1" parent="elevator:class:ShaftFloor">
-          <mxGeometry y="94" width="220" height="20" as="geometry"/>
+          <mxGeometry y="94" width="232" height="20" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:DestFloorButton" value="&lt;&lt;active&gt;&gt;&#10;DestFloorButton" style="swimlane;fontStyle=1;horizontal=1;startSize=26;fillColor=#d5e8d4;strokeColor=#82b366;rounded=0;childLayout=stackLayout;stackFill=1;resizeParent=1;resizeParentMax=0;" vertex="1" parent="1">
-          <mxGeometry x="790" y="120" width="220" height="114" as="geometry"/>
+          <mxGeometry x="795" y="120" width="232" height="114" as="geometry"/>
         </mxCell>
-        <mxCell id="elevator:class:DestFloorButton:attrs" value="- r4_elevator_id: UniqueID {I1}&lt;br&gt;- r5_floor_num: FloorNumber {I1}&lt;br&gt;- pressed_at: Timestamp" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;html=1;overflow=fill;whiteSpace=wrap;rotatable=0;" vertex="1" parent="elevator:class:DestFloorButton">
-          <mxGeometry y="26" width="220" height="60" as="geometry"/>
+        <mxCell id="elevator:class:DestFloorButton:attrs" value="- r4_elevator_id: UniqueID {I1, R4}&lt;br&gt;- r5_floor_num: FloorNumber {I1, R5}&lt;br&gt;- pressed_at: Timestamp" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;html=1;overflow=fill;whiteSpace=wrap;rotatable=0;" vertex="1" parent="elevator:class:DestFloorButton">
+          <mxGeometry y="26" width="232" height="60" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:sep:DestFloorButton" value="" style="line;strokeColor=inherit;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingBottom=-1;spacingLeft=3;spacingRight=3;rotatable=0;" vertex="1" parent="elevator:class:DestFloorButton">
-          <mxGeometry y="86" width="220" height="8" as="geometry"/>
+          <mxGeometry y="86" width="232" height="8" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:DestFloorButton:methods" value="+ press()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;html=1;overflow=fill;whiteSpace=wrap;rotatable=0;" vertex="1" parent="elevator:class:DestFloorButton">
-          <mxGeometry y="94" width="220" height="20" as="geometry"/>
+          <mxGeometry y="94" width="232" height="20" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:FloorCallButton" value="&lt;&lt;active&gt;&gt;&#10;FloorCallButton" style="swimlane;fontStyle=1;horizontal=1;startSize=26;fillColor=#d5e8d4;strokeColor=#82b366;rounded=0;childLayout=stackLayout;stackFill=1;resizeParent=1;resizeParentMax=0;" vertex="1" parent="1">
-          <mxGeometry x="1392" y="421" width="220" height="114" as="geometry"/>
+          <mxGeometry x="1401" y="423" width="220" height="114" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:FloorCallButton:attrs" value="- button_id: UniqueID {I1}&lt;br&gt;- direction: CallDirection&lt;br&gt;- pressed_at: Timestamp" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;html=1;overflow=fill;whiteSpace=wrap;rotatable=0;" vertex="1" parent="elevator:class:FloorCallButton">
           <mxGeometry y="26" width="220" height="60" as="geometry"/>
@@ -77,7 +77,7 @@
           <mxGeometry y="94" width="220" height="20" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:Door" value="&lt;&lt;entity&gt;&gt;&#10;Door" style="swimlane;fontStyle=1;horizontal=1;startSize=26;fillColor=#dae8fc;strokeColor=#6c8ebf;rounded=0;childLayout=stackLayout;stackFill=1;resizeParent=1;resizeParentMax=0;" vertex="1" parent="1">
-          <mxGeometry x="183" y="870" width="220" height="74" as="geometry"/>
+          <mxGeometry x="183" y="875" width="220" height="74" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:Door:attrs" value="- door_id: UniqueID {I1}" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;html=1;overflow=fill;whiteSpace=wrap;rotatable=0;" vertex="1" parent="elevator:class:Door">
           <mxGeometry y="26" width="220" height="20" as="geometry"/>
@@ -89,7 +89,7 @@
           <mxGeometry y="54" width="220" height="20" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:CarDoor" value="&lt;&lt;active&gt;&gt;&#10;CarDoor" style="swimlane;fontStyle=1;horizontal=1;startSize=26;fillColor=#d5e8d4;strokeColor=#82b366;rounded=0;childLayout=stackLayout;stackFill=1;resizeParent=1;resizeParentMax=0;" vertex="1" parent="1">
-          <mxGeometry x="120" y="489" width="220" height="74" as="geometry"/>
+          <mxGeometry x="120" y="491" width="220" height="74" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:CarDoor:attrs" value="" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;html=1;overflow=fill;whiteSpace=wrap;rotatable=0;" vertex="1" parent="elevator:class:CarDoor">
           <mxGeometry y="26" width="220" height="20" as="geometry"/>
@@ -101,7 +101,7 @@
           <mxGeometry y="54" width="220" height="20" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:ShaftDoor" value="&lt;&lt;active&gt;&gt;&#10;ShaftDoor" style="swimlane;fontStyle=1;horizontal=1;startSize=26;fillColor=#d5e8d4;strokeColor=#82b366;rounded=0;childLayout=stackLayout;stackFill=1;resizeParent=1;resizeParentMax=0;" vertex="1" parent="1">
-          <mxGeometry x="544" y="1009" width="220" height="74" as="geometry"/>
+          <mxGeometry x="547" y="1015" width="220" height="74" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:class:ShaftDoor:attrs" value="" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;html=1;overflow=fill;whiteSpace=wrap;rotatable=0;" vertex="1" parent="elevator:class:ShaftDoor">
           <mxGeometry y="26" width="220" height="20" as="geometry"/>
@@ -157,19 +157,19 @@
         <mxCell id="elevator:assoc_mult:R3:tgt_phrase" value="is&#10;served by" style="edgeLabel;html=1;fillColor=none;strokeColor=none;labelBackgroundColor=none;resizable=0;points=[];align=left;verticalAlign=bottom;" vertex="1" connectable="0" parent="elevator:assoc:R3">
           <mxGeometry x="1.0" y="-5" relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="elevator:assoc:R4" value="R4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;startArrow=none;exitX=0.5;exitY=0.0;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="elevator:class:Elevator" target="elevator:class:DestFloorButton" parent="1">
+        <mxCell id="elevator:assoc:R4" value="R4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;startArrow=none;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=1.0;entryDx=0;entryDy=0;" edge="1" source="elevator:class:Elevator" target="elevator:class:DestFloorButton" parent="1">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="elevator:assoc_mult:R4:src_mult" value="1" style="edgeLabel;html=1;fillColor=none;strokeColor=none;labelBackgroundColor=none;resizable=0;points=[];align=left;verticalAlign=bottom;" vertex="1" connectable="0" parent="elevator:assoc:R4">
+        <mxCell id="elevator:assoc_mult:R4:src_mult" value="1" style="edgeLabel;html=1;fillColor=none;strokeColor=none;labelBackgroundColor=none;resizable=0;points=[];align=left;verticalAlign=top;" vertex="1" connectable="0" parent="elevator:assoc:R4">
           <mxGeometry x="-1.0" y="-5" relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="elevator:assoc_mult:R4:src_phrase" value="is&#10;inside" style="edgeLabel;html=1;fillColor=none;strokeColor=none;labelBackgroundColor=none;resizable=0;points=[];align=right;verticalAlign=bottom;" vertex="1" connectable="0" parent="elevator:assoc:R4">
+        <mxCell id="elevator:assoc_mult:R4:src_phrase" value="is&#10;inside" style="edgeLabel;html=1;fillColor=none;strokeColor=none;labelBackgroundColor=none;resizable=0;points=[];align=left;verticalAlign=bottom;" vertex="1" connectable="0" parent="elevator:assoc:R4">
           <mxGeometry x="-1.0" y="5" relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="elevator:assoc_mult:R4:tgt_mult" value="2..*" style="edgeLabel;html=1;fillColor=none;strokeColor=none;labelBackgroundColor=none;resizable=0;points=[];align=right;verticalAlign=top;" vertex="1" connectable="0" parent="elevator:assoc:R4">
+        <mxCell id="elevator:assoc_mult:R4:tgt_mult" value="2..*" style="edgeLabel;html=1;fillColor=none;strokeColor=none;labelBackgroundColor=none;resizable=0;points=[];align=left;verticalAlign=top;" vertex="1" connectable="0" parent="elevator:assoc:R4">
           <mxGeometry x="1.0" y="-5" relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="elevator:assoc_mult:R4:tgt_phrase" value="has destination&#10;buttons for" style="edgeLabel;html=1;fillColor=none;strokeColor=none;labelBackgroundColor=none;resizable=0;points=[];align=right;verticalAlign=bottom;" vertex="1" connectable="0" parent="elevator:assoc:R4">
+        <mxCell id="elevator:assoc_mult:R4:tgt_phrase" value="has destination&#10;buttons for" style="edgeLabel;html=1;fillColor=none;strokeColor=none;labelBackgroundColor=none;resizable=0;points=[];align=right;verticalAlign=top;" vertex="1" connectable="0" parent="elevator:assoc:R4">
           <mxGeometry x="1.0" y="5" relative="1" as="geometry"/>
         </mxCell>
         <mxCell id="elevator:assoc:R5" value="R5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;startArrow=none;exitX=0.5;exitY=0.0;exitDx=0;exitDy=0;entryX=1.0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="elevator:class:Floor" target="elevator:class:DestFloorButton" parent="1">
