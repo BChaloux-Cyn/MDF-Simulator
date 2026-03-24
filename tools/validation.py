@@ -1143,8 +1143,10 @@ def validate_model(report_missing: bool = True) -> list[dict]:
             issues.extend(_make_pydantic_issues(exc, "DOMAINS.yaml"))
             return issues
 
-        # Validate each domain
+        # Validate each domain (skip realized domains — they have no classes or state machines)
         for domain_entry in domains_file.domains:
+            if domain_entry.type == "realized":
+                continue
             domain = domain_entry.name
             domain_path = _resolve_domain_path(domain)
             if domain_path is None:
