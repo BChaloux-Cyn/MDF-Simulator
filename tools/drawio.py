@@ -1054,10 +1054,7 @@ def _drawio_to_canonical_state(drawio_path: Path) -> str | None:
     def _unescape_entry_action(raw: str) -> str:
         """Reverse HTML escaping used when building state labels."""
         result = raw.replace("<br>", "\n")
-        result = result.replace("&amp;", "&")
-        result = result.replace("&lt;", "<")
-        result = result.replace("&gt;", ">")
-        result = result.replace("&#x27;", "'")
+        result = html.unescape(result)
         return result
 
     states: list[CanonicalState] = []
