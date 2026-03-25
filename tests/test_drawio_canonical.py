@@ -425,3 +425,109 @@ def test_class_diagram_round_trip(tmp_path, monkeypatch):
         f"YAML side:\n{json.dumps(json.loads(yaml_canonical), indent=2)}\n"
         f"Draw.io side:\n{json.dumps(json.loads(drawio_canonical), indent=2)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# _content_matches_state integration tests
+# ---------------------------------------------------------------------------
+
+def _setup_state_domain(tmp_path, monkeypatch):
+    """Create a minimal domain with a state diagram and render it.
+
+    Returns (domain_name, drawio_path).
+    """
+    import importlib
+    import yaml as _yaml
+
+    domain_name = "Hydraulics"
+    domain_root = tmp_path / ".design" / "model" / domain_name
+    domain_root.mkdir(parents=True)
+    (domain_root / "state-diagrams").mkdir()
+
+    pump_sd = {
+        "schema_version": "1.0.0",
+        "domain": domain_name,
+        "class": "Pump",
+        "initial_state": "Off",
+        "states": [
+            {"name": "Off"},
+            {"name": "Running", "entry_action": "start_motor()"},
+        ],
+        "events": [
+            {"name": "TurnOn"},
+            {"name": "TurnOff"},
+        ],
+        "transitions": [
+            {"from": "Off", "to": "Running", "event": "TurnOn"},
+            {"from": "Running", "to": "Off", "event": "TurnOff"},
+        ],
+    }
+
+    (domain_root / "state-diagrams" / "Pump.yaml").write_text(
+        _yaml.dump(pump_sd, default_flow_style=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+
+    # Reload so MODULE_ROOT resolves relative to tmp_path
+    import tools.drawio as _drawio_mod
+    importlib.reload(_drawio_mod)
+
+    from tools.drawio import render_to_drawio_state
+    result = render_to_drawio_state(domain_name, "Pump", force=True)
+    assert result[0]["status"] == "written"
+
+    drawio_path = tmp_path / ".design" / "model" / "diagrams" / f"{domain_name}-Pump.drawio"
+    assert drawio_path.exists()
+    return (domain_name, drawio_path)
+
+
+def test_content_matches_state_skip_on_geometry_change(tmp_path, monkeypatch):
+    """Geometry-only change should still match (skip redraw)."""
+    domain, drawio_path = _setup_state_domain(tmp_path, monkeypatch)
+
+    # Modify geometry only: change an x coordinate
+    xml_text = drawio_path.read_text(encoding="utf-8")
+    assert 'x="120"' in xml_text or 'x=' in xml_text  # sanity check
+
+    # Replace one geometry x value with a different number
+    import re
+    modified = re.sub(r'x="(\d+)"', lambda m: f'x="{int(m.group(1)) + 200}"', xml_text, count=1)
+    assert modified != xml_text, "Geometry substitution should change the XML"
+    drawio_path.write_text(modified, encoding="utf-8")
+
+    from tools.drawio import _content_matches_state
+    from schema.yaml_schema import StateDiagramFile
+    import yaml as _yaml
+
+    sd_path = tmp_path / ".design" / "model" / "Hydraulics" / "state-diagrams" / "Pump.yaml"
+    raw = _yaml.safe_load(sd_path.read_text(encoding="utf-8"))
+    sd = StateDiagramFile.model_validate(raw)
+    domain_path = tmp_path / ".design" / "model" / "Hydraulics"
+
+    assert _content_matches_state(domain_path, domain, "Pump", sd) is True
+
+
+def test_content_matches_state_redraw_on_label_change(tmp_path, monkeypatch):
+    """Label change in drawio should trigger redraw."""
+    domain, drawio_path = _setup_state_domain(tmp_path, monkeypatch)
+
+    # Modify the entry action label on the "Running" state.
+    # The canonical parser extracts entry_action from the value attribute,
+    # so changing "start_motor()" to "stop_motor()" will be detected.
+    xml_text = drawio_path.read_text(encoding="utf-8")
+    modified = xml_text.replace("start_motor()", "stop_motor()", 1)
+    assert modified != xml_text, "Label substitution should change the XML"
+    drawio_path.write_text(modified, encoding="utf-8")
+
+    from tools.drawio import _content_matches_state
+    from schema.yaml_schema import StateDiagramFile
+    import yaml as _yaml
+
+    sd_path = tmp_path / ".design" / "model" / "Hydraulics" / "state-diagrams" / "Pump.yaml"
+    raw = _yaml.safe_load(sd_path.read_text(encoding="utf-8"))
+    sd = StateDiagramFile.model_validate(raw)
+    domain_path = tmp_path / ".design" / "model" / "Hydraulics"
+
+    assert _content_matches_state(domain_path, domain, "Pump", sd) is False

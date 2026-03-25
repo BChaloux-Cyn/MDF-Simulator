@@ -949,80 +949,28 @@ def _method_label(
     return f"{sym} {sig}"
 
 
-def _extract_drawio_ids(xml_path: Path) -> frozenset[str] | None:
-    """Parse an existing .drawio file and return the set of IDs containing ':'.
-
-    Returns None if the file does not exist or is malformed XML.
-    """
-    if not xml_path.exists():
-        return None
-    try:
-        tree = etree.parse(str(xml_path))
-        ids = frozenset(
-            el.get("id", "")
-            for el in tree.iter("mxCell")
-            if ":" in el.get("id", "")
-        )
-        return ids
-    except etree.XMLSyntaxError:
-        return None
-
-
-def _compute_expected_class_ids(domain: str, cd: ClassDiagramFile) -> frozenset[str]:
-    """Return frozenset of all cell IDs that _build_class_diagram_xml would generate."""
-    ids: set[str] = set()
-    for cls in cd.classes:
-        cid = class_id(domain, cls.name)
-        ids.add(cid)
-        ids.add(f"{cid}:attrs")
-        ids.add(separator_id(domain, cls.name))
-        ids.add(f"{cid}:methods")
-    for assoc in cd.associations:
-        ids.add(association_id(domain, assoc.name))
-        for suffix in ("src_mult", "src_phrase", "tgt_mult", "tgt_phrase"):
-            ids.add(association_label_id(domain, assoc.name, suffix))
-    return frozenset(ids)
-
-
-def _structure_matches_class(
+def _content_matches_class(
     domain_path: Path, domain: str, cd: ClassDiagramFile
 ) -> bool:
-    """Return True if existing class-diagram.drawio has the same element set."""
+    """Return True if existing drawio content matches YAML canonical JSON."""
     drawio_path = domain_path.parent / "diagrams" / f"{domain}-class-diagram.drawio"
-    existing = _extract_drawio_ids(drawio_path)
-    if existing is None:
+    yaml_canonical = _yaml_to_canonical_class(domain, cd)
+    drawio_canonical = _drawio_to_canonical_class(drawio_path)
+    if drawio_canonical is None:
         return False
-    expected = _compute_expected_class_ids(domain, cd)
-    return existing == expected
+    return yaml_canonical == drawio_canonical
 
 
-def _compute_expected_state_ids(
-    domain: str, sd: StateDiagramFile
-) -> frozenset[str]:
-    """Return frozenset of all cell IDs that _build_state_diagram_xml would generate."""
-    ids: set[str] = set()
-    # initial pseudostate
-    init_id = f"{domain.lower()}:state:{sd.class_name}:__initial__"
-    ids.add(init_id)
-    init_trans_id = f"{domain.lower()}:trans:{sd.class_name}:__initial__:__init__:0"
-    ids.add(init_trans_id)
-    for st in sd.states:
-        ids.add(state_id(domain, sd.class_name, st.name))
-    for idx, trans in enumerate(sd.transitions):
-        ids.add(transition_id(domain, sd.class_name, trans.from_state, trans.event, idx))
-    return frozenset(ids)
-
-
-def _structure_matches_state(
+def _content_matches_state(
     domain_path: Path, domain: str, class_name: str, sd: StateDiagramFile
 ) -> bool:
-    """Return True if existing state diagram .drawio has the same element set."""
+    """Return True if existing drawio content matches YAML canonical JSON."""
     drawio_path = domain_path.parent / "diagrams" / f"{domain}-{class_name}.drawio"
-    existing = _extract_drawio_ids(drawio_path)
-    if existing is None:
+    yaml_canonical = _yaml_to_canonical_state(domain, sd)
+    drawio_canonical = _drawio_to_canonical_state(drawio_path)
+    if drawio_canonical is None:
         return False
-    expected = _compute_expected_state_ids(domain, sd)
-    return existing == expected
+    return yaml_canonical == drawio_canonical
 
 
 def _yaml_to_canonical_state(domain: str, sd: StateDiagramFile) -> str:
@@ -2038,7 +1986,7 @@ def render_to_drawio_class(domain: str, *, force: bool = False) -> list[dict]:
     diagrams_dir.mkdir(parents=True, exist_ok=True)
     drawio_path = diagrams_dir / f"{domain}-class-diagram.drawio"
 
-    if not force and _structure_matches_class(domain_path, domain, cd):
+    if not force and _content_matches_class(domain_path, domain, cd):
         return [{"file": str(drawio_path), "status": "skipped"}]
 
     xml_bytes = _build_class_diagram_xml(domain, cd)
@@ -2082,7 +2030,7 @@ def render_to_drawio_state(domain: str, class_name: str, *, force: bool = False)
     drawio_dir.mkdir(parents=True, exist_ok=True)
     drawio_path = drawio_dir / f"{domain}-{class_name}.drawio"
 
-    if not force and _structure_matches_state(domain_path, domain, class_name, sd):
+    if not force and _content_matches_state(domain_path, domain, class_name, sd):
         return [{"file": str(drawio_path), "status": "skipped"}]
 
     xml_bytes = _build_state_diagram_xml(domain, sd)
