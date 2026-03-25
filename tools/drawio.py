@@ -844,9 +844,19 @@ def _optimize_edge_routing(
         edge_waypoints.append(wps)
 
     # ------------------------------------------------------------------
-    # Bidirectional pair separation — offset parallel edges so they
-    # don't visually overlap when Draw.io's orthogonal router collapses
-    # them into the same corridor.
+    # Bidirectional pair separation — nudge port fractions apart and
+    # add a midpoint waypoint so orthogonal edges run as parallel lines
+    # with visible separation, even when the two boxes are at different
+    # Y positions (requiring an L-bend).
+    #
+    # Strategy:
+    #   1. Shift the exit/entry port fractions apart (lateral separation
+    #      along the shared face) so anchors don't coincide.
+    #   2. Add one waypoint per edge at the midpoint X between the two
+    #      boxes, at the Y of that edge's exit anchor.  This forces the
+    #      orthogonal router to draw a horizontal segment from the exit
+    #      anchor to the midpoint, then a vertical segment to the entry
+    #      anchor — keeping the two horizontal runs at different Ys.
     # ------------------------------------------------------------------
     pair_map: dict[tuple[int, int], list[int]] = {}
     for idx, (src, tgt) in enumerate(edges):
@@ -855,38 +865,58 @@ def _optimize_edge_routing(
         key = (min(src, tgt), max(src, tgt))
         pair_map.setdefault(key, []).append(idx)
 
-    BIDIR_OFFSET = 30  # px perpendicular offset for each direction
+    BIDIR_PORT_GAP = 0.12  # fraction of side length between the two edges
+    BIDIR_SPREAD = 30      # px horizontal offset between vertical segments
 
     for key, idx_list in pair_map.items():
         if len(idx_list) < 2:
             continue
-        # For each pair of edges sharing the same two vertices, inject
-        # symmetric perpendicular waypoints at the midpoint.
+        n_edges_in_pair = len(idx_list)
+
+        # Step 1: nudge port fractions apart
         for rank, idx in enumerate(idx_list):
             src, tgt = edges[idx]
             pd = port_data[idx]
+            exit_x, exit_y = pd["exitX"], pd["exitY"]
+            entry_x, entry_y = pd["entryX"], pd["entryY"]
+
+            offset = (rank - (n_edges_in_pair - 1) / 2) * BIDIR_PORT_GAP
+
+            if exit_x <= 0.01 or exit_x >= 0.99:
+                pd["exitY"] = max(0.1, min(0.9, exit_y + offset))
+            else:
+                pd["exitX"] = max(0.1, min(0.9, exit_x + offset))
+
+            if entry_x <= 0.01 or entry_x >= 0.99:
+                pd["entryY"] = max(0.1, min(0.9, entry_y + offset))
+            else:
+                pd["entryX"] = max(0.1, min(0.9, entry_x + offset))
+
+        # Step 2: rebuild port suffixes and add midpoint waypoints
+        for rank, idx in enumerate(idx_list):
+            src, tgt = edges[idx]
+            pd = port_data[idx]
+
+            port_suffixes[idx] = (
+                f"exitX={round(pd['exitX'], 4)};exitY={round(pd['exitY'], 4)};"
+                f"exitDx=0;exitDy=0;"
+                f"entryX={round(pd['entryX'], 4)};entryY={round(pd['entryY'], 4)};"
+                f"entryDx=0;entryDy=0;"
+            )
+
             ax = positions[src][0] + pd["exitX"] * node_widths[src]
             ay = positions[src][1] + pd["exitY"] * node_heights[src]
             bx = positions[tgt][0] + pd["entryX"] * node_widths[tgt]
             by = positions[tgt][1] + pd["entryY"] * node_heights[tgt]
 
-            mx, my = (ax + bx) / 2, (ay + by) / 2
-            dx, dy = bx - ax, by - ay
-            length = math.hypot(dx, dy)
-            if length < 1e-6:
-                continue
-            # Unit perpendicular (rotated 90 degrees)
-            px, py = -dy / length, dx / length
-
-            # Alternate sides: even ranks go one way, odd ranks the other
-            sign = 1.0 if rank % 2 == 0 else -1.0
-            offset = BIDIR_OFFSET * (1 + rank // 2)
-            wp = (mx + sign * px * offset, my + sign * py * offset)
-            # Insert the offset waypoint at the midpoint of any existing
-            # box-avoidance waypoints rather than replacing them.
-            existing = edge_waypoints[idx]
-            mid = len(existing) // 2
-            edge_waypoints[idx] = existing[:mid] + [wp] + existing[mid:]
+            # Two waypoints: one at exit Y, one at entry Y, both at a
+            # turn X offset toward the target so the vertical segments
+            # don't cross the other edge's horizontal runs.
+            mid_x = (ax + bx) / 2
+            # Offset toward the target: positive if going right, negative if going left
+            direction = 1.0 if bx > ax else -1.0
+            turn_x = mid_x + direction * BIDIR_SPREAD / 2
+            edge_waypoints[idx] = [(turn_x, ay), (turn_x, by)]
 
     return port_suffixes, edge_waypoints
 

@@ -929,10 +929,10 @@ def test_optimize_routing_avoids_box_via_side_selection():
 
 @pytest.mark.skipif(_optimize_edge_routing is None, reason="tools.drawio not importable")
 def test_optimize_routing_separates_bidirectional_edges():
-    """Two edges between the same pair of nodes (opposite directions) get distinct waypoints."""
+    """Two edges between the same pair of nodes (opposite directions) get distinct port fractions."""
     #   A (0) -----> B (1)
     #   A (0) <----- B (1)
-    # Both on the same horizontal line, so the corridor is identical without separation.
+    # Both on the same horizontal line — without separation they'd overlap.
     positions = [(100.0, 200.0), (500.0, 200.0)]
     widths = [160, 160]
     heights = [50, 50]
@@ -940,26 +940,19 @@ def test_optimize_routing_separates_bidirectional_edges():
 
     suffixes, waypoints = _optimize_edge_routing(edges, positions, widths, heights, gap=10)
 
-    # Both edges should have waypoints (offset in opposite directions)
-    assert len(waypoints[0]) > 0, (
-        f"Forward edge A->B has no waypoints — will overlap with reverse edge"
-    )
-    assert len(waypoints[1]) > 0, (
-        f"Reverse edge B->A has no waypoints — will overlap with forward edge"
-    )
+    # Extract port fractions from suffixes
+    import re
+    def _get_ports(suffix):
+        return {k: float(v) for k, v in re.findall(r'(exit[XY]|entry[XY])=([0-9.]+)', suffix)}
 
-    # The waypoints should be on opposite sides of the direct line (different Y values
-    # since the nodes are on the same horizontal line)
-    fwd_y = waypoints[0][0][1]
-    rev_y = waypoints[1][0][1]
-    assert fwd_y != rev_y, (
-        f"Bidirectional waypoints have same Y ({fwd_y}) — edges will still overlap"
-    )
-    # They should be on opposite sides of the midpoint between the two anchors
-    # (don't hardcode the midpoint — it depends on which sides the optimizer picks)
-    mid_y = (fwd_y + rev_y) / 2
-    assert (fwd_y < mid_y) != (rev_y < mid_y), (
-        f"Waypoints not on opposite sides: fwd_y={fwd_y}, rev_y={rev_y}"
+    fwd_ports = _get_ports(suffixes[0])
+    rev_ports = _get_ports(suffixes[1])
+
+    # The two edges should have different exit Y fractions on their shared sides,
+    # so they render as parallel lines with visible separation.
+    assert fwd_ports["exitY"] != pytest.approx(rev_ports["entryY"], abs=0.01), (
+        f"Forward exitY={fwd_ports['exitY']} matches reverse entryY={rev_ports['entryY']} "
+        f"— edges will overlap"
     )
 
 
