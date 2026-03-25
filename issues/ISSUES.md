@@ -53,4 +53,3 @@ When you identify a bug, modeling error, schema gap, or missing test:
 | [ELV-001](elevator-001-subtype-relvar-inheritance.md) | Subtype inherits supertype referential attributes | Schema / engine | Open |
 | [DRAWIO-001](drawio-001-association-edge-routing-overlap.md) | Association edges may route through other class boxes | drawio renderer | Open |
 | [DRAWIO-002](drawio-002-domain-diagram-missing.md) | No domain diagram renderer (DOMAINS.yaml → drawio) | drawio renderer | Open |
-| [DRAWIO-003](drawio-003-render-overwrites-layout.md) | Render overwrites user layout changes on state diagrams | drawio renderer | Open |
