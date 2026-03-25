@@ -74,3 +74,33 @@ def test_statement_if():
     # Grammar extended in 04.1-04 to use brace syntax (if (expr) { stmts })
     # Old semicolon-style "if x > 0; ... end if;" is no longer supported.
     STATEMENT_PARSER.parse("if (x > 0) { self.y = 1; }")
+
+
+def test_direct_traversal_single_hop():
+    from pycca.grammar import STATEMENT_PARSER
+    tree = STATEMENT_PARSER.parse("Shaft shaft = self->R1;")
+    assert tree is not None
+
+
+def test_direct_traversal_multi_hop():
+    from pycca.grammar import STATEMENT_PARSER
+    tree = STATEMENT_PARSER.parse("CarDoor cd = self->R8->R2->R1->R7;")
+    assert tree is not None
+
+
+def test_direct_traversal_from_variable():
+    from pycca.grammar import STATEMENT_PARSER
+    tree = STATEMENT_PARSER.parse("Floor floor = btn->R5;")
+    assert tree is not None
+
+
+def test_direct_traversal_does_not_break_arithmetic():
+    from pycca.grammar import STATEMENT_PARSER
+    tree = STATEMENT_PARSER.parse("Integer x = a - b;")
+    assert tree is not None
+
+
+def test_direct_traversal_does_not_break_comparison():
+    from pycca.grammar import STATEMENT_PARSER
+    tree = STATEMENT_PARSER.parse("Boolean ok = a > b;")
+    assert tree is not None

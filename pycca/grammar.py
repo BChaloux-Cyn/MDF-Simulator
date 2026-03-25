@@ -187,10 +187,11 @@ PYCCA_GRAMMAR = r"""
                 | access_chain "." NAME "(" arglist? ")"        -> chained_method_call
                 | access_chain "." NAME                         -> chained_attr_access
 
-    // atom: dotted_name must appear before plain name to ensure longer match
+    // atom: traversal_chain and dotted_name must appear before plain name to ensure longer match
     atom: NUMBER -> number
         | ESCAPED_STRING -> string
         | access_chain
+        | traversal_chain -> direct_traversal
         | NAME "." NAME -> dotted_name
         | NAME "(" arglist? ")" -> func_call
         | NAME -> name
