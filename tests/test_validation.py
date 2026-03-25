@@ -992,3 +992,133 @@ bridges: []
     result = validation.validate_domain("Hydraulics")
     id_issues = [i for i in result if "no identifier 1" in i["issue"].lower()]
     assert id_issues == [], f"Compound identifier should be valid, got: {id_issues}"
+
+
+# ---------------------------------------------------------------------------
+# Type validation: built-in types, generics, class names
+# ---------------------------------------------------------------------------
+
+
+def test_builtin_types_accepted(tmp_path, monkeypatch):
+    """Timestamp and Duration are valid attribute types without declaring them in types.yaml."""
+    monkeypatch.chdir(tmp_path)
+    class_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: Sensor
+    stereotype: entity
+    attributes:
+      - name: sensor_id
+        type: UniqueID
+        identifier: 1
+      - name: last_read
+        type: Timestamp
+      - name: interval
+        type: Duration
+associations: []
+bridges: []
+"""
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(class_yaml)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    type_issues = [i for i in result if "unknown type" in i["issue"].lower()]
+    assert type_issues == [], f"Timestamp/Duration should be valid, got: {type_issues}"
+
+
+def test_generic_type_with_valid_class(tmp_path, monkeypatch):
+    """Set<ClassName> is valid when ClassName exists in the domain."""
+    monkeypatch.chdir(tmp_path)
+    class_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: Pump
+    stereotype: active
+    attributes:
+      - name: pump_id
+        type: UniqueID
+        identifier: 1
+    methods:
+      - name: get_valves
+        visibility: public
+        scope: instance
+        return: Set<Valve>
+  - name: Valve
+    stereotype: entity
+    attributes:
+      - name: valve_id
+        type: UniqueID
+        identifier: 1
+associations: []
+bridges: []
+"""
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(class_yaml)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    type_issues = [i for i in result if "unknown type" in i["issue"].lower()]
+    assert type_issues == [], f"Set<Valve> should be valid, got: {type_issues}"
+
+
+def test_generic_type_with_invalid_class(tmp_path, monkeypatch):
+    """Set<NonexistentClass> is an error."""
+    monkeypatch.chdir(tmp_path)
+    class_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: Pump
+    stereotype: active
+    attributes:
+      - name: pump_id
+        type: UniqueID
+        identifier: 1
+    methods:
+      - name: get_stuff
+        visibility: public
+        scope: instance
+        return: Set<NonexistentClass>
+associations: []
+bridges: []
+"""
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(class_yaml)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    type_issues = [i for i in result if "is unknown" in i["issue"].lower() and "NonexistentClass" in i["issue"]]
+    assert len(type_issues) >= 1, f"Set<NonexistentClass> should be invalid, got: {result}"
+
+
+def test_nested_generic_optional_of_class(tmp_path, monkeypatch):
+    """Optional<ClassName> is valid when ClassName exists."""
+    monkeypatch.chdir(tmp_path)
+    class_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: Pump
+    stereotype: active
+    attributes:
+      - name: pump_id
+        type: UniqueID
+        identifier: 1
+    methods:
+      - name: find_valve
+        visibility: public
+        scope: instance
+        return: Optional<Pump>
+associations: []
+bridges: []
+"""
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(class_yaml)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    type_issues = [i for i in result if "unknown type" in i["issue"].lower()]
+    assert type_issues == [], f"Optional<Pump> should be valid, got: {type_issues}"
