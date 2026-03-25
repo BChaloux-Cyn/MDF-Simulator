@@ -1,0 +1,70 @@
+<mxfile host="65bd71144e" compressed="false">
+    <diagram name="Page-1" id="page1">
+        <mxGraphModel dx="962" dy="488" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2056" pageHeight="1541" background="#FFFFFF" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="elevator:state:Elevator:__initial__" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#000000;strokeColor=#000000;" parent="1" vertex="1">
+                    <mxGeometry x="1757" y="120" width="20" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="elevator:state:Elevator:Idle" value="Idle&lt;br&gt;──────────────────&lt;br&gt;&lt;i&gt;entry /&lt;/i&gt;&lt;br&gt;self.direction = Stopped;&lt;br&gt;self.next_stop_floor = 0;&lt;br&gt;select any req from instances of Request where request_id == self.r14_request_id;&lt;br&gt;if (req != empty) {&lt;br&gt;  generate Request_assigned(target_floor: req.destination_floor) to self;&lt;br&gt;} else {&lt;br&gt;  select any disp from instances of Dispatcher;&lt;br&gt;  generate Elevator_available(queue_length: 0) to disp;&lt;br&gt;}" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Courier New;" parent="1" vertex="1">
+                    <mxGeometry x="1353" y="513" width="583" height="240" as="geometry"/>
+                </mxCell>
+                <mxCell id="elevator:state:Elevator:Moving_Up" value="Moving_Up&lt;br&gt;──────────────────&lt;br&gt;&lt;i&gt;entry /&lt;/i&gt;&lt;br&gt;self.direction = Up;&lt;br&gt;select any shaft related by self-&amp;gt;R11;&lt;br&gt;generate Move_up to shaft;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Courier New;" parent="1" vertex="1">
+                    <mxGeometry x="839" y="745" width="273" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="elevator:state:Elevator:Moving_Down" value="Moving_Down&lt;br&gt;──────────────────&lt;br&gt;&lt;i&gt;entry /&lt;/i&gt;&lt;br&gt;self.direction = Down;&lt;br&gt;select any shaft related by self-&amp;gt;R11;&lt;br&gt;generate Move_down to shaft;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Courier New;" parent="1" vertex="1">
+                    <mxGeometry x="1191" y="1301" width="273" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="elevator:state:Elevator:Stopping" value="Stopping&lt;br&gt;──────────────────&lt;br&gt;&lt;i&gt;entry /&lt;/i&gt;&lt;br&gt;self.direction = Stopped;&lt;br&gt;select any shaft related by self-&amp;gt;R11;&lt;br&gt;generate Stop to shaft;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Courier New;" parent="1" vertex="1">
+                    <mxGeometry x="619" y="1237" width="273" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="elevator:state:Elevator:At_Floor" value="At_Floor&lt;br&gt;──────────────────&lt;br&gt;&lt;i&gt;entry /&lt;/i&gt;&lt;br&gt;select any next_req from instances of Request where request_id == self.r14_request_id;&lt;br&gt;if (next_req != empty) {&lt;br&gt;  if (next_req.destination_floor &amp;gt; self.current_floor) { self.next_direction = Up; }&lt;br&gt;  if (next_req.destination_floor &amp;lt; self.current_floor) { self.next_direction = Down; }&lt;br&gt;} else {&lt;br&gt;  select any fc from instances of FloorCall where floor_num == self.current_floor;&lt;br&gt;  if (fc != empty) { self.next_direction = fc.direction; }&lt;br&gt;  else { self.next_direction = Stopped; }&lt;br&gt;}&lt;br&gt;select any floor_inst from instances of Floor where floor_num == self.current_floor;&lt;br&gt;select any indicator related by self-&amp;gt;R10;&lt;br&gt;generate Direction_set(direction: self.next_direction) to indicator;&lt;br&gt;generate Elevator_arrived to floor_inst;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Courier New;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="474" width="619" height="340" as="geometry"/>
+                </mxCell>
+                <mxCell id="elevator:trans:Elevator:__initial__:__init__:0" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=0.5;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;" parent="1" source="elevator:state:Elevator:__initial__" target="elevator:state:Elevator:Idle" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="elevator:trans:Elevator:Idle:Request_assigned:0" value="elevator:trans:Elevator:Idle:Request_assigned:0&lt;br&gt;Request_assigned(target_floor: FloorNumber)&lt;br&gt;[rcvd_evt.target_floor &gt; self.current_floor]" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=0.0;exitY=0.8;exitDx=0;exitDy=0;entryX=1.0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="elevator:state:Elevator:Idle" target="elevator:state:Elevator:Moving_Up" edge="1">
+                    <mxGeometry x="-0.3" y="-15" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="elevator:trans:Elevator:Idle:Request_assigned:1" value="elevator:trans:Elevator:Idle:Request_assigned:1&lt;br&gt;Request_assigned(target_floor: FloorNumber)&lt;br&gt;[rcvd_evt.target_floor &lt; self.current_floor]" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=0.5;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;" parent="1" source="elevator:state:Elevator:Idle" target="elevator:state:Elevator:Moving_Down" edge="1">
+                    <mxGeometry x="-0.3" y="-15" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="elevator:trans:Elevator:Moving_Up:Floor_reached:3" value="elevator:trans:Elevator:Moving_Up:Floor_reached:3&lt;br&gt;Floor_reached(current_floor: FloorNumber)&lt;br&gt;[rcvd_evt.current_floor == self.next_stop_floor]" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=0.5;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;" parent="1" source="elevator:state:Elevator:Moving_Up" target="elevator:state:Elevator:Stopping" edge="1">
+                    <mxGeometry x="-0.3" y="-15" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="elevator:trans:Elevator:Moving_Up:Floor_reached:4" value="elevator:trans:Elevator:Moving_Up:Floor_reached:4&lt;br&gt;Floor_reached(current_floor: FloorNumber)&lt;br&gt;[rcvd_evt.current_floor != self.next_stop_floor]" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=0.2;exitY=0.0;exitDx=0;exitDy=0;entryX=0.0;entryY=0.2;entryDx=0;entryDy=0;" parent="1" source="elevator:state:Elevator:Moving_Up" target="elevator:state:Elevator:Moving_Up" edge="1">
+                    <mxGeometry x="-0.3" y="-15" relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="893" y="705"/>
+                            <mxPoint x="799" y="705"/>
+                            <mxPoint x="799" y="769"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="elevator:trans:Elevator:Moving_Down:Floor_reached:5" value="elevator:trans:Elevator:Moving_Down:Floor_reached:5&lt;br&gt;Floor_reached(current_floor: FloorNumber)&lt;br&gt;[rcvd_evt.current_floor == self.next_stop_floor]" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=0.0;exitY=0.5;exitDx=0;exitDy=0;entryX=1.0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="elevator:state:Elevator:Moving_Down" target="elevator:state:Elevator:Stopping" edge="1">
+                    <mxGeometry x="-0.3" y="-15" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="elevator:trans:Elevator:Moving_Down:Floor_reached:6" value="elevator:trans:Elevator:Moving_Down:Floor_reached:6&lt;br&gt;Floor_reached(current_floor: FloorNumber)&lt;br&gt;[rcvd_evt.current_floor != self.next_stop_floor]" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=1.0;exitY=0.8;exitDx=0;exitDy=0;entryX=0.8;entryY=1.0;entryDx=0;entryDy=0;" parent="1" source="elevator:state:Elevator:Moving_Down" target="elevator:state:Elevator:Moving_Down" edge="1">
+                    <mxGeometry x="-0.3" y="-15" relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1504" y="1397"/>
+                            <mxPoint x="1504" y="1461"/>
+                            <mxPoint x="1410" y="1461"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="elevator:trans:Elevator:Stopping:Stopped:7" value="elevator:trans:Elevator:Stopping:Stopped:7&lt;br&gt;Stopped()" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=0.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=1.0;entryDx=0;entryDy=0;" parent="1" source="elevator:state:Elevator:Stopping" target="elevator:state:Elevator:At_Floor" edge="1">
+                    <mxGeometry x="-0.3" y="-15" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="elevator:trans:Elevator:At_Floor:Door_closed:8" value="elevator:trans:Elevator:At_Floor:Door_closed:8&lt;br&gt;Door_closed()" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.4;entryDx=0;entryDy=0;" parent="1" source="elevator:state:Elevator:At_Floor" target="elevator:state:Elevator:Idle" edge="1">
+                    <mxGeometry x="-0.3" y="-15" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="elevator:trans:Elevator:At_Floor:Service_complete:9" value="elevator:trans:Elevator:At_Floor:Service_complete:9&lt;br&gt;Service_complete()" style="edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;exitX=1.0;exitY=0.75;exitDx=0;exitDy=0;entryX=0.0;entryY=0.6;entryDx=0;entryDy=0;" parent="1" source="elevator:state:Elevator:At_Floor" target="elevator:state:Elevator:Idle" edge="1">
+                    <mxGeometry x="-0.3" y="-15" relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

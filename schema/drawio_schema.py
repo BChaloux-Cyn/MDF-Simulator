@@ -38,7 +38,8 @@ __all__ = [
 STYLE_CLASS = (
     "swimlane;fontStyle=1;horizontal=1;"
     "startSize=26;fillColor=#dae8fc;strokeColor=#6c8ebf;rounded=0;"
-    "childLayout=stackLayout;stackFill=1;resizeParent=1;resizeParentMax=0;"
+    "childLayout=stackLayout;horizontalStack=0;stackFill=1;stackSpacing=0;"
+    "resizeParent=1;resizeParentMax=0;"
 )
 
 STYLE_ATTRIBUTE = (
@@ -68,7 +69,8 @@ STYLE_GENERALIZATION = (
 STYLE_CLASS_ACTIVE = (
     "swimlane;fontStyle=1;horizontal=1;"
     "startSize=26;fillColor=#d5e8d4;strokeColor=#82b366;rounded=0;"
-    "childLayout=stackLayout;stackFill=1;resizeParent=1;resizeParentMax=0;"
+    "childLayout=stackLayout;horizontalStack=0;stackFill=1;stackSpacing=0;"
+    "resizeParent=1;resizeParentMax=0;"
 )
 
 STYLE_STATE = "rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Courier New;"
