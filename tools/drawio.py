@@ -843,6 +843,51 @@ def _optimize_edge_routing(
         wps, _ = _route_path(ax, ay, bx, by, src, tgt, positions, node_widths, node_heights, gap)
         edge_waypoints.append(wps)
 
+    # ------------------------------------------------------------------
+    # Bidirectional pair separation — offset parallel edges so they
+    # don't visually overlap when Draw.io's orthogonal router collapses
+    # them into the same corridor.
+    # ------------------------------------------------------------------
+    pair_map: dict[tuple[int, int], list[int]] = {}
+    for idx, (src, tgt) in enumerate(edges):
+        if src == tgt:
+            continue
+        key = (min(src, tgt), max(src, tgt))
+        pair_map.setdefault(key, []).append(idx)
+
+    BIDIR_OFFSET = 30  # px perpendicular offset for each direction
+
+    for key, idx_list in pair_map.items():
+        if len(idx_list) < 2:
+            continue
+        # For each pair of edges sharing the same two vertices, inject
+        # symmetric perpendicular waypoints at the midpoint.
+        for rank, idx in enumerate(idx_list):
+            src, tgt = edges[idx]
+            pd = port_data[idx]
+            ax = positions[src][0] + pd["exitX"] * node_widths[src]
+            ay = positions[src][1] + pd["exitY"] * node_heights[src]
+            bx = positions[tgt][0] + pd["entryX"] * node_widths[tgt]
+            by = positions[tgt][1] + pd["entryY"] * node_heights[tgt]
+
+            mx, my = (ax + bx) / 2, (ay + by) / 2
+            dx, dy = bx - ax, by - ay
+            length = math.hypot(dx, dy)
+            if length < 1e-6:
+                continue
+            # Unit perpendicular (rotated 90 degrees)
+            px, py = -dy / length, dx / length
+
+            # Alternate sides: even ranks go one way, odd ranks the other
+            sign = 1.0 if rank % 2 == 0 else -1.0
+            offset = BIDIR_OFFSET * (1 + rank // 2)
+            wp = (mx + sign * px * offset, my + sign * py * offset)
+            # Insert the offset waypoint at the midpoint of any existing
+            # box-avoidance waypoints rather than replacing them.
+            existing = edge_waypoints[idx]
+            mid = len(existing) // 2
+            edge_waypoints[idx] = existing[:mid] + [wp] + existing[mid:]
+
     return port_suffixes, edge_waypoints
 
 
