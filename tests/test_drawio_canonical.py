@@ -531,3 +531,82 @@ def test_content_matches_state_redraw_on_label_change(tmp_path, monkeypatch):
     domain_path = tmp_path / ".design" / "model" / "Hydraulics"
 
     assert _content_matches_state(domain_path, domain, "Pump", sd) is False
+
+
+# ---------------------------------------------------------------------------
+# Fixture-based comparison tests (persistent drawio files)
+# ---------------------------------------------------------------------------
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture
+def state_yaml():
+    """Load the elevator state diagram fixture YAML."""
+    import yaml as _yaml
+    from schema.yaml_schema import StateDiagramFile
+    raw = _yaml.safe_load((FIXTURES / "elevator-state-diagram.yaml").read_text(encoding="utf-8"))
+    return StateDiagramFile.model_validate(raw)
+
+
+@pytest.fixture
+def class_yaml():
+    """Load the elevator class diagram fixture YAML."""
+    import yaml as _yaml
+    from schema.yaml_schema import ClassDiagramFile
+    raw = _yaml.safe_load((FIXTURES / "elevator-class-diagram.yaml").read_text(encoding="utf-8"))
+    return ClassDiagramFile.model_validate(raw)
+
+
+def test_fixture_state_baseline_matches_yaml(state_yaml):
+    """Baseline drawio (freshly rendered) matches YAML canonical JSON."""
+    from tools.drawio import _yaml_to_canonical_state, _drawio_to_canonical_state
+    yaml_json = _yaml_to_canonical_state("Elevator", state_yaml)
+    drawio_json = _drawio_to_canonical_state(FIXTURES / "elevator-state-baseline.drawio")
+    assert drawio_json is not None
+    assert yaml_json == drawio_json
+
+
+def test_fixture_state_geometry_changed_still_matches(state_yaml):
+    """Geometry-only changes (moved boxes, resized states) still match YAML."""
+    from tools.drawio import _yaml_to_canonical_state, _drawio_to_canonical_state
+    yaml_json = _yaml_to_canonical_state("Elevator", state_yaml)
+    drawio_json = _drawio_to_canonical_state(FIXTURES / "elevator-state-geometry-changed.drawio")
+    assert drawio_json is not None
+    assert yaml_json == drawio_json
+
+
+def test_fixture_state_structure_changed_does_not_match(state_yaml):
+    """Structural content changes (labels, states) do NOT match YAML."""
+    from tools.drawio import _yaml_to_canonical_state, _drawio_to_canonical_state
+    yaml_json = _yaml_to_canonical_state("Elevator", state_yaml)
+    drawio_json = _drawio_to_canonical_state(FIXTURES / "elevator-state-structure-changed.drawio")
+    assert drawio_json is not None
+    assert yaml_json != drawio_json
+
+
+def test_fixture_class_baseline_matches_yaml(class_yaml):
+    """Baseline drawio (freshly rendered) matches YAML canonical JSON."""
+    from tools.drawio import _yaml_to_canonical_class, _drawio_to_canonical_class
+    yaml_json = _yaml_to_canonical_class("Elevator", class_yaml)
+    drawio_json = _drawio_to_canonical_class(FIXTURES / "elevator-class-baseline.drawio")
+    assert drawio_json is not None
+    assert yaml_json == drawio_json
+
+
+def test_fixture_class_geometry_changed_still_matches(class_yaml):
+    """Geometry-only changes (moved boxes, resized classes) still match YAML."""
+    from tools.drawio import _yaml_to_canonical_class, _drawio_to_canonical_class
+    yaml_json = _yaml_to_canonical_class("Elevator", class_yaml)
+    drawio_json = _drawio_to_canonical_class(FIXTURES / "elevator-class-geometry-changed.drawio")
+    assert drawio_json is not None
+    assert yaml_json == drawio_json
+
+
+def test_fixture_class_structure_changed_does_not_match(class_yaml):
+    """Structural content changes (labels, classes) do NOT match YAML."""
+    from tools.drawio import _yaml_to_canonical_class, _drawio_to_canonical_class
+    yaml_json = _yaml_to_canonical_class("Elevator", class_yaml)
+    drawio_json = _drawio_to_canonical_class(FIXTURES / "elevator-class-structure-changed.drawio")
+    assert drawio_json is not None
+    assert yaml_json != drawio_json
