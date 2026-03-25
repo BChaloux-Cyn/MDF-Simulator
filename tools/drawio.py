@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import html
 import io
+import json
 import math
 import re
 from itertools import combinations
@@ -1022,6 +1023,462 @@ def _structure_matches_state(
         return False
     expected = _compute_expected_state_ids(domain, sd)
     return existing == expected
+
+
+def _yaml_to_canonical_state(domain: str, sd: StateDiagramFile) -> str:
+    """Build canonical JSON string from a StateDiagramFile.
+
+    Used to compare YAML source against existing drawio content.
+    """
+    from schema.drawio_canonical import CanonicalState, CanonicalTransition, CanonicalStateDiagram
+
+    # Build event_map for param lookup
+    event_map = {e.name: e for e in sd.events} if sd.events else {}
+
+    # States sorted by name
+    canonical_states = sorted(
+        [CanonicalState(name=st.name, entry_action=st.entry_action) for st in sd.states],
+        key=lambda s: s.name,
+    )
+
+    # Transitions sorted by (from_state, event, to)
+    canonical_transitions = []
+    for trans in sd.transitions:
+        event_def = event_map.get(trans.event)
+        if event_def and event_def.params:
+            params = ", ".join(f"{p.name}: {p.type}" for p in event_def.params)
+        else:
+            params = None
+        canonical_transitions.append(
+            CanonicalTransition(
+                from_state=trans.from_state,
+                to=trans.to,
+                event=trans.event,
+                params=params,
+                guard=trans.guard,
+            )
+        )
+    canonical_transitions.sort(key=lambda t: (t.from_state, t.event, t.to))
+
+    model = CanonicalStateDiagram(
+        type="state_diagram",
+        domain=domain,
+        class_name=sd.class_name,
+        initial_state=sd.initial_state,
+        states=canonical_states,
+        transitions=canonical_transitions,
+    )
+    return json.dumps(model.model_dump(by_alias=True), sort_keys=True)
+
+
+def _drawio_to_canonical_state(drawio_path: Path) -> str | None:
+    """Parse an existing state diagram drawio XML into canonical JSON.
+
+    Returns None if the file is missing or malformed.
+    """
+    from schema.drawio_canonical import CanonicalState, CanonicalTransition, CanonicalStateDiagram
+
+    if not drawio_path.exists():
+        return None
+    try:
+        tree = etree.parse(str(drawio_path))
+    except etree.XMLSyntaxError:
+        return None
+
+    cells = list(tree.iter("mxCell"))
+
+    # Determine domain and class_name from first state ID found
+    domain: str | None = None
+    class_name: str | None = None
+    for cell in cells:
+        cid = cell.get("id", "")
+        # Pattern: lowerdomain:state:ClassName:StateName
+        parts = cid.split(":")
+        if len(parts) == 4 and parts[1] == "state" and parts[3] != "__initial__":
+            domain = parts[0].title()
+            class_name = parts[2]
+            break
+
+    if domain is None or class_name is None:
+        return None
+
+    # --- States ---
+    def _unescape_entry_action(raw: str) -> str:
+        """Reverse HTML escaping used when building state labels."""
+        result = raw.replace("<br>", "\n")
+        result = result.replace("&amp;", "&")
+        result = result.replace("&lt;", "<")
+        result = result.replace("&gt;", ">")
+        result = result.replace("&#x27;", "'")
+        return result
+
+    states: list[CanonicalState] = []
+    for cell in cells:
+        cid = cell.get("id", "")
+        parts = cid.split(":")
+        if len(parts) != 4 or parts[1] != "state":
+            continue
+        state_name = parts[3]
+        if state_name == "__initial__":
+            continue
+        value = cell.get("value", "")
+        entry_action: str | None = None
+        marker = "<i>entry /</i><br>"
+        if marker in value:
+            after_marker = value.split(marker, 1)[1]
+            entry_action = _unescape_entry_action(after_marker)
+        states.append(CanonicalState(name=state_name, entry_action=entry_action))
+    states.sort(key=lambda s: s.name)
+
+    # --- Initial state ---
+    initial_state: str | None = None
+    for cell in cells:
+        cid = cell.get("id", "")
+        parts = cid.split(":")
+        # Initial transition: lowerdomain:trans:ClassName:__initial__:__init__:0
+        if (
+            len(parts) == 6
+            and parts[1] == "trans"
+            and parts[3] == "__initial__"
+            and parts[4] == "__init__"
+        ):
+            target_id = cell.get("target", "")
+            target_parts = target_id.split(":")
+            if len(target_parts) == 4 and target_parts[1] == "state":
+                initial_state = target_parts[3]
+            break
+
+    if initial_state is None:
+        return None
+
+    # --- Transitions ---
+    transitions: list[CanonicalTransition] = []
+    for cell in cells:
+        cid = cell.get("id", "")
+        parts = cid.split(":")
+        # Transition IDs: lowerdomain:trans:ClassName:FromState:Event:idx
+        if len(parts) != 6 or parts[1] != "trans":
+            continue
+        if parts[3] == "__initial__":
+            continue
+
+        from_state_name = parts[3]
+        value = cell.get("value", "")
+
+        # Label format: {trans_id}<br>{event_line}[<br>[{guard}]]
+        label_parts = value.split("<br>", 2)
+        if len(label_parts) < 2:
+            continue
+        # label_parts[0] is the trans_id — skip it
+        event_line = label_parts[1]
+        guard_segment = label_parts[2] if len(label_parts) > 2 else ""
+
+        # Parse event name and params from event_line: EventName(param: Type, ...)
+        m = re.match(r"^(\w+)\(([^)]*)\)$", event_line)
+        if not m:
+            continue
+        event_name = m.group(1)
+        param_str = m.group(2).strip()
+        params: str | None = param_str if param_str else None
+
+        # Parse guard from [guard_text]
+        guard: str | None = None
+        gm = re.match(r"^\[(.+)\]$", guard_segment.strip())
+        if gm:
+            guard = gm.group(1)
+
+        # Get to_state from target cell ID
+        target_id = cell.get("target", "")
+        target_parts = target_id.split(":")
+        if len(target_parts) != 4 or target_parts[1] != "state":
+            continue
+        to_state_name = target_parts[3]
+
+        transitions.append(
+            CanonicalTransition(
+                from_state=from_state_name,
+                to=to_state_name,
+                event=event_name,
+                params=params,
+                guard=guard,
+            )
+        )
+    transitions.sort(key=lambda t: (t.from_state, t.event, t.to))
+
+    model = CanonicalStateDiagram(
+        type="state_diagram",
+        domain=domain,
+        class_name=class_name,
+        initial_state=initial_state,
+        states=states,
+        transitions=transitions,
+    )
+    return json.dumps(model.model_dump(by_alias=True), sort_keys=True)
+
+
+def _yaml_to_canonical_class(domain: str, cd: ClassDiagramFile) -> str:
+    """Build canonical JSON string from a ClassDiagramFile.
+
+    Used to compare YAML source against existing drawio content.
+    """
+    from schema.drawio_canonical import (
+        CanonicalClassEntry,
+        CanonicalAssociation,
+        CanonicalGeneralization,
+        CanonicalClassDiagram,
+    )
+
+    # Build gen_map: rname -> {supertype, subtypes} from partitions on supertype classes
+    gen_map: dict[str, dict] = {}
+    for cls in cd.classes:
+        if cls.partitions:
+            for p in cls.partitions:
+                gen_map[p.name] = {"supertype": cls.name, "subtypes": sorted(p.subtypes)}
+
+    # Classes sorted by name
+    canonical_classes = []
+    for cls in sorted(cd.classes, key=lambda c: c.name):
+        attrs = [
+            _attr_label(a.visibility, a.scope, a.name, a.type, a.identifier, a.referential)
+            for a in cls.attributes
+        ]
+        methods = [
+            _method_label(m.visibility, m.scope, m.name, m.params, m.return_type)
+            for m in cls.methods
+        ]
+        canonical_classes.append(
+            CanonicalClassEntry(
+                name=cls.name,
+                stereotype=cls.stereotype,
+                specializes=cls.specializes,
+                attributes=attrs,
+                methods=methods,
+            )
+        )
+
+    # Associations: skip any that are generalizations
+    canonical_assocs = []
+    for assoc in sorted(cd.associations, key=lambda a: a.name):
+        if assoc.name in gen_map:
+            continue
+        canonical_assocs.append(
+            CanonicalAssociation(
+                name=assoc.name,
+                point_1=assoc.point_1,
+                point_2=assoc.point_2,
+                mult_1_2=assoc.mult_1_to_2,
+                mult_2_1=assoc.mult_2_to_1,
+                phrase_1_2=_wrap_squarest(assoc.phrase_1_to_2),
+                phrase_2_1=_wrap_squarest(assoc.phrase_2_to_1),
+            )
+        )
+
+    # Generalizations from gen_map
+    canonical_gens = [
+        CanonicalGeneralization(
+            name=rname,
+            supertype=info["supertype"],
+            subtypes=info["subtypes"],  # already sorted above
+        )
+        for rname, info in sorted(gen_map.items())
+    ]
+
+    model = CanonicalClassDiagram(
+        type="class_diagram",
+        domain=domain.lower(),
+        classes=canonical_classes,
+        associations=canonical_assocs,
+        generalizations=canonical_gens,
+    )
+    return json.dumps(model.model_dump(by_alias=True), sort_keys=True)
+
+
+def _drawio_to_canonical_class(drawio_path: Path) -> str | None:
+    """Parse an existing class diagram drawio XML into canonical JSON.
+
+    Returns None if the file is missing or malformed.
+    """
+    from schema.drawio_canonical import (
+        CanonicalClassEntry,
+        CanonicalAssociation,
+        CanonicalGeneralization,
+        CanonicalClassDiagram,
+    )
+
+    if not drawio_path.exists():
+        return None
+    try:
+        tree = etree.parse(str(drawio_path))
+    except etree.XMLSyntaxError:
+        return None
+
+    # Build a flat dict of id -> element for all mxCell elements
+    cells: dict[str, "etree._Element"] = {}
+    for el in tree.iter("mxCell"):
+        cid = el.get("id", "")
+        if cid:
+            cells[cid] = el
+
+    # --- Recover domain from first class ID found ---
+    # IDs always store domain in lowercase; canonical form uses lowercase domain.
+    domain: str | None = None
+    for cid in cells:
+        parts = cid.split(":")
+        if len(parts) == 3 and parts[1] == "class":
+            domain = parts[0]  # already lowercase
+            break
+    if domain is None:
+        return None
+
+    # --- Classes ---
+    # Gather class cells: pattern domain:class:ClassName (exactly 3 parts)
+    # Build specializes map from generalization edges (endArrow=block;endFill=0)
+    # A generalization edge has source=subtype class, target=supertype class
+    # ID pattern: domain:assoc:Rname:subtype  (4 parts)
+    specializes_map: dict[str, str] = {}  # class_name -> R-number (from gen edges)
+    for cid, el in cells.items():
+        parts = cid.split(":")
+        if len(parts) == 4 and parts[1] == "assoc":
+            style = el.get("style", "")
+            if "endArrow=block;endFill=0" in style:
+                rname = parts[2]
+                src_id = el.get("source", "")
+                src_parts = src_id.split(":")
+                if len(src_parts) == 3 and src_parts[1] == "class":
+                    subtype_name = src_parts[2]
+                    specializes_map[subtype_name] = rname
+
+    canonical_classes = []
+    for cid, el in cells.items():
+        parts = cid.split(":")
+        if len(parts) != 3 or parts[1] != "class":
+            continue
+        class_name = parts[2]
+
+        # Swimlane value: "<<stereotype>>\nClassName"
+        value = el.get("value", "")
+        stereotype = ""
+        m = re.match(r"<<(.+?)>>", value)
+        if m:
+            stereotype = m.group(1)
+
+        # Find :attrs and :methods child cells
+        attrs_cell = cells.get(f"{cid}:attrs")
+        methods_cell = cells.get(f"{cid}:methods")
+
+        attrs: list[str] = []
+        if attrs_cell is not None:
+            raw = attrs_cell.get("value", "")
+            if raw:
+                attrs = raw.split("<br>")
+
+        methods: list[str] = []
+        if methods_cell is not None:
+            raw = methods_cell.get("value", "")
+            if raw:
+                methods = raw.split("<br>")
+
+        specializes = specializes_map.get(class_name)
+
+        canonical_classes.append(
+            CanonicalClassEntry(
+                name=class_name,
+                stereotype=stereotype,
+                specializes=specializes,
+                attributes=attrs,
+                methods=methods,
+            )
+        )
+    canonical_classes.sort(key=lambda c: c.name)
+
+    # --- Associations ---
+    # Edge cells with ID pattern: domain:assoc:Rname (3 parts — no colon after Rname)
+    canonical_assocs: list[CanonicalAssociation] = []
+    for cid, el in cells.items():
+        parts = cid.split(":")
+        if len(parts) != 3 or parts[1] != "assoc":
+            continue
+        rname = parts[2]
+
+        # Find label child cells (parent == cid)
+        src_mult = ""
+        tgt_mult = ""
+        src_phrase = ""
+        tgt_phrase = ""
+        for child_id, child_el in cells.items():
+            if child_el.get("parent") != cid:
+                continue
+            if child_id.endswith(":src_mult"):
+                src_mult = child_el.get("value", "")
+            elif child_id.endswith(":tgt_mult"):
+                tgt_mult = child_el.get("value", "")
+            elif child_id.endswith(":src_phrase"):
+                src_phrase = child_el.get("value", "")
+            elif child_id.endswith(":tgt_phrase"):
+                tgt_phrase = child_el.get("value", "")
+
+        # Recover point_1 and point_2 from source/target class IDs
+        src_class_id = el.get("source", "")
+        tgt_class_id = el.get("target", "")
+        src_parts = src_class_id.split(":")
+        tgt_parts = tgt_class_id.split(":")
+        point_1 = src_parts[2] if len(src_parts) == 3 and src_parts[1] == "class" else ""
+        point_2 = tgt_parts[2] if len(tgt_parts) == 3 and tgt_parts[1] == "class" else ""
+
+        # In the XML: src_mult label holds mult_2_to_1 (rendered near source/point_1 end)
+        #             tgt_mult label holds mult_1_to_2 (rendered near target/point_2 end)
+        # The canonical model uses mult_1_2 (point_1→point_2) and mult_2_1 (point_2→point_1)
+        # src_phrase = phrase_2_to_1 (wrapping may have been applied by _wrap_squarest)
+        # tgt_phrase = phrase_1_to_2 (wrapping may have been applied by _wrap_squarest)
+        canonical_assocs.append(
+            CanonicalAssociation(
+                name=rname,
+                point_1=point_1,
+                point_2=point_2,
+                mult_1_2=tgt_mult,
+                mult_2_1=src_mult,
+                phrase_1_2=tgt_phrase,
+                phrase_2_1=src_phrase,
+            )
+        )
+    canonical_assocs.sort(key=lambda a: a.name)
+
+    # --- Generalizations ---
+    # Group generalization edges by Rname: domain:assoc:Rname:subtype (4 parts)
+    gen_groups: dict[str, dict] = {}  # rname -> {supertype, subtypes}
+    for cid, el in cells.items():
+        parts = cid.split(":")
+        if len(parts) != 4 or parts[1] != "assoc":
+            continue
+        style = el.get("style", "")
+        if "endArrow=block;endFill=0" not in style:
+            continue
+        rname = parts[2]
+        subtype_name = parts[3]
+        tgt_class_id = el.get("target", "")
+        tgt_parts = tgt_class_id.split(":")
+        supertype = tgt_parts[2] if len(tgt_parts) == 3 and tgt_parts[1] == "class" else ""
+        if rname not in gen_groups:
+            gen_groups[rname] = {"supertype": supertype, "subtypes": []}
+        gen_groups[rname]["subtypes"].append(subtype_name)
+
+    canonical_gens = [
+        CanonicalGeneralization(
+            name=rname,
+            supertype=info["supertype"],
+            subtypes=sorted(info["subtypes"]),
+        )
+        for rname, info in sorted(gen_groups.items())
+    ]
+
+    model = CanonicalClassDiagram(
+        type="class_diagram",
+        domain=domain,
+        classes=canonical_classes,
+        associations=canonical_assocs,
+        generalizations=canonical_gens,
+    )
+    return json.dumps(model.model_dump(by_alias=True), sort_keys=True)
 
 
 def _build_class_diagram_xml(
