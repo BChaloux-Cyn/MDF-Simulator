@@ -18,9 +18,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: MCP Server + model_io** - Scaffold the library package and implement the three foundational CRUD tools (completed 2026-03-06)
 - [x] **Phase 3: Validation Tool** - Implement validate_model with graph reachability, structural checks, and pycca pre-parser (completed 2026-03-09)
 - [x] **Phase 4: Draw.io Tools** - Implement render_to_drawio, validate_drawio, and sync_from_drawio against the locked canonical schema (completed 2026-03-11)
-- [ ] **Phase 5: Simulation Engine** - Build pycca interpreter, object instance registry, three-queue event scheduler, micro-step generator, and MCP tool wrappers (simulate_domain + simulate_class)
+- [ ] **Phase 5: Simulation Engine** (umbrella — compiler approach, not interpreter; see 05-CONTEXT.md)
+  - [ ] **Phase 5.1: Runtime Framework** - Instance registry, relationship link store, three-queue scheduler, ctx runtime, micro-step stream, bridge mocks, simulation clock
+  - [ ] **Phase 5.2: Model Compiler** - Lark Transformer (action bodies + guards → Python), type system mapping, transition table generation, opaque zip bundle packaging
+  - [ ] **Phase 5.3: Simulation Runner + Verification** - Bundle loader, scenario input, elevator model end-to-end verification, MCP tool wrappers (simulate_domain + simulate_class)
+  - [ ] **Phase 5.4: GDB Command Language + CLI** - Command set definition, state inspection, step/continue/reset, clock control, attach to running simulation
+  - [ ] **Phase 5.5: Breakpoint Injection** - Action-line breakpoints, property watchpoints, event breakpoints, hook injection into generated code templates
 - [ ] **Phase 6: CLI Test Harness** - YAML test script schema, engine runner, mid-sequence and final-state assertion evaluation, mdf-sim-test entry point
-- [ ] **Phase 7: GUI Debugger** - Dear PyGui desktop app with domain/class canvas, instance registry, queue inspector, log panel, action-line breakpoints, property watchpoints, and event injector
+- [ ] **Phase 7: GUI Debugger** - Dear PyGui desktop app with domain/class canvas, instance registry, queue inspector, log panel (consumes GDB commands from 5.4)
 - [ ] **Phase 8: Test Suite** - Build pytest suite covering all tools, engine unit tests, and round-trip integration test
 
 ## Phase Details
@@ -71,10 +76,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Schema change (initial_state on StateDiagramFile), install networkx + lark, update existing fixtures
-- [ ] 03-02-PLAN.md — Pycca grammar module: PYCCA_GRAMMAR, GUARD_PARSER, STATEMENT_PARSER (pycca/grammar.py)
-- [ ] 03-03-PLAN.md — Core validator: three public tool functions, referential integrity, graph reachability
-- [ ] 03-04-PLAN.md — Guard completeness: enum coverage, integer interval gap analysis, string guard errors
+- [x] 03-01-PLAN.md — Schema change (initial_state on StateDiagramFile), install networkx + lark, update existing fixtures
+- [x] 03-02-PLAN.md — Pycca grammar module: PYCCA_GRAMMAR, GUARD_PARSER, STATEMENT_PARSER (pycca/grammar.py)
+- [x] 03-03-PLAN.md — Core validator: three public tool functions, referential integrity, graph reachability
+- [x] 03-04-PLAN.md — Guard completeness: enum coverage, integer interval gap analysis, string guard errors
 
 ### Phase 4: Draw.io Tools
 **Goal**: Engineers can generate, validate, and sync Draw.io diagrams from YAML with a deterministic, round-trip-stable workflow
@@ -88,24 +93,24 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Test scaffold: 10 skipped test stubs + minimal-domain fixture (Wave 0)
-- [ ] 04-02-PLAN.md — render_to_drawio / render_to_drawio_class / render_to_drawio_state with igraph Sugiyama layout and skip-if-unchanged (MCP-05)
-- [ ] 04-03-PLAN.md — validate_drawio + sync_from_drawio + server.py registration of all 5 tools (MCP-06, MCP-07)
+- [x] 04-01-PLAN.md — Test scaffold: 10 skipped test stubs + minimal-domain fixture (Wave 0)
+- [x] 04-02-PLAN.md — render_to_drawio / render_to_drawio_class / render_to_drawio_state with igraph Sugiyama layout and skip-if-unchanged (MCP-05)
+- [x] 04-03-PLAN.md — validate_drawio + sync_from_drawio + server.py registration of all 5 tools (MCP-06, MCP-07)
 
 ### Phase 04.1: Model Development and Compiler Testing (INSERTED)
 
 **Goal:** Fix all broken schema artifacts (associative removal aftermath), complete the elevator reference model with simulate-ready pycca action bodies for all active classes, resolve all 5 open elevator issues, and prove the pycca grammar against real action bodies via test_elevator.py and test_pycca.py
 **Requirements**: SCHEMA-REPAIR-01, SCHEMA-REPAIR-02, ELV-001, ELV-003, ELV-005, ELV-006, ELV-007, GRAMMAR-EXT, ACTION-BODIES-01, ACTION-BODIES-02, TEST-ELEVATOR
 **Depends on:** Phase 4
-**Plans:** 6/6 plans complete
+**Plans:** 6/6 plans complete (completed 2026-04-05)
 
 Plans:
-- [ ] 04.1-01-PLAN.md — Remove formalizes blocks from validation.py and associative fixture from test_yaml_schema.py
-- [ ] 04.1-02-PLAN.md — FloorIndicator migration to active class; ELV-001 subtype inheritance; ELV-003 R14 head pointer
-- [ ] 04.1-03-PLAN.md — ELV-005/006/007 model YAML fixes; Dispatcher/CallButton/FloorCall syntax corrections
-- [ ] 04.1-04-PLAN.md — Grammar extension: 9 pycca constructs + tests/test_pycca.py
-- [ ] 04.1-05-PLAN.md — Action bodies: Shaft, Door, Floor, ElevatorIndicator, FloorIndicator
-- [ ] 04.1-06-PLAN.md — Action bodies: Elevator, Dispatcher, ElevatorCall, FloorCall, Request, CallButton; test_elevator.py
+- [x] 04.1-01-PLAN.md — Remove formalizes blocks from validation.py and associative fixture from test_yaml_schema.py
+- [x] 04.1-02-PLAN.md — FloorIndicator migration to active class; ELV-001 subtype inheritance; ELV-003 R14 head pointer
+- [x] 04.1-03-PLAN.md — ELV-005/006/007 model YAML fixes; Dispatcher/CallButton/FloorCall syntax corrections
+- [x] 04.1-04-PLAN.md — Grammar extension: 9 pycca constructs + tests/test_pycca.py
+- [x] 04.1-05-PLAN.md — Action bodies: Shaft, Door, Floor, ElevatorIndicator, FloorIndicator
+- [x] 04.1-06-PLAN.md — Action bodies: Elevator, Dispatcher, ElevatorCall, FloorCall, Request, CallButton; test_elevator.py
 
 ### Phase 04.2: Body of Knowledge and Modeling Process (INSERTED)
 
@@ -117,11 +122,12 @@ Plans:
 Plans:
 - [ ] TBD (run /gsd:plan-phase 04.2 to break down)
 
-### Phase 5: Simulation Engine
-**Goal**: A domain-scoped simulation engine that manages object instances, relationship links, event queues, and a step-aware pycca interpreter — exposed as two MCP tools
-**Depends on**: Phase 3 (pycca grammar)
+### Phase 5: Simulation Engine (Umbrella)
+**Goal**: Compile MDF YAML models into executable opaque bundles, run domain-scoped simulations with full Shlaer-Mellor execution semantics, and provide a GDB-style CLI debugger with breakpoints. Elevator model must compile, run, and be debuggable by the end of all sub-phases.
+**Architecture**: Compiler approach (not interpreter) — YAML → Python source → opaque zip bundle. Hybrid: generated classes + action functions, stable framework in `engine/`. See `05-CONTEXT.md`.
+**Depends on**: Phase 4.1 (pycca grammar + elevator model)
 **Requirements**: MCP-08
-**Success Criteria** (what must be TRUE):
+**Success Criteria** (what must be TRUE — across all sub-phases):
   1. `simulate_domain(domain, scenario)` manages multiple active class instances across a domain, dispatches events between instances via the three-queue scheduler, and returns the full micro-step stream without raising exceptions
   2. `simulate_class(class, events)` runs an isolated single-class event sequence and returns the same micro-step format
   3. All queue routing rules apply: self-directed events → priority queue; cross-instance → standard queue; creation/deletion/delayed → standard queue
@@ -129,6 +135,75 @@ Plans:
   5. Sync and async instance creation and deletion each produce the correct micro-steps and lifecycle behavior per the execution domain rules
   6. Bridge calls hit the YAML mock registry and record `bridge_called` micro-steps; undefined operations return null without error
   7. An undefined class, unknown event target, or unparseable pycca block returns a structured error — not a Python exception
+  8. GDB-style CLI can attach to a running simulation, inspect state, step through, and set all breakpoint types
+  9. All breakpoint types (action-line, property watchpoint, event breakpoint) halt execution correctly on the elevator model
+
+### Phase 5.1: Runtime Framework
+**Goal**: Self-contained runtime framework — instance registry, relationship link store, three-queue event scheduler, `ctx` runtime object, micro-step stream generator, bridge mock registry, simulation clock. Framework runs a hand-written test harness without the compiler.
+**Depends on**: Phase 5 architecture decisions (05-CONTEXT.md)
+**Requirements**: MCP-08 (partial — runtime semantics)
+**Success Criteria** (what must be TRUE):
+  1. Instance registry supports create (sync/async), delete (sync/async), and lookup by class + identifier (including composite identifiers)
+  2. Relationship link store enforces multiplicity (1:1, 1:M, M:M) and supports relate, unrelate, and chained navigation
+  3. Three-queue scheduler dispatches correctly: priority before standard, FIFO within each, delay queue feeds standard on expiry
+  4. Run-to-completion holds: generated events enqueue but don't dispatch until current event completes
+  5. Polymorphic event dispatch routes supertype events to subtype state machines
+  6. "Can't happen" produces error micro-step; "event ignored" silently consumes
+  7. Final state detection triggers automatic async deletion
+  8. All 12 micro-step types yield correctly from the generator
+  9. Bridge mock registry loads YAML and records bridge_called micro-steps
+  10. Two identical runs produce identical micro-step streams (determinism)
+  11. `engine/` has zero imports from `schema/`, `tools/`, or `pycca/`
+**Plans**: TBD
+
+### Phase 5.2: Model Compiler
+**Goal**: Lark Transformer compiles pycca action bodies and guards into Python source. Compiler generates one file per class (transition tables + action functions), a domain manifest, and packages everything into an opaque self-contained zip bundle.
+**Depends on**: Phase 5.1
+**Requirements**: MCP-08 (partial — compilation)
+**Success Criteria** (what must be TRUE):
+  1. Lark Transformer translates all pycca constructs (assignment, generate, cancel, create, delete, relate, unrelate, select, navigate, bridge, if/else, for-each, lambda, method calls) into valid Python source
+  2. Guard expressions compile to Python boolean expressions via separate grammar entry point
+  3. MDF types (enums, typedefs, container types) map to Python equivalents in generated code
+  4. Supertype/subtype hierarchies are flattened correctly in generated class files
+  5. Transition tables include can't-happen and event-ignored cells per state/event pair
+  6. Opaque zip bundle contains generated code + copied framework — self-contained and portable
+  7. Elevator model compiles to a bundle without errors
+  8. Same model input produces identical bundle output (deterministic)
+**Plans**: TBD
+
+### Phase 5.3: Simulation Runner + Verification
+**Goal**: Load compiled bundles, execute simulations, verify the elevator model produces correct micro-step output. Expose as `simulate_domain()` and `simulate_class()` MCP tool wrappers.
+**Depends on**: Phase 5.2
+**Requirements**: MCP-08 (partial — MCP tools + verification)
+**Success Criteria** (what must be TRUE):
+  1. Bundle loader unpacks opaque zip and wires generated code into the runtime framework
+  2. Elevator model compiles, loads, runs a multi-instance scenario, and produces correct micro-step stream
+  3. `simulate_domain(domain, scenario)` manages full object instance pool across a domain
+  4. `simulate_class(class, events)` runs isolated single-class simulation with stripped-down context
+  5. Two identical scenario runs produce identical micro-step output (determinism verified end-to-end)
+**Plans**: TBD
+
+### Phase 5.4: GDB Command Language + CLI
+**Goal**: Define and implement a GDB-style command set for interacting with running simulations — inspect instances, show queues, step through events, control the clock.
+**Depends on**: Phase 5.3
+**Requirements**: MCP-08 (partial — interactive control)
+**Success Criteria** (what must be TRUE):
+  1. Command set covers: inspect instances, show queues, show current state, list relationships, list breakpoints, step, continue, reset, clock control (pause/resume/speed)
+  2. CLI attaches to a running simulation and processes commands interactively
+  3. State inspection shows instance attributes, current state, queue contents, and relationship links
+  4. Step advances one micro-step; continue runs until breakpoint or domain idle
+**Plans**: TBD
+
+### Phase 5.5: Breakpoint Injection
+**Goal**: Inject debugger hooks into generated code templates so all breakpoint types halt execution. Verify all types on the elevator model.
+**Depends on**: Phase 5.4
+**Requirements**: MCP-08 (partial — breakpoints)
+**Success Criteria** (what must be TRUE):
+  1. Action-line breakpoints (class + instance + state + line) halt execution at the specified line
+  2. Property watchpoints (break on write, conditional write) halt on attribute modification
+  3. Event breakpoints (instance created/deleted, event generated/received, bridge called) halt on the matching micro-step
+  4. Breakpoint manager in runtime supports register, remove, enable/disable, and hit notification
+  5. All breakpoint types verified working on elevator model via the GDB CLI
 **Plans**: TBD
 
 ### Phase 6: CLI Test Harness
@@ -177,13 +252,20 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Schema Foundation | 5/5 | Complete | 2026-03-06 |
 | 2. MCP Server + model_io | 2/2 | Complete | 2026-03-06 |
-| 3. Validation Tool | 4/4 | Complete   | 2026-03-09 |
-| 4. Draw.io Tools | 3/3 | Complete   | 2026-03-11 |
-| 5. Simulation Engine | 0/TBD | Not started | - |
+| 3. Validation Tool | 4/4 | Complete | 2026-03-09 |
+| 4. Draw.io Tools | 3/3 | Complete | 2026-03-11 |
+| 04.1. Model Development and Compiler Testing | 6/6 | Complete | 2026-04-05 |
+| 04.2. Body of Knowledge and Modeling Process | 0/TBD | In planning | - |
+| 5. Simulation Engine (umbrella) | — | Context gathered | - |
+| 5.1. Runtime Framework | 0/TBD | Context gathered | - |
+| 5.2. Model Compiler | 0/TBD | Not started | - |
+| 5.3. Simulation Runner + Verification | 0/TBD | Not started | - |
+| 5.4. GDB Command Language + CLI | 0/TBD | Not started | - |
+| 5.5. Breakpoint Injection | 0/TBD | Not started | - |
 | 6. CLI Test Harness | 0/TBD | Not started | - |
 | 7. GUI Debugger | 0/TBD | Not started | - |
 | 8. Test Suite | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-03-05 for milestone v1.0 Foundation*
-*Last updated: 2026-03-11 — Phase 4 planned: 3 plans (test scaffold, render tools, validate+sync+registration)*
+*Last updated: 2026-04-05 — Phase 5 reframed as compiler approach with 5 sub-phases (5.1–5.5); Phase 5 and 5.1 context gathered*
