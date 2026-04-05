@@ -154,7 +154,14 @@ Plans:
   9. Bridge mock registry loads YAML and records bridge_called micro-steps
   10. Two identical runs produce identical micro-step streams (determinism)
   11. `engine/` has zero imports from `schema/`, `tools/`, or `pycca/`
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 05.1-01-PLAN.md — Data types (micro-steps, Event, manifest spec) + Wave 0 test scaffold
+- [ ] 05.1-02-PLAN.md — Instance registry + relationship link store (SC-01, SC-02)
+- [ ] 05.1-03-PLAN.md — Simulation clock + bridge mock registry (SC-09)
+- [ ] 05.1-04-PLAN.md — Three-queue scheduler with dispatch, run-to-completion, polymorphic routing (SC-03..SC-07)
+- [ ] 05.1-05-PLAN.md — SimulationContext (ctx) + run_simulation generator + integration tests (SC-08, SC-10, SC-11)
 
 ### Phase 5.2: Model Compiler
 **Goal**: Lark Transformer compiles pycca action bodies and guards into Python source. Compiler generates one file per class (transition tables + action functions), a domain manifest, and packages everything into an opaque self-contained zip bundle.
@@ -257,7 +264,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 04.1. Model Development and Compiler Testing | 6/6 | Complete | 2026-04-05 |
 | 04.2. Body of Knowledge and Modeling Process | 0/TBD | In planning | - |
 | 5. Simulation Engine (umbrella) | — | Context gathered | - |
-| 5.1. Runtime Framework | 0/TBD | Context gathered | - |
+| 5.1. Runtime Framework | 0/5 | Planned | - |
 | 5.2. Model Compiler | 0/TBD | Not started | - |
 | 5.3. Simulation Runner + Verification | 0/TBD | Not started | - |
 | 5.4. GDB Command Language + CLI | 0/TBD | Not started | - |
@@ -268,4 +275,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 ---
 *Roadmap created: 2026-03-05 for milestone v1.0 Foundation*
-*Last updated: 2026-04-05 — Phase 5 reframed as compiler approach with 5 sub-phases (5.1–5.5); Phase 5 and 5.1 context gathered*
+*Last updated: 2026-04-05 — Phase 5.1 planned: 5 plans in 3 waves*
