@@ -4,8 +4,8 @@ milestone: v0.1
 milestone_name: milestone
 status: executing
 stopped_at: Phase 5 and 5.1 context gathered (compiler architecture)
-last_updated: "2026-04-05T19:12:41.457Z"
-last_activity: 2026-04-05 -- Phase 5.1 planning complete
+last_updated: "2026-04-06T15:50:48.009Z"
+last_activity: 2026-04-06 -- Phase 05.1 execution started
 progress:
   total_phases: 15
   completed_phases: 5
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** Engineers can verify the full structural design before typing `execute-phase` — no guessing, no mid-execution surprises.
-**Current focus:** Phase 4 — Draw.io Tools (complete); next: Phase 5 — Simulation Engine
+**Current focus:** Phase 05.1 — runtime-framework
 
 ## Current Position
 
-Phase: 4 of 8 (Draw.io Tools — complete)
-Plan: 3 of 3 in current phase (all complete)
-Status: Ready to execute
-Last activity: 2026-04-05 -- Phase 5.1 planning complete
+Phase: 05.1 (runtime-framework) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 05.1
+Last activity: 2026-04-06 -- Phase 05.1 execution started
 
 Progress: [██████████] 100%
 
