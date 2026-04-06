@@ -1,0 +1,4 @@
+LogEvent: "ok"
+GetTimeOfDay: "12:00"
+IsTopFloor: true
+IsBottomFloor: false
