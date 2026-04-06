@@ -16,7 +16,11 @@ Supported constructs:
   - Assignments (self.attr, var, var.attr)
   - Arithmetic with precedence tower (or > and > compare > add > mul > atom)
   - Container types: List<T>, Set<T>, Optional<T>, Fn(T,...)->R
-  - Lambda expressions with capture lists ([captures] |params| -> R { body })
+  - Lambda expressions with capture lists ([captures] |params| -> type_expr { body })
+  - Lambda captures support dotted names: [self.attr, var] (Gap 2 fix)
+  - Lambda return types support generic types: -> Set<T> (Gap 1 fix)
+  - Bridge calls support named args: Domain::Op[key: expr] (Gap 4 fix)
+  - select_related_stmt supports multi-hop traversal chains (Gap 3 fix)
   - Method calls and recursive chained access (a.b().c().d)
   - For-each loops (for (Type var : expr) { stmts })
   - Select as expression with lambda where clause
@@ -67,9 +71,15 @@ PYCCA_GRAMMAR = r"""
 
     // --- Type expressions (simple, generic, or function types) ---
     // Name | Name<T> | Name<T,U> | Fn(T,...) -> R
-    type_expr: NAME "<" NAME ("," NAME)* ">"  -> generic_type
+    // GENERIC_TYPE matches the whole "Name<T>" token atomically to avoid
+    // conflict with comparison OP ("<" / ">") in expression context.
+    type_expr: GENERIC_TYPE  -> generic_type
              | NAME "(" NAME ("," NAME)* ")" "->" NAME  -> fn_type
              | NAME  -> simple_type
+
+    // Matches: Word<Word> or Word<Word,Word,...>  (no spaces — per pycca style)
+    // Priority 2 > NAME (priority 0) so xearley prefers GENERIC_TYPE when both are valid
+    GENERIC_TYPE.2: /[a-zA-Z_][a-zA-Z0-9_]*<[a-zA-Z_][a-zA-Z0-9_,\s]*>/
 
     // --- Typed variable declaration ---
     // Type var = expr;
@@ -104,7 +114,13 @@ PYCCA_GRAMMAR = r"""
 
     // --- Bridge call ---
     // Domain::Operation[args];
-    bridge_call: NAME "::" NAME "[" arglist? "]" ";"
+    // Domain::Operation[named: expr, ...];  (Gap 4: named argument form)
+    bridge_call: NAME "::" NAME "[" named_arg_list "]" ";"
+               | NAME "::" NAME "[" arglist "]" ";"
+               | NAME "::" NAME "[" "]" ";"
+
+    // Named argument list: k: expr (, k: expr)*
+    named_arg_list: NAME ":" expr ("," NAME ":" expr)*
 
     // --- Create ---
     // create var of Class;
@@ -123,8 +139,8 @@ PYCCA_GRAMMAR = r"""
     select_stmt: "select" ("any"|"many") NAME "from" "instances" "of" NAME ("where" expr)? ";"
 
     // --- Select related by ---
-    // select any/many var related by NAME->NAME;
-    select_related_stmt: "select" ("any"|"many") NAME "related" "by" NAME "->" NAME ";"
+    // select any/many var related by traversal_chain;  (Gap 3: multi-hop support)
+    select_related_stmt: "select" ("any"|"many") NAME "related" "by" traversal_chain ";"
 
     // --- Relate / Unrelate ---
     // relate var1 to var2 across RN;
@@ -173,8 +189,17 @@ PYCCA_GRAMMAR = r"""
     // --- Lambda expressions ---
     // [] |a: T, b: T| -> RetType { stmts }
     // [capture1, capture2] |param: T| -> RetType { stmts }
-    lambda_expr: "[" capture_list? "]" PIPE lambda_params PIPE "->" NAME "{" statement+ "}"
-    capture_list: NAME ("," NAME)*
+    // [self.attr] |param: T| -> Set<T> { stmts }  (Gap 1: generic return; Gap 2: dotted capture)
+    // lambda_return_type uses a single terminal (LAMBDA_RETURN_TYPE) to atomically match
+    // both "Name" and "Name<T,...>" — avoids xearley ambiguity with comparison OP.
+    lambda_expr: "[" capture_list? "]" PIPE lambda_params PIPE "->" LAMBDA_RETURN_TYPE "{" statement+ "}"
+
+    // Matches Name<T,U,...> or plain Name — used only in lambda return position
+    // Priority 3: wins over GENERIC_TYPE (2), NAME (0) at same position
+    LAMBDA_RETURN_TYPE.3: /[a-zA-Z_][a-zA-Z0-9_]*(?:<[a-zA-Z_][a-zA-Z0-9_,\s]*>)?/
+    capture_list: capture_item ("," capture_item)*
+    capture_item: NAME "." NAME
+                | NAME
     lambda_params: lambda_param ("," lambda_param)*
     lambda_param: NAME ":" NAME
     PIPE: "|"
