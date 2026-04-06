@@ -16,6 +16,7 @@ a `dict[str, ClassManifest]` produced upstream by the compiler.
 from __future__ import annotations
 
 import heapq
+import time
 from collections import deque
 from typing import Any, Generator
 
@@ -26,6 +27,7 @@ from engine.microstep import (
     ActionExecuted,
     ErrorMicroStep,
     EventCancelled,
+    EventCompleted,
     EventDelayed,
     EventDelayExpired,
     EventReceived,
@@ -34,6 +36,8 @@ from engine.microstep import (
     InstanceDeleted,
     MicroStep,
     SchedulerSelected,
+    SenescentEntered,
+    SenescentExited,
     TransitionFired,
 )
 from engine.registry import InstanceRegistry
@@ -41,6 +45,11 @@ from engine.registry import InstanceRegistry
 
 def _id_key(class_name: str, identifier: dict) -> tuple[str, frozenset]:
     return (class_name, make_instance_key(identifier))
+
+
+def _ikey(class_name: str, identifier: dict) -> str:
+    """Stable printable instance key for senescence sidecar + micro-step fields."""
+    return f"{class_name}:{sorted(identifier.items())}"
 
 
 class ThreeQueueScheduler:
@@ -68,6 +77,9 @@ class ThreeQueueScheduler:
         # event is in flight. Flushed after the current event completes.
         self._pending_generated: list[Event] = []
         self._in_flight: Event | None = None
+
+        # Per-instance senescence flag (D-16, D-17). Key = _ikey(class, id).
+        self._senescent: dict[str, bool] = {}
 
     # ------------------------------------------------------------------
     # Enqueue / cancel / delay tick
@@ -273,8 +285,14 @@ class ThreeQueueScheduler:
                     target_class=event.target_class,
                     target_instance_id=dict(event.target_id),
                 )
-                for step in self._process_event(event, queue="priority"):
-                    yield step
+                t_start = time.perf_counter_ns()
+                yield from self._process_event(event, queue="priority")
+                duration_ns = time.perf_counter_ns() - t_start
+                yield EventCompleted(
+                    target=_ikey(event.target_class, event.target_id),
+                    name=event.event_type,
+                    duration_ns=duration_ns,
+                )
             elif self._standard:
                 event = self._standard.popleft()
                 yield SchedulerSelected(
@@ -283,8 +301,14 @@ class ThreeQueueScheduler:
                     target_class=event.target_class,
                     target_instance_id=dict(event.target_id),
                 )
-                for step in self._process_event(event, queue="standard"):
-                    yield step
+                t_start = time.perf_counter_ns()
+                yield from self._process_event(event, queue="standard")
+                duration_ns = time.perf_counter_ns() - t_start
+                yield EventCompleted(
+                    target=_ikey(event.target_class, event.target_id),
+                    name=event.event_type,
+                    duration_ns=duration_ns,
+                )
             else:
                 # All queues empty — domain idle (rule 9)
                 break
@@ -335,6 +359,16 @@ class ThreeQueueScheduler:
             return
 
         curr_state = self._registry.get_state(concrete_class, concrete_id)
+
+        ikey = _ikey(concrete_class, concrete_id)
+        if self._senescent.get(ikey, False):
+            self._senescent[ikey] = False
+            yield SenescentExited(
+                instance=ikey,
+                state=curr_state if curr_state is not None else "",
+                exited_at=int(self._clock.now()),
+                by_event=event.event_type,
+            )
 
         yield EventReceived(
             class_name=concrete_class,
@@ -420,6 +454,20 @@ class ThreeQueueScheduler:
                     instance_id=dict(concrete_id),
                 )
 
+                # D-15: final state wins over senescence
+                _final_states_check = cdef.get("final_states", []) or []
+                if next_state not in _final_states_check:
+                    sen_states = cdef.get("senescent_states") or set()
+                    if next_state in sen_states:
+                        _ikey_val = _ikey(concrete_class, concrete_id)
+                        if not self._senescent.get(_ikey_val, False):
+                            self._senescent[_ikey_val] = True
+                            yield SenescentEntered(
+                                instance=_ikey_val,
+                                state=next_state,
+                                settled_at=int(self._clock.now()),
+                            )
+
             # D-23/D-24: final state -> async deletion
             final_states = cdef.get("final_states", []) or []
             if next_state is not None and next_state in final_states:
@@ -484,6 +532,20 @@ class ThreeQueueScheduler:
                 for be in buffered:
                     self._enqueue_direct(be)
 
+        # D-18: initial-state senescence check
+        if initial_state is not None:
+            sen_states = cdef.get("senescent_states") or set()
+            final_states = cdef.get("final_states", []) or []
+            if initial_state in sen_states and initial_state not in final_states:
+                ikey = _ikey(target_class, target_id)
+                if not self._senescent.get(ikey, False):
+                    self._senescent[ikey] = True
+                    yield SenescentEntered(
+                        instance=ikey,
+                        state=initial_state,
+                        settled_at=int(self._clock.now()),
+                    )
+
     def _process_deletion(
         self, event: Event, queue: str
     ) -> Generator[MicroStep, None, None]:
@@ -492,3 +554,6 @@ class ThreeQueueScheduler:
         steps = self._registry.process_deletion(target_class, target_id)
         for step in steps:
             yield step
+        # Clean up senescence flag (D-17)
+        ikey = _ikey(target_class, target_id)
+        self._senescent.pop(ikey, None)

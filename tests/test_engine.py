@@ -23,6 +23,7 @@ from engine.microstep import (
     BridgeCalled,
     ErrorMicroStep,
     EventCancelled,
+    EventCompleted,
     EventDelayed,
     EventDelayExpired,
     EventReceived,
@@ -1005,7 +1006,15 @@ def test_determinism_identical_streams():
     assert len(run_a) == len(run_b)
     for sa, sb in zip(run_a, run_b):
         assert type(sa) is type(sb)
-        assert sa == sb
+        # EventCompleted.duration_ns is real wall-clock time and non-deterministic
+        # between runs (D-04). Compare structural fields only, not timing.
+        if isinstance(sa, EventCompleted):
+            assert sa.target == sb.target
+            assert sa.name == sb.name
+            assert sa.duration_ns > 0
+            assert sb.duration_ns > 0
+        else:
+            assert sa == sb
 
 
 def _controller_with_start_manifest():
