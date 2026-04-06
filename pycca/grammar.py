@@ -122,13 +122,16 @@ PYCCA_GRAMMAR = r"""
     delete_stmt: "delete" NAME ";"
                | "delete" "object" "of" NAME "where" expr ";"
 
+    // CARDINALITY terminal captures "any" or "many" as a token in the tree.
+    CARDINALITY: "any" | "many"
+
     // --- Select from instances ---
     // select any/many var from instances of Class [where expr];
-    select_stmt: "select" ("any"|"many") NAME "from" "instances" "of" NAME ("where" expr)? ";"
+    select_stmt: "select" CARDINALITY NAME "from" "instances" "of" NAME ("where" expr)? ";"
 
     // --- Select related by ---
     // select any/many var related by NAME->NAME (->NAME)*;
-    select_related_stmt: "select" ("any"|"many") NAME "related" "by" traversal_chain ";"
+    select_related_stmt: "select" CARDINALITY NAME "related" "by" traversal_chain ";"
 
     // --- Relate / Unrelate ---
     // relate var1 to var2 across RN;
@@ -138,7 +141,9 @@ PYCCA_GRAMMAR = r"""
 
     // --- If / else if / else ---
     // if (expr) { stmts } [else if (expr) { stmts }]* [else { stmts }]
-    if_stmt: "if" "(" expr ")" "{" statement* "}" else_if_chain? ("else" "{" statement* "}")?
+    // Named else_body rule prevents ambiguity when Earley flattens statement* groups.
+    else_body: statement+
+    if_stmt: "if" "(" expr ")" "{" statement* "}" else_if_chain? ("else" "{" else_body "}")?
     else_if_chain: else_if_clause+
     else_if_clause: "else" "if" "(" expr ")" "{" statement* "}"
 
@@ -168,8 +173,8 @@ PYCCA_GRAMMAR = r"""
     // --- Select as expression (for typed_var_decl RHS) ---
     // select many from instances of Class [where lambda_expr]
     // select many related by NAME->NAME [where lambda_expr]
-    select_expr: "select" ("any"|"many") "from" "instances" "of" NAME ("where" lambda_expr)?
-               | "select" ("any"|"many") "related" "by" traversal_chain ("where" lambda_expr)?
+    select_expr: "select" CARDINALITY "from" "instances" "of" NAME ("where" lambda_expr)?
+               | "select" CARDINALITY "related" "by" traversal_chain ("where" lambda_expr)?
 
     // --- Traversal chain: NAME->NAME (->NAME)* ---
     traversal_chain: NAME "->" NAME ("->" NAME)*
