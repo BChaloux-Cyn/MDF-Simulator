@@ -16,8 +16,31 @@ from engine.microstep import (
     ErrorMicroStep,
 )
 from engine.event import Event, make_instance_key
+from engine.manifest import (
+    AssociationManifest,
+    ClassManifest,
+    DomainManifest,
+    TransitionEntry,
+)
+from engine.registry import InstanceRegistry
+from engine.relationship import RelationshipStore
+from engine.scheduler import ThreeQueueScheduler
+from engine.clock import SimulationClock
+from engine.bridge import BridgeMockRegistry
+from engine.ctx import SimulationContext, run_simulation
 
 __all__ = [
+    "SimulationContext",
+    "run_simulation",
+    "DomainManifest",
+    "ClassManifest",
+    "AssociationManifest",
+    "TransitionEntry",
+    "InstanceRegistry",
+    "RelationshipStore",
+    "ThreeQueueScheduler",
+    "SimulationClock",
+    "BridgeMockRegistry",
     "MicroStep",
     "SchedulerSelected",
     "EventReceived",
