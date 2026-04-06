@@ -16,7 +16,7 @@ from typing import Any, Callable, Generator
 from engine.bridge import BridgeMockRegistry
 from engine.clock import SimulationClock
 from engine.event import Event
-from engine.microstep import MicroStep
+from engine.microstep import EventCompleted, LongEventWarning, MicroStep
 from engine.registry import InstanceRegistry
 from engine.relationship import RelationshipStore
 from engine.scheduler import ThreeQueueScheduler
@@ -214,7 +214,17 @@ class SimulationContext:
     def execute(self) -> Generator[MicroStep, None, None]:
         self._running = True
         try:
-            yield from self.scheduler.execute()
+            for step in self.scheduler.execute():
+                yield step
+                if isinstance(step, EventCompleted):
+                    threshold = self.event_duration_warn_ns
+                    if threshold is not None and step.duration_ns > threshold:
+                        yield LongEventWarning(
+                            target=step.target,
+                            name=step.name,
+                            duration_ns=step.duration_ns,
+                            threshold_ns=threshold,
+                        )
         finally:
             self._running = False
 
