@@ -325,19 +325,93 @@ def test_registry_supertype_inheritance():
     assert inst["trunk_size"] == 200  # own attribute
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-02")
+from engine.relationship import RelationshipStore
+
+
 def test_relationships_relate_unrelate_navigate():
-    pass
+    store = RelationshipStore(DOMAIN_MANIFEST["associations"])
+    ctrl = {"ctrl_id": 1}
+    light = {"light_id": "main"}
+
+    err = store.relate("R1", "Controller", ctrl, "TrafficLight", light)
+    assert err == []
+
+    # Navigate from Controller (M side) -> TrafficLight
+    targets = store.navigate("R1", "Controller", ctrl)
+    assert len(targets) == 1
+    assert targets[0]["class"] == "TrafficLight"
+    assert targets[0]["id"] == light
+
+    # Navigate from TrafficLight (1 side) -> Controller
+    back = store.navigate("R1", "TrafficLight", light)
+    assert len(back) == 1
+    assert back[0]["class"] == "Controller"
+    assert back[0]["id"] == ctrl
+
+    # Unrelate removes the link
+    err = store.unrelate("R1", "Controller", ctrl, "TrafficLight", light)
+    assert err == []
+    assert store.navigate("R1", "Controller", ctrl) == []
+
+    # Unrelate-not-found surfaces ErrorMicroStep
+    err2 = store.unrelate("R1", "Controller", ctrl, "TrafficLight", light)
+    assert len(err2) == 1
+    assert isinstance(err2[0], ErrorMicroStep)
+    assert err2[0].error_kind == "unrelate_not_found"
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-02")
 def test_relationships_multiplicity_enforcement():
-    pass
+    # R1: Controller (M) -- (1) TrafficLight
+    # mult_a_to_b="M", mult_b_to_a="1"
+    # => each TrafficLight links to at most 1 Controller
+    # => each Controller may link to many TrafficLights
+    store = RelationshipStore(DOMAIN_MANIFEST["associations"])
+    c1 = {"ctrl_id": 1}
+    c2 = {"ctrl_id": 2}
+    light = {"light_id": "main"}
+    light2 = {"light_id": "second"}
+
+    assert store.relate("R1", "Controller", c1, "TrafficLight", light) == []
+    # Second controller linking to same light violates the "1" side
+    err = store.relate("R1", "Controller", c2, "TrafficLight", light)
+    assert len(err) == 1
+    assert isinstance(err[0], ErrorMicroStep)
+    assert err[0].error_kind == "multiplicity_violation"
+
+    # But the same controller can link multiple TrafficLights (M side)
+    assert store.relate("R1", "Controller", c1, "TrafficLight", light2) == []
+    targets = store.navigate("R1", "Controller", c1)
+    assert len(targets) == 2
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-02")
 def test_relationships_chained_navigation():
-    pass
+    associations = {
+        "R1": {
+            "rel_id": "R1",
+            "class_a": "A",
+            "class_b": "B",
+            "mult_a_to_b": "1",
+            "mult_b_to_a": "1",
+        },
+        "R2": {
+            "rel_id": "R2",
+            "class_a": "B",
+            "class_b": "C",
+            "mult_a_to_b": "1",
+            "mult_b_to_a": "1",
+        },
+    }
+    store = RelationshipStore(associations)
+    a = {"id": "a"}
+    b = {"id": "b"}
+    c = {"id": "c"}
+    assert store.relate("R1", "A", a, "B", b) == []
+    assert store.relate("R2", "B", b, "C", c) == []
+
+    result = store.navigate_chain([("R1", "B"), ("R2", "C")], "A", a)
+    assert len(result) == 1
+    assert result[0]["class"] == "C"
+    assert result[0]["id"] == c
 
 
 @pytest.mark.skip(reason="Implemented in plan 05.1-04")
