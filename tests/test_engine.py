@@ -414,69 +414,333 @@ def test_relationships_chained_navigation():
     assert result[0]["id"] == c
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-04")
+# ---------------------------------------------------------------------------
+# Plan 05.1-04: ThreeQueueScheduler tests
+# ---------------------------------------------------------------------------
+
+
+from engine.clock import SimulationClock
+from engine.scheduler import ThreeQueueScheduler
+
+
+def _make_scheduler(class_defs=None, generalizations=None):
+    defs = class_defs if class_defs is not None else DOMAIN_MANIFEST["class_defs"]
+    gens = generalizations if generalizations is not None else DOMAIN_MANIFEST["generalizations"]
+    reg = InstanceRegistry(defs)
+    clock = SimulationClock()
+    sched = ThreeQueueScheduler(reg, clock, defs, gens)
+    return sched, reg, clock
+
+
 def test_scheduler_priority_before_standard():
-    pass
+    """SC-03: priority queue is dequeued before standard queue."""
+    sched, reg, _ = _make_scheduler()
+    reg.create_sync("TrafficLight", {"light_id": 1}, initial_state="Idle")
+    reg.create_sync("TrafficLight", {"light_id": 2}, initial_state="Green")
+
+    # Cross-instance event -> standard
+    sched.enqueue(Event(
+        event_type="TurnOn",
+        sender_class="TrafficLight", sender_id={"light_id": 2},
+        target_class="TrafficLight", target_id={"light_id": 1},
+    ))
+    # Self-event -> priority
+    sched.enqueue(Event(
+        event_type="Timer",
+        sender_class="TrafficLight", sender_id={"light_id": 2},
+        target_class="TrafficLight", target_id={"light_id": 2},
+    ))
+
+    selected = [s for s in sched.execute() if isinstance(s, SchedulerSelected)]
+    assert len(selected) == 2
+    assert selected[0].queue == "priority"
+    assert selected[0].target_instance_id == {"light_id": 2}
+    assert selected[1].queue == "standard"
+    assert selected[1].target_instance_id == {"light_id": 1}
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-04")
 def test_scheduler_fifo_within_queue():
-    pass
+    """SC-03 / D-16: FIFO ordering within a queue."""
+    sched, reg, _ = _make_scheduler()
+    for i in (1, 2, 3):
+        reg.create_sync("TrafficLight", {"light_id": i}, initial_state="Idle")
+    sender = {"light_id": 99}
+    reg.create_sync("TrafficLight", sender, initial_state="Idle")
+    for i in (1, 2, 3):
+        sched.enqueue(Event(
+            event_type="TurnOn",
+            sender_class="TrafficLight", sender_id=sender,
+            target_class="TrafficLight", target_id={"light_id": i},
+        ))
+    selected = [s for s in sched.execute() if isinstance(s, SchedulerSelected)]
+    assert [s.target_instance_id["light_id"] for s in selected] == [1, 2, 3]
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-04")
 def test_scheduler_delay_feeds_standard():
-    pass
+    """SC-03 / rule 8: delayed event expires into standard queue on clock tick."""
+    sched, reg, clock = _make_scheduler()
+    reg.create_sync("TrafficLight", {"light_id": 1}, initial_state="Idle")
+    reg.create_sync("TrafficLight", {"light_id": 2}, initial_state="Idle")
+
+    sched.enqueue(Event(
+        event_type="TurnOn",
+        sender_class="TrafficLight", sender_id={"light_id": 2},
+        target_class="TrafficLight", target_id={"light_id": 1},
+        delay_ms=100.0,
+    ))
+
+    # Before clock advance: nothing fires
+    steps_before = list(sched.execute())
+    assert not [s for s in steps_before if isinstance(s, SchedulerSelected)]
+
+    # Advance past expiry; tick during execute() should release it
+    clock.advance(150)
+    steps_after = list(sched.execute())
+    expired = [s for s in steps_after if isinstance(s, EventDelayExpired)]
+    selected = [s for s in steps_after if isinstance(s, SchedulerSelected)]
+    assert len(expired) == 1
+    assert len(selected) == 1
+    assert selected[0].queue == "standard"
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-04")
 def test_run_to_completion():
-    pass
+    """SC-04 / D-18-19: events generated in an action don't fire mid-event."""
+    sched, reg, _ = _make_scheduler()
+    reg.create_sync("TrafficLight", {"light_id": 1}, initial_state="Idle")
+    reg.create_sync("TrafficLight", {"light_id": 2}, initial_state="Green")
+
+    def gen_action(instance, args, scheduler):
+        # Generate cross-instance event during action execution
+        scheduler.enqueue(Event(
+            event_type="Timer",
+            sender_class="TrafficLight", sender_id={"light_id": 1},
+            target_class="TrafficLight", target_id={"light_id": 2},
+        ))
+        return {}
+
+    custom_defs = {
+        "TrafficLight": {
+            **DOMAIN_MANIFEST["class_defs"]["TrafficLight"],
+            "transition_table": {
+                ("Idle", "TurnOn"): {"next_state": "Green", "action_fn": gen_action, "guard_fn": None},
+                ("Green", "Timer"): {"next_state": "Yellow", "action_fn": _noop_action, "guard_fn": None},
+            },
+        }
+    }
+    sched, reg, _ = _make_scheduler(class_defs=custom_defs)
+    reg.create_sync("TrafficLight", {"light_id": 1}, initial_state="Idle")
+    reg.create_sync("TrafficLight", {"light_id": 2}, initial_state="Green")
+
+    sched.enqueue(Event(
+        event_type="TurnOn",
+        sender_class="TrafficLight", sender_id={"light_id": 1},
+        target_class="TrafficLight", target_id={"light_id": 1},
+    ))
+
+    steps = list(sched.execute())
+    # Find ActionExecuted and the subsequent TransitionFired for instance 2
+    types = [type(s).__name__ for s in steps]
+    # The first transition (light 1) must complete before the second event fires
+    first_action = types.index("ActionExecuted")
+    first_transition = types.index("TransitionFired")
+    # Light 2's transition must come after light 1's transition
+    light2_transitions = [
+        i for i, s in enumerate(steps)
+        if isinstance(s, TransitionFired) and s.instance_id == {"light_id": 2}
+    ]
+    assert light2_transitions
+    assert light2_transitions[0] > first_transition
+    assert first_action < first_transition
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-04")
 def test_polymorphic_dispatch():
-    pass
+    """SC-05 / D-20: event to supertype routes to subtype state machine."""
+    class_defs = {
+        "Animal": {
+            "name": "Animal", "is_abstract": True,
+            "identifier_attrs": ["aid"],
+            "attributes": {"aid": "int"},
+            "initial_state": None, "final_states": [],
+            "transition_table": {},
+            "supertype": None, "subtypes": ["Dog"],
+        },
+        "Dog": {
+            "name": "Dog", "is_abstract": False,
+            "identifier_attrs": ["aid"],
+            "attributes": {"aid": "int"},
+            "initial_state": "Quiet", "final_states": [],
+            "transition_table": {
+                ("Quiet", "Poke"): {"next_state": "Barking", "action_fn": _noop_action, "guard_fn": None},
+            },
+            "supertype": "Animal", "subtypes": [],
+        },
+    }
+    generalizations = {"Animal": ["Dog"]}
+    sched, reg, _ = _make_scheduler(class_defs=class_defs, generalizations=generalizations)
+    reg.create_sync("Dog", {"aid": 1}, initial_state="Quiet")
+
+    # Send the event to the supertype
+    sched.enqueue(Event(
+        event_type="Poke",
+        sender_class="Dog", sender_id={"aid": 99},
+        target_class="Animal", target_id={"aid": 1},
+    ))
+    steps = list(sched.execute())
+    transitions = [s for s in steps if isinstance(s, TransitionFired)]
+    assert len(transitions) == 1
+    assert transitions[0].class_name == "Dog"
+    assert transitions[0].to_state == "Barking"
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-04")
 def test_cant_happen_error_microstep():
-    pass
+    """SC-06 / D-21: missing transition cell yields ErrorMicroStep."""
+    sched, reg, _ = _make_scheduler()
+    reg.create_sync("TrafficLight", {"light_id": 1}, initial_state="Idle")
+    sched.enqueue(Event(
+        event_type="Timer",  # not in (Idle, Timer)
+        sender_class="TrafficLight", sender_id={"light_id": 99},
+        target_class="TrafficLight", target_id={"light_id": 1},
+    ))
+    steps = list(sched.execute())
+    errors = [s for s in steps if isinstance(s, ErrorMicroStep)]
+    assert len(errors) == 1
+    assert errors[0].error_kind == "cant_happen"
+    assert not [s for s in steps if isinstance(s, TransitionFired)]
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-04")
 def test_event_ignored_silent():
-    pass
+    """D-21: event-ignored cell consumes the event without TransitionFired."""
+    custom_defs = {
+        "TrafficLight": {
+            **DOMAIN_MANIFEST["class_defs"]["TrafficLight"],
+            "transition_table": {
+                ("Idle", "Ping"): {"next_state": None, "action_fn": None, "guard_fn": None},
+            },
+        }
+    }
+    sched, reg, _ = _make_scheduler(class_defs=custom_defs)
+    reg.create_sync("TrafficLight", {"light_id": 1}, initial_state="Idle")
+    sched.enqueue(Event(
+        event_type="Ping",
+        sender_class="TrafficLight", sender_id={"light_id": 99},
+        target_class="TrafficLight", target_id={"light_id": 1},
+    ))
+    steps = list(sched.execute())
+    assert not [s for s in steps if isinstance(s, TransitionFired)]
+    assert not [s for s in steps if isinstance(s, ErrorMicroStep)]
+    received = [s for s in steps if isinstance(s, EventReceived)]
+    assert len(received) == 1
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-04")
 def test_final_state_async_deletion():
-    pass
+    """SC-07 / D-23-24: reaching a final state triggers async deletion."""
+    sched, reg, _ = _make_scheduler()
+    reg.create_sync("Controller", {"ctrl_id": 1}, initial_state="Running")
+    sched.enqueue(Event(
+        event_type="Stop",
+        sender_class="Controller", sender_id={"ctrl_id": 1},
+        target_class="Controller", target_id={"ctrl_id": 1},
+    ))
+    steps = list(sched.execute())
+    deleted = [s for s in steps if isinstance(s, InstanceDeleted)]
+    assert len(deleted) == 1
+    assert deleted[0].mode == "async"
+    assert deleted[0].instance_id == {"ctrl_id": 1}
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-04")
 def test_cancel_delayed_event():
-    pass
+    """SC-03 / D-25: cancel removes a matching delayed event."""
+    sched, reg, clock = _make_scheduler()
+    reg.create_sync("TrafficLight", {"light_id": 1}, initial_state="Idle")
+    sched.enqueue(Event(
+        event_type="TurnOn",
+        sender_class="TrafficLight", sender_id={"light_id": 99},
+        target_class="TrafficLight", target_id={"light_id": 1},
+        delay_ms=100.0,
+    ))
+    cancelled_steps = sched.cancel(
+        "TurnOn", "TrafficLight", {"light_id": 99},
+        "TrafficLight", {"light_id": 1},
+    )
+    assert len(cancelled_steps) == 1
+    assert isinstance(cancelled_steps[0], EventCancelled)
+
+    clock.advance(500)
+    steps = list(sched.execute())
+    assert not [s for s in steps if isinstance(s, TransitionFired)]
+    assert not [s for s in steps if isinstance(s, EventDelayExpired)]
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-04")
 def test_at_most_one_delayed_per_triple():
-    pass
+    """D-14: posting a duplicate delayed (type, sender, target) replaces the first."""
+    sched, reg, clock = _make_scheduler()
+    reg.create_sync("TrafficLight", {"light_id": 1}, initial_state="Idle")
+    sched.enqueue(Event(
+        event_type="TurnOn",
+        sender_class="TrafficLight", sender_id={"light_id": 99},
+        target_class="TrafficLight", target_id={"light_id": 1},
+        delay_ms=100.0,
+    ))
+    sched.enqueue(Event(
+        event_type="TurnOn",
+        sender_class="TrafficLight", sender_id={"light_id": 99},
+        target_class="TrafficLight", target_id={"light_id": 1},
+        delay_ms=200.0,
+    ))
+    assert len(sched._delay) == 1
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-04")
 def test_creation_event_processing():
-    pass
+    """SC-03: __creation__ event sets initial_state."""
+    sched, reg, _ = _make_scheduler()
+    steps_create, evt = reg.create_async(
+        "TrafficLight", {"light_id": 5}, initial_state="Idle"
+    )
+    assert reg.get_state("TrafficLight", {"light_id": 5}) is None
+    sched.enqueue(evt)
+    list(sched.execute())
+    assert reg.get_state("TrafficLight", {"light_id": 5}) == "Idle"
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-04")
 def test_guard_false_skips_transition():
-    pass
+    """SC-03: guard returning False blocks the transition."""
+    def guard_false(instance, args):
+        return False
+
+    custom_defs = {
+        "TrafficLight": {
+            **DOMAIN_MANIFEST["class_defs"]["TrafficLight"],
+            "transition_table": {
+                ("Idle", "TurnOn"): {"next_state": "Green", "action_fn": _noop_action, "guard_fn": guard_false},
+            },
+        }
+    }
+    sched, reg, _ = _make_scheduler(class_defs=custom_defs)
+    reg.create_sync("TrafficLight", {"light_id": 1}, initial_state="Idle")
+    sched.enqueue(Event(
+        event_type="TurnOn",
+        sender_class="TrafficLight", sender_id={"light_id": 99},
+        target_class="TrafficLight", target_id={"light_id": 1},
+    ))
+    steps = list(sched.execute())
+    guards = [s for s in steps if isinstance(s, GuardEvaluated)]
+    assert len(guards) == 1
+    assert guards[0].result is False
+    assert not [s for s in steps if isinstance(s, TransitionFired)]
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-04")
 def test_event_to_nonexistent_instance():
-    pass
+    """D-28: event to a missing instance produces unknown_target ErrorMicroStep."""
+    sched, _, _ = _make_scheduler()
+    sched.enqueue(Event(
+        event_type="TurnOn",
+        sender_class="TrafficLight", sender_id={"light_id": 99},
+        target_class="TrafficLight", target_id={"light_id": 404},
+    ))
+    steps = list(sched.execute())
+    errors = [s for s in steps if isinstance(s, ErrorMicroStep)]
+    assert len(errors) == 1
+    assert errors[0].error_kind == "unknown_target"
 
 
 @pytest.mark.skip(reason="Implemented in plan 05.1-05")
