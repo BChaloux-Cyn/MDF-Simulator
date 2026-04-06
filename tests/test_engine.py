@@ -484,6 +484,39 @@ def test_all_microstep_types():
     pass
 
 
+def test_clock_basic():
+    from engine.clock import SimulationClock
+
+    clock = SimulationClock()
+    assert clock.now() == 0.0
+    clock.advance(100)
+    assert clock.now() == 100.0
+
+
+def test_clock_speed_multiplier():
+    from engine.clock import SimulationClock
+
+    clock = SimulationClock(speed_multiplier=2.0)
+    clock.advance(100)
+    assert clock.now() == 200.0
+
+
+def test_clock_pause_resume():
+    from engine.clock import SimulationClock
+
+    clock = SimulationClock()
+    clock.advance(50)
+    assert clock.now() == 50.0
+    clock.pause()
+    assert clock.paused is True
+    clock.advance(100)
+    assert clock.now() == 50.0
+    clock.resume()
+    assert clock.paused is False
+    clock.advance(100)
+    assert clock.now() == 150.0
+
+
 @pytest.mark.skip(reason="Implemented in plan 05.1-03")
 def test_bridge_mock_hit():
     pass
