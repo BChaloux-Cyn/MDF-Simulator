@@ -517,14 +517,38 @@ def test_clock_pause_resume():
     assert clock.now() == 150.0
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-03")
 def test_bridge_mock_hit():
-    pass
+    """SC-09: known bridge ops return mock value + BridgeCalled micro-step."""
+    from engine.bridge import BridgeMockRegistry
+
+    fixture = pathlib.Path(__file__).parent / "fixtures" / "bridge_mocks.yaml"
+    registry = BridgeMockRegistry.from_yaml(fixture)
+
+    value, step = registry.call("LogEvent", {})
+    assert value == "ok"
+    assert isinstance(step, BridgeCalled)
+    assert step.operation == "LogEvent"
+    assert step.args == {}
+    assert step.mock_return == "ok"
+
+    value2, step2 = registry.call("GetTimeOfDay", {"zone": "EST"})
+    assert value2 == "12:00"
+    assert step2.operation == "GetTimeOfDay"
+    assert step2.args == {"zone": "EST"}
+    assert step2.mock_return == "12:00"
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-03")
 def test_bridge_mock_miss_returns_none():
-    pass
+    """SC-09 / D-30: undefined bridge ops return None without error."""
+    from engine.bridge import BridgeMockRegistry
+
+    registry = BridgeMockRegistry(mocks={"LogEvent": "ok"})
+    value, step = registry.call("UnknownOp", {"x": 1})
+    assert value is None
+    assert isinstance(step, BridgeCalled)
+    assert step.operation == "UnknownOp"
+    assert step.args == {"x": 1}
+    assert step.mock_return is None
 
 
 @pytest.mark.skip(reason="Implemented in plan 05.1-05")
