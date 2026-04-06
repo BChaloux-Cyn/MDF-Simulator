@@ -743,9 +743,163 @@ def test_event_to_nonexistent_instance():
     assert errors[0].error_kind == "unknown_target"
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-05")
+from engine.ctx import SimulationContext, run_simulation
+
+
+def _all_microstep_manifest():
+    """Manifest tailored to exercise all 12 micro-step types in one run."""
+    def tl_turnon_action(instance, args, scheduler):
+        # bridge call (BridgeCalled), self-generate (GenerateDispatched)
+        ctx_ref = args.get("__ctx__")
+        if ctx_ref is not None:
+            ctx_ref.bridge("LogEvent", {"msg": "turning on"})
+            ctx_ref.generate(
+                "Timer",
+                "TrafficLight",
+                instance,
+                "TrafficLight",
+                instance,
+                args={},
+                delay_ms=50.0,
+            )
+        return {}
+
+    def guard_true(instance, args):
+        return True
+
+    return {
+        "class_defs": {
+            "TrafficLight": {
+                "name": "TrafficLight",
+                "is_abstract": False,
+                "identifier_attrs": ["light_id"],
+                "attributes": {"light_id": "int"},
+                "initial_state": "Idle",
+                "final_states": [],
+                "transition_table": {
+                    ("Idle", "TurnOn"): {
+                        "next_state": "Green",
+                        "action_fn": tl_turnon_action,
+                        "guard_fn": guard_true,
+                    },
+                    ("Green", "Timer"): {
+                        "next_state": "Yellow",
+                        "action_fn": _noop_action,
+                        "guard_fn": None,
+                    },
+                },
+                "supertype": None,
+                "subtypes": [],
+            },
+            "Controller": {
+                "name": "Controller",
+                "is_abstract": False,
+                "identifier_attrs": ["ctrl_id"],
+                "attributes": {"ctrl_id": "int"},
+                "initial_state": "Off",
+                "final_states": ["Shutdown"],
+                "transition_table": {
+                    ("Off", "Stop"): {
+                        "next_state": "Shutdown",
+                        "action_fn": _noop_action,
+                        "guard_fn": None,
+                    },
+                },
+                "supertype": None,
+                "subtypes": [],
+            },
+        },
+        "associations": {
+            "R1": {
+                "rel_id": "R1",
+                "class_a": "Controller",
+                "class_b": "TrafficLight",
+                "mult_a_to_b": "M",
+                "mult_b_to_a": "1",
+            },
+        },
+        "generalizations": {},
+    }
+
+
 def test_all_microstep_types():
-    pass
+    """SC-08: a single run produces all 12 micro-step types."""
+    manifest = _all_microstep_manifest()
+    ctx = SimulationContext(manifest, bridge_mocks=BRIDGE_MOCKS)
+    steps: list = []
+
+    # bridge_called via direct ctx.bridge invocation (also exercised in action)
+    _val, brsteps = ctx.bridge("LogEvent", {"phase": "init"})
+    steps += brsteps
+
+    # 1. instance_created (sync) x2
+    steps += ctx.create_sync("TrafficLight", {"light_id": 1}, "Idle")
+    steps += ctx.create_sync("Controller", {"ctrl_id": 1}, "Off")
+    # relate
+    steps += ctx.relate("R1", "Controller", {"ctrl_id": 1}, "TrafficLight", {"light_id": 1})
+
+    # Wire ctx into action via args; the action will issue bridge_called +
+    # generate_dispatched (delayed -> event_delayed) during run-to-completion.
+    steps += ctx.generate(
+        "TurnOn",
+        "TrafficLight",
+        {"light_id": 1},
+        "TrafficLight",
+        {"light_id": 1},
+        args={"__ctx__": ctx},
+    )
+
+    # Schedule a separate delayed event we will cancel
+    steps += ctx.generate(
+        "Timer",
+        "TrafficLight",
+        {"light_id": 99},
+        "TrafficLight",
+        {"light_id": 1},
+        delay_ms=10000.0,
+    )
+    steps += ctx.cancel(
+        "Timer",
+        "TrafficLight",
+        {"light_id": 99},
+        "TrafficLight",
+        {"light_id": 1},
+    )
+
+    # Run; the TurnOn action enqueues a delayed self-Timer at 50ms.
+    steps += list(ctx.execute())
+
+    # Advance clock so the action-scheduled Timer expires.
+    ctx.clock.advance(100)
+    steps += list(ctx.execute())
+
+    # Drive Controller to its final state -> instance_deleted (async)
+    steps += ctx.generate(
+        "Stop",
+        "Controller",
+        {"ctrl_id": 1},
+        "Controller",
+        {"ctrl_id": 1},
+    )
+    steps += list(ctx.execute())
+
+    seen = {getattr(s, "type", None) for s in steps}
+    expected = {
+        "scheduler_selected",
+        "event_received",
+        "guard_evaluated",
+        "transition_fired",
+        "action_executed",
+        "generate_dispatched",
+        "event_delayed",
+        "event_delay_expired",
+        "event_cancelled",
+        "instance_created",
+        "instance_deleted",
+        "bridge_called",
+    }
+    missing = expected - seen
+    assert missing == set(), f"missing micro-step types: {missing}"
 
 
 def test_clock_basic():
@@ -815,9 +969,43 @@ def test_bridge_mock_miss_returns_none():
     assert step.mock_return is None
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-05")
 def test_determinism_identical_streams():
-    pass
+    """SC-10 / D-17: two identical runs produce element-wise identical streams."""
+    scenario = {
+        "instances": [
+            {"class": "TrafficLight", "identifier": {"light_id": 1}, "initial_state": "Idle", "attrs": {}},
+            {"class": "TrafficLight", "identifier": {"light_id": 2}, "initial_state": "Green"},
+            {"class": "Controller", "identifier": {"ctrl_id": 1}, "initial_state": "Off"},
+        ],
+        "events": [
+            {"class": "TrafficLight", "instance": {"light_id": 1}, "event": "TurnOn", "args": {}},
+            {"class": "TrafficLight", "instance": {"light_id": 2}, "event": "Timer", "args": {}},
+            {"class": "Controller", "instance": {"ctrl_id": 1}, "event": "Start", "args": {}},
+        ],
+    }
+    # Add Start transition for Controller
+    manifest = {
+        "class_defs": {
+            **DOMAIN_MANIFEST["class_defs"],
+            "Controller": {
+                **DOMAIN_MANIFEST["class_defs"]["Controller"],
+                "transition_table": {
+                    ("Off", "Start"): {"next_state": "Running", "action_fn": _noop_action, "guard_fn": None},
+                    ("Running", "Stop"): {"next_state": "Shutdown", "action_fn": _noop_action, "guard_fn": None},
+                },
+            },
+        },
+        "associations": DOMAIN_MANIFEST["associations"],
+        "generalizations": DOMAIN_MANIFEST["generalizations"],
+    }
+
+    run_a = list(run_simulation(manifest, scenario=scenario, bridge_mocks=BRIDGE_MOCKS))
+    run_b = list(run_simulation(manifest, scenario=scenario, bridge_mocks=BRIDGE_MOCKS))
+
+    assert len(run_a) == len(run_b)
+    for sa, sb in zip(run_a, run_b):
+        assert type(sa) is type(sb)
+        assert sa == sb
 
 
 @pytest.mark.skip(reason="Implemented in plan 05.1-05")
