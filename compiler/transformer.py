@@ -553,6 +553,12 @@ class ActionTransformer(Transformer):
             result += f"\n{else_part}"
         return result
 
+    def else_clause(self, children: list[Any]) -> str:
+        # "else" "{" statement* "}" — returns sentinel for if_stmt to detect
+        body_stmts = [str(c) for c in children]
+        body = _join_stmts(body_stmts) or "pass"
+        return f"__else__:{body}"
+
     def else_if_chain(self, children: list[Any]) -> str:
         return "\n".join(str(c) for c in children)
 

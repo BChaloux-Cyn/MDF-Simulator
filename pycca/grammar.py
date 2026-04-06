@@ -136,11 +136,11 @@ PYCCA_GRAMMAR = r"""
 
     // --- Select from instances ---
     // select any/many var from instances of Class [where expr];
-    select_stmt: "select" ("any"|"many") NAME "from" "instances" "of" NAME ("where" expr)? ";"
+    select_stmt: "select" CARDINALITY NAME "from" "instances" "of" NAME ("where" expr)? ";"
 
     // --- Select related by ---
     // select any/many var related by traversal_chain;  (Gap 3: multi-hop support)
-    select_related_stmt: "select" ("any"|"many") NAME "related" "by" traversal_chain ";"
+    select_related_stmt: "select" CARDINALITY NAME "related" "by" traversal_chain ";"
 
     // --- Relate / Unrelate ---
     // relate var1 to var2 across RN;
@@ -150,7 +150,8 @@ PYCCA_GRAMMAR = r"""
 
     // --- If / else if / else ---
     // if (expr) { stmts } [else if (expr) { stmts }]* [else { stmts }]
-    if_stmt: "if" "(" expr ")" "{" statement* "}" else_if_chain? ("else" "{" statement* "}")?
+    if_stmt: "if" "(" expr ")" "{" statement* "}" else_if_chain? else_clause?
+    else_clause: "else" "{" statement* "}"
     else_if_chain: else_if_clause+
     else_if_clause: "else" "if" "(" expr ")" "{" statement* "}"
 
@@ -180,8 +181,8 @@ PYCCA_GRAMMAR = r"""
     // --- Select as expression (for typed_var_decl RHS) ---
     // select many from instances of Class [where lambda_expr]
     // select many related by NAME->NAME [where lambda_expr]
-    select_expr: "select" ("any"|"many") "from" "instances" "of" NAME ("where" lambda_expr)?
-               | "select" ("any"|"many") "related" "by" traversal_chain ("where" lambda_expr)?
+    select_expr: "select" CARDINALITY "from" "instances" "of" NAME ("where" lambda_expr)?
+               | "select" CARDINALITY "related" "by" traversal_chain ("where" lambda_expr)?
 
     // --- Traversal chain: NAME->NAME (->NAME)* ---
     traversal_chain: NAME "->" NAME ("->" NAME)*
@@ -197,6 +198,7 @@ PYCCA_GRAMMAR = r"""
     // Matches Name<T,U,...> or plain Name — used only in lambda return position
     // Priority 3: wins over GENERIC_TYPE (2), NAME (0) at same position
     LAMBDA_RETURN_TYPE.3: /[a-zA-Z_][a-zA-Z0-9_]*(?:<[a-zA-Z_][a-zA-Z0-9_,\s]*>)?/
+    CARDINALITY: "any" | "many"
     capture_list: capture_item ("," capture_item)*
     capture_item: NAME "." NAME
                 | NAME
