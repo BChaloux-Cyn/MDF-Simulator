@@ -19,11 +19,13 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Validation Tool** - Implement validate_model with graph reachability, structural checks, and pycca pre-parser (completed 2026-03-09)
 - [x] **Phase 4: Draw.io Tools** - Implement render_to_drawio, validate_drawio, and sync_from_drawio against the locked canonical schema (completed 2026-03-11)
 - [ ] **Phase 5: Simulation Engine** (umbrella — compiler approach, not interpreter; see 05-CONTEXT.md)
-  - [ ] **Phase 5.1: Runtime Framework** - Instance registry, relationship link store, three-queue scheduler, ctx runtime, micro-step stream, bridge mocks, simulation clock
+  - [x] **Phase 5.1: Runtime Framework** - Instance registry, relationship link store, three-queue scheduler, ctx runtime, micro-step stream, bridge mocks, simulation clock (completed 2026-04-06)
+  - [ ] **Phase 5.1.1: Runtime Instrumentation** (INSERTED) - EventCompleted+duration_ns, opt-in LongEventWarning, SenescentEntered/SenescentExited, senescent_states manifest field
   - [ ] **Phase 5.2: Model Compiler** - Lark Transformer (action bodies + guards → Python), type system mapping, transition table generation, opaque zip bundle packaging
   - [ ] **Phase 5.3: Simulation Runner + Verification** - Bundle loader, scenario input, elevator model end-to-end verification, MCP tool wrappers (simulate_domain + simulate_class)
   - [ ] **Phase 5.4: GDB Command Language + CLI** - Command set definition, state inspection, step/continue/reset, clock control, attach to running simulation
   - [ ] **Phase 5.5: Breakpoint Injection** - Action-line breakpoints, property watchpoints, event breakpoints, hook injection into generated code templates
+  - [ ] **Phase 5.6: Metrics Gatherer** (INSERTED) - Pure-library micro-step consumer; structural coverage, lifecycle, queue, timing, senescence dwell, guard outcomes, bridge counts, determinism hash
 - [ ] **Phase 6: CLI Test Harness** - YAML test script schema, engine runner, mid-sequence and final-state assertion evaluation, mdf-sim-test entry point
 - [ ] **Phase 7: GUI Debugger** - Dear PyGui desktop app with domain/class canvas, instance registry, queue inspector, log panel (consumes GDB commands from 5.4)
 - [ ] **Phase 8: Test Suite** - Build pytest suite covering all tools, engine unit tests, and round-trip integration test
@@ -163,6 +165,22 @@ Plans:
 - [ ] 05.1-04-PLAN.md — Three-queue scheduler with dispatch, run-to-completion, polymorphic routing (SC-03..SC-07)
 - [ ] 05.1-05-PLAN.md — SimulationContext (ctx) + run_simulation generator + integration tests (SC-08, SC-10, SC-11)
 
+### Phase 5.1.1: Runtime Instrumentation (INSERTED)
+**Goal**: Add runtime observability micro-steps to the engine: `EventCompleted` with `duration_ns`, opt-in `LongEventWarning` threshold, `SenescentEntered`/`SenescentExited`, plus a `senescent_states: set[str]` field on `ClassManifest`. Pure additive runtime work — no compiler involvement, no schema changes, backward compatible with all 42 existing engine tests.
+**Depends on**: Phase 5.1
+**Requirements**: MCP-08 (partial — runtime instrumentation)
+**Success Criteria** (what must be TRUE):
+  1. `EventCompleted(target, name, duration_ns)` micro-step yielded after every event with `duration_ns` measured via `time.perf_counter_ns()` from dispatch to completion
+  2. `ctx.event_duration_warn_ns` is opt-in (default `None`); when set and exceeded, a `LongEventWarning(target, name, duration_ns, threshold_ns)` micro-step is yielded immediately after `EventCompleted`
+  3. `SenescentEntered(instance, state, settled_at)` micro-step yielded after `StateEntered` whenever the new state is in `ClassManifest.senescent_states` for that instance's class
+  4. `SenescentExited(instance, state, exited_at, by_event)` micro-step yielded before `EventDispatched` whenever the source state is in the senescent set, naming the waking event
+  5. `senescent_states: set[str]` field added to `ClassManifest` TypedDict in `engine/manifest.py`, defaulting to empty set for backward compatibility
+  6. Reaching a final state still triggers async deletion and does NOT emit `SenescentEntered` (final-state detection wins)
+  7. No double-emission: `SenescentEntered` is not re-emitted if the instance was already senescent (per-instance "currently senescent" tracking in the scheduler)
+  8. All 42 existing engine tests still pass without modification (additive only)
+  9. New tests cover all four micro-steps, the threshold warning, the no-double-emit rule, and the final-state-wins rule
+**Plans**: TBD
+
 ### Phase 5.2: Model Compiler
 **Goal**: Lark Transformer compiles pycca action bodies and guards into Python source. Compiler generates one file per class (transition tables + action functions), a domain manifest, and packages everything into an opaque self-contained zip bundle.
 **Depends on**: Phase 5.1
@@ -211,6 +229,24 @@ Plans:
   3. Event breakpoints (instance created/deleted, event generated/received, bridge called) halt on the matching micro-step
   4. Breakpoint manager in runtime supports register, remove, enable/disable, and hit notification
   5. All breakpoint types verified working on elevator model via the GDB CLI
+**Plans**: TBD
+
+### Phase 5.6: Metrics Gatherer (INSERTED)
+**Goal**: Pure-library metrics collector that consumes the micro-step stream and produces a structured coverage + observability report. No engine modifications. Pairs with Phase 5.1.1 (timing + senescence) and provides Phase 6's CLI test harness with a `--coverage-min` gate.
+**Depends on**: Phase 5.1.1, Phase 5.5
+**Requirements**: MCP-08 (partial — verification metrics)
+**Success Criteria** (what must be TRUE):
+  1. `MetricsCollector(manifest).observe(step)` accepts every micro-step type without error and aggregates state
+  2. **Structural coverage**: state coverage, transition coverage, event coverage, action coverage — each reported as ratio + uncovered list against the declared sets in the manifest
+  3. **Lifecycle counts**: per-class instances created, deleted, peak live count, currently live
+  4. **Queue dynamics**: events generated per type, max depth observed in standard / priority / delay queues, total dispatched
+  5. **Timing histograms**: per `(class, state, event)` event duration distribution with p50/p95/p99, total wall time, long-event count (consumes `EventCompleted` from Phase 5.1.1)
+  6. **Senescence dwell**: per-instance dwell time in each senescent state, plus senescence cycle count (consumes `SenescentEntered`/`SenescentExited` from Phase 5.1.1)
+  7. **Guard outcomes**: per-guard True/False ratios and a list of guards never evaluated
+  8. **Bridge usage**: per-bridge call counts, mock hit/miss counts
+  9. **Determinism hash**: canonicalized digest of all metrics; two identical runs must produce identical hashes
+  10. `report.to_json()` produces deterministic, sorted JSON suitable for diffing across runs and CI gates
+  11. Tests cover each metric category against hand-built micro-step streams plus an end-to-end integration test against an Phase 5.2 elevator bundle once available
 **Plans**: TBD
 
 ### Phase 6: CLI Test Harness

@@ -131,6 +131,8 @@ Recent decisions affecting current work:
 ### Roadmap Evolution
 
 - Phase 04.1 inserted after Phase 4: Model Development and Compiler Testing (URGENT)
+- Phase 5.1.1 inserted after Phase 5.1: Runtime Instrumentation (EventCompleted+duration_ns, LongEventWarning, SenescentEntered/Exited, senescent_states manifest field)
+- Phase 5.6 inserted between Phase 5.5 and Phase 6: Metrics Gatherer (model coverage + lifecycle + queue + timing + senescence dwell + guard outcomes + bridge counts + determinism hash)
 
 ### Pending Todos
 
