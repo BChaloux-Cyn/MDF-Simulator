@@ -199,7 +199,12 @@ Plans:
   6. Opaque zip bundle contains generated code + copied framework — self-contained and portable
   7. Elevator model compiles to a bundle without errors
   8. Same model input produces identical bundle output (deterministic)
-**Plans**: TBD
+**Plans**: 5 plans
+- [ ] 05.2-01-PLAN.md — Wave 0: install black, fix 4 grammar gaps, RED test stubs (Wave 0)
+- [ ] 05.2-02-PLAN.md — compiler/ scaffold + ActionTransformer + GuardTransformer (Wave 1)
+- [ ] 05.2-03-PLAN.md — Loader + manifest builder + senescent classifier (Wave 2)
+- [ ] 05.2-04-PLAN.md — Codegen + deterministic .mdfbundle packager + compile_model wire-up (Wave 3)
+- [ ] 05.2-05-PLAN.md — Elevator end-to-end acceptance + human readability check (Wave 4)
 
 ### Phase 5.3: Simulation Runner + Verification
 **Goal**: Load compiled bundles, execute simulations, verify the elevator model produces correct micro-step output. Expose as `simulate_domain()` and `simulate_class()` MCP tool wrappers.

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: executing
-stopped_at: Phase 5 and 5.1 context gathered (compiler architecture)
-last_updated: "2026-04-06T15:50:48.009Z"
-last_activity: 2026-04-06 -- Phase 05.1 execution started
+stopped_at: Phase 05.1.1 complete — runtime instrumentation verified
+last_updated: "2026-04-06T20:59:19.715Z"
+last_activity: 2026-04-06 -- Phase 5.2 planning complete
 progress:
-  total_phases: 15
-  completed_phases: 5
-  total_plans: 25
-  completed_plans: 20
-  percent: 80
+  total_phases: 17
+  completed_phases: 7
+  total_plans: 33
+  completed_plans: 28
+  percent: 85
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** Engineers can verify the full structural design before typing `execute-phase` — no guessing, no mid-execution surprises.
-**Current focus:** Phase 05.1 — runtime-framework
+**Current focus:** Phase 05.1.1 — runtime-instrumentation (COMPLETE)
 
 ## Current Position
 
-Phase: 05.1 (runtime-framework) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 05.1
-Last activity: 2026-04-06 -- Phase 05.1 execution started
+Phase: 05.1.1 (runtime-instrumentation) — COMPLETE
+Plan: 3 of 3 (all plans complete)
+Status: Ready to execute
+Last activity: 2026-04-06 -- Phase 5.2 planning complete
 
 Progress: [██████████] 100%
 
@@ -72,6 +72,9 @@ Progress: [██████████] 100%
 | Phase 04.1-model-development-and-compiler-testing P04 | 3 | 2 tasks | 3 files |
 | Phase 04.1-model-development-and-compiler-testing P05 | 3 | 2 tasks | 4 files |
 | Phase 04.1-model-development-and-compiler-testing P06 | 15 | 2 tasks | 9 files |
+| Phase 05.1.1-runtime-instrumentation P01 | 3 | 2 tasks | 5 files |
+| Phase 05.1.1-runtime-instrumentation P02 | 8 | 2 tasks | 3 files |
+| Phase 05.1.1-runtime-instrumentation P03 | 10 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -127,6 +130,12 @@ Recent decisions affecting current work:
 - [Draw.io routing improvement 2026-03-18]: S_GAP raised from 10 to 100 px in `_build_state_diagram_xml` — 10 px allowed Moving_Up to be placed directly adjacent to At_Floor, cluttering routing corridors; 100 px enforced by both Kamada-Kawai ideal weights and `_remove_overlaps`
 - [Draw.io routing improvement 2026-03-18]: `background="#FFFFFF"` added to mxGraphModel in both diagram builders — draw.io defaults to transparent/grey; explicit white matches expected visual output
 - [Draw.io routing improvement 2026-03-18]: New geometry helpers `_anchor_point`, `_segments_intersect`, `_route_path` extracted as independently testable units; `_assign_edge_ports` and `_route_edges_around_boxes` kept in place (still tested directly)
+- [Phase 05.1.1-runtime-instrumentation]: SenescentEntered uses _ikey_val local variable (not shadowing outer ikey) inside if-block to avoid confusion with SenescentExited's ikey
+- [Phase 05.1.1-runtime-instrumentation]: test_senescent_exited_on_wakeup uses park->Idle->wake pattern — create_sync bypasses _process_creation so initial-state SenescentEntered never fires for sync-created instances
+- [Phase 05.1.1-runtime-instrumentation]: test_initial_state_senescence uses SimulationContext.create_async directly — only async creation dispatches __creation__ event through scheduler
+- [Phase 05.1.1-runtime-instrumentation]: test_determinism_identical_streams relaxed — EventCompleted.duration_ns is real wall-clock nanoseconds and non-deterministic; test now checks target, name, duration_ns > 0 only
+- [Phase 05.1.1-runtime-instrumentation]: ctx.execute() wraps scheduler via for-loop (not yield-from) — only for-loop can inspect each yielded value and conditionally emit LongEventWarning after EventCompleted
+- [Phase 05.1.1-runtime-instrumentation]: threshold_ns=1 in test_long_event_warning_fires — any real Python dispatch exceeds 1ns, eliminates timing sensitivity from test
 
 ### Roadmap Evolution
 
@@ -144,7 +153,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-05T18:50:26.301Z
-Stopped at: Phase 5 and 5.1 context gathered (compiler architecture)
-Resume file: .planning/phases/05.1-runtime-framework/05.1-CONTEXT.md
-Next action: Plan Phase 04.2 (Body of Knowledge) or Phase 5 (Simulation Engine) — run /gsd:progress to route
+Last session: 2026-04-06T18:00:00.000Z
+Stopped at: Phase 05.1.1 complete — runtime instrumentation verified
+Resume file: .planning/phases/05.1.1-runtime-instrumentation/05.1.1-VERIFICATION.md
+Next action: Run /gsd:progress to route to next phase (Phase 5.2 Model Compiler or Phase 04.2 Body of Knowledge)
