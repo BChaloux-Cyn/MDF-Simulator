@@ -90,7 +90,28 @@ def test_event_completed_emitted():
 
 
 def test_no_long_event_warning_by_default():
-    pytest.fail("Phase 5.1.1 plan 02/03 — not yet implemented")
+    manifest = _make_manifest({
+        "Widget": _widget_class(
+            initial_state="Active",
+            transition_table={
+                ("Active", "go"): {"next_state": "Idle", "action_fn": _noop, "guard_fn": None},
+            },
+        )
+    })
+    scenario = {
+        "instances": [{"class": "Widget", "identifier": {"wid": 1}, "initial_state": "Active"}],
+        "events": [{"class": "Widget", "instance": {"wid": 1}, "event": "go", "args": {}}],
+    }
+    steps = list(run_simulation(manifest, scenario))
+
+    # Sanity: at least one EventCompleted fired (wrapper is active)
+    assert any(isinstance(s, EventCompleted) for s in steps), (
+        "Expected at least one EventCompleted in the trace"
+    )
+    # No LongEventWarning when event_duration_warn_ns is None (default)
+    assert not any(isinstance(s, LongEventWarning) for s in steps), (
+        "LongEventWarning must not appear when threshold is None"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +120,55 @@ def test_no_long_event_warning_by_default():
 
 
 def test_long_event_warning_fires():
-    pytest.fail("Phase 5.1.1 plan 02/03 — not yet implemented")
+    manifest = _make_manifest({
+        "Widget": _widget_class(
+            initial_state="Active",
+            transition_table={
+                ("Active", "go"): {"next_state": "Idle", "action_fn": _noop, "guard_fn": None},
+            },
+        )
+    })
+    ctx = SimulationContext(manifest)
+    ctx.event_duration_warn_ns = 1  # 1 ns — any real dispatch will exceed this
+    ctx.create_sync("Widget", {"wid": 1}, "Active")
+    ctx.generate(
+        event_type="go",
+        sender_class="Widget",
+        sender_id={"wid": 1},
+        target_class="Widget",
+        target_id={"wid": 1},
+    )
+    steps = list(ctx.execute())
+
+    warnings = [s for s in steps if isinstance(s, LongEventWarning)]
+    completes = [s for s in steps if isinstance(s, EventCompleted)]
+
+    assert len(completes) >= 1, "At least one EventCompleted must appear"
+    assert len(warnings) >= 1, "LongEventWarning must fire when threshold=1 ns is exceeded"
+
+    # Each warning must have matching threshold and duration > threshold
+    for w in warnings:
+        assert w.threshold_ns == 1, f"threshold_ns must be 1, got {w.threshold_ns}"
+        assert w.duration_ns > 1, f"duration_ns must exceed threshold, got {w.duration_ns}"
+
+    # Adjacency check: each LongEventWarning's predecessor must be an EventCompleted
+    # with matching target, name, and duration_ns
+    for i, s in enumerate(steps):
+        if isinstance(s, LongEventWarning):
+            prev = steps[i - 1]
+            assert isinstance(prev, EventCompleted), (
+                f"Step before LongEventWarning at index {i} must be EventCompleted, "
+                f"got {type(prev).__name__}"
+            )
+            assert prev.target == s.target, (
+                f"LongEventWarning.target '{s.target}' must match EventCompleted.target '{prev.target}'"
+            )
+            assert prev.name == s.name, (
+                f"LongEventWarning.name '{s.name}' must match EventCompleted.name '{prev.name}'"
+            )
+            assert prev.duration_ns == s.duration_ns, (
+                f"LongEventWarning.duration_ns {s.duration_ns} must match EventCompleted.duration_ns {prev.duration_ns}"
+            )
 
 
 # ---------------------------------------------------------------------------
