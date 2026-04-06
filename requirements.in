@@ -2,6 +2,7 @@
 # Compile to requirements.txt with: pip-compile requirements.in
 # Requires Python >= 3.11
 
+black>=26.0
 defusedxml>=0.7.1
 igraph>=1.0.0
 lark>=1.1

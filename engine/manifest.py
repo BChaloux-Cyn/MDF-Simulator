@@ -9,7 +9,7 @@ that engine/* stays free of schema/, tools/, and pycca/ imports per D-37.
 """
 from __future__ import annotations
 
-from typing import Any, Callable, NotRequired, TypedDict
+from typing import Any, Callable, TypedDict
 
 
 class TransitionEntry(TypedDict):
@@ -28,7 +28,6 @@ class ClassManifest(TypedDict):
     transition_table: dict[tuple[str, str], TransitionEntry]
     supertype: str | None
     subtypes: list[str]
-    senescent_states: NotRequired[set[str]]
 
 
 class AssociationManifest(TypedDict):

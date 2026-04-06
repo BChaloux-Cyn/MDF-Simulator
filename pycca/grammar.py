@@ -103,8 +103,12 @@ PYCCA_GRAMMAR = r"""
     param_list: NAME ":" expr ("," NAME ":" expr)*
 
     // --- Bridge call ---
-    // Domain::Operation[args];
-    bridge_call: NAME "::" NAME "[" arglist? "]" ";"
+    // Domain::Operation[args];           (positional)
+    // Domain::Operation[key: val, ...];  (named)
+    named_arg_list: NAME ":" expr ("," NAME ":" expr)*
+    bridge_call: NAME "::" NAME "[" named_arg_list "]" ";"
+               | NAME "::" NAME "[" arglist "]" ";"
+               | NAME "::" NAME "[" "]" ";"
 
     // --- Create ---
     // create var of Class;
@@ -123,8 +127,8 @@ PYCCA_GRAMMAR = r"""
     select_stmt: "select" ("any"|"many") NAME "from" "instances" "of" NAME ("where" expr)? ";"
 
     // --- Select related by ---
-    // select any/many var related by NAME->NAME;
-    select_related_stmt: "select" ("any"|"many") NAME "related" "by" NAME "->" NAME ";"
+    // select any/many var related by NAME->NAME (->NAME)*;
+    select_related_stmt: "select" ("any"|"many") NAME "related" "by" traversal_chain ";"
 
     // --- Relate / Unrelate ---
     // relate var1 to var2 across RN;
@@ -173,8 +177,11 @@ PYCCA_GRAMMAR = r"""
     // --- Lambda expressions ---
     // [] |a: T, b: T| -> RetType { stmts }
     // [capture1, capture2] |param: T| -> RetType { stmts }
-    lambda_expr: "[" capture_list? "]" PIPE lambda_params PIPE "->" NAME "{" statement+ "}"
-    capture_list: NAME ("," NAME)*
+    // [self.attr, var] captures (Gap 2: allow dotted name in capture list)
+    // -> Set<T> return type (Gap 1: allow generic_type after ->)
+    lambda_expr: "[" capture_list? "]" PIPE lambda_params PIPE "->" type_expr "{" statement+ "}"
+    capture_item: NAME "." NAME | NAME
+    capture_list: capture_item ("," capture_item)*
     lambda_params: lambda_param ("," lambda_param)*
     lambda_param: NAME ":" NAME
     PIPE: "|"

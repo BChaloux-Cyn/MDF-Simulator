@@ -14,10 +14,6 @@ from engine.microstep import (
     InstanceDeleted,
     BridgeCalled,
     ErrorMicroStep,
-    EventCompleted,
-    LongEventWarning,
-    SenescentEntered,
-    SenescentExited,
 )
 from engine.event import Event, make_instance_key
 from engine.manifest import (
@@ -59,10 +55,6 @@ __all__ = [
     "InstanceDeleted",
     "BridgeCalled",
     "ErrorMicroStep",
-    "EventCompleted",
-    "LongEventWarning",
-    "SenescentEntered",
-    "SenescentExited",
     "Event",
     "make_instance_key",
 ]
