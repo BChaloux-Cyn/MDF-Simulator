@@ -21,11 +21,12 @@ class TestCompilerImport:
         """from compiler import compile_model must succeed (Plan 05.2-02 Task 1)."""
         from compiler import compile_model  # noqa: F401
 
-    def test_compile_model_raises_not_implemented(self):
-        """compile_model placeholder raises NotImplementedError (Plan 05.2-02 Task 1)."""
+    def test_compile_model_raises_on_bad_root(self):
+        """compile_model raises CompilationFailed on a bad model root (Plan 05.2-04)."""
         from pathlib import Path
         from compiler import compile_model
-        with pytest.raises(NotImplementedError):
+        from compiler.error import CompilationFailed
+        with pytest.raises(CompilationFailed):
             compile_model(Path("."), Path("/tmp"))
 
     def test_compile_error_import(self):
