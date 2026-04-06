@@ -179,7 +179,12 @@ Plans:
   7. No double-emission: `SenescentEntered` is not re-emitted if the instance was already senescent (per-instance "currently senescent" tracking in the scheduler)
   8. All 42 existing engine tests still pass without modification (additive only)
   9. New tests cover all four micro-steps, the threshold warning, the no-double-emit rule, and the final-state-wins rule
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 05.1.1-01-PLAN.md — Types + manifest field + ctx attribute + 10 RED test stubs (Wave 1)
+- [ ] 05.1.1-02-PLAN.md — Scheduler instrumentation: timing + senescence emission + 8 tests (Wave 2)
+- [ ] 05.1.1-03-PLAN.md — ctx.execute wrapper for LongEventWarning + final 2 tests (Wave 3)
 
 ### Phase 5.2: Model Compiler
 **Goal**: Lark Transformer compiles pycca action bodies and guards into Python source. Compiler generates one file per class (transition tables + action functions), a domain manifest, and packages everything into an opaque self-contained zip bundle.
