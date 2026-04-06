@@ -1008,41 +1008,256 @@ def test_determinism_identical_streams():
         assert sa == sb
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-05")
+def _controller_with_start_manifest():
+    return {
+        "class_defs": {
+            **DOMAIN_MANIFEST["class_defs"],
+            "Controller": {
+                **DOMAIN_MANIFEST["class_defs"]["Controller"],
+                "transition_table": {
+                    ("Off", "Start"): {"next_state": "Running", "action_fn": _noop_action, "guard_fn": None},
+                    ("Running", "Stop"): {"next_state": "Shutdown", "action_fn": _noop_action, "guard_fn": None},
+                },
+            },
+        },
+        "associations": DOMAIN_MANIFEST["associations"],
+        "generalizations": DOMAIN_MANIFEST["generalizations"],
+    }
+
+
 def test_integration_full_lifecycle():
-    pass
+    manifest = _controller_with_start_manifest()
+    ctx = SimulationContext(manifest, bridge_mocks=BRIDGE_MOCKS)
+
+    create_steps = ctx.create_sync("Controller", {"ctrl_id": "c1"}, "Off")
+    assert any(isinstance(s, InstanceCreated) for s in create_steps)
+    ctx.create_sync("TrafficLight", {"light_id": "t1"}, "Idle")
+    ctx.relate("R1", "Controller", {"ctrl_id": "c1"}, "TrafficLight", {"light_id": "t1"})
+
+    ctx.generate("Start", "Controller", {"ctrl_id": "c1"}, "Controller", {"ctrl_id": "c1"})
+    steps1 = list(ctx.execute())
+    assert any(isinstance(s, SchedulerSelected) for s in steps1)
+    assert any(isinstance(s, EventReceived) for s in steps1)
+    assert any(isinstance(s, TransitionFired) and s.to_state == "Running" for s in steps1)
+
+    ctx.generate("Stop", "Controller", {"ctrl_id": "c1"}, "Controller", {"ctrl_id": "c1"})
+    steps2 = list(ctx.execute())
+    assert any(isinstance(s, TransitionFired) and s.to_state == "Shutdown" for s in steps2)
+    assert any(isinstance(s, InstanceDeleted) and s.mode == "async" for s in steps2)
+    assert ctx.registry.lookup("Controller", {"ctrl_id": "c1"}) is None
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-05")
 def test_integration_error_propagation():
-    pass
+    manifest = {
+        "class_defs": {
+            **DOMAIN_MANIFEST["class_defs"],
+            "Vehicle": {
+                "name": "Vehicle",
+                "is_abstract": True,
+                "identifier_attrs": ["vid"],
+                "attributes": {"vid": "int"},
+                "initial_state": None,
+                "final_states": [],
+                "transition_table": {},
+                "supertype": None,
+                "subtypes": [],
+            },
+        },
+        "associations": DOMAIN_MANIFEST["associations"],
+        "generalizations": DOMAIN_MANIFEST["generalizations"],
+    }
+    ctx = SimulationContext(manifest)
+    err_steps = ctx.create_sync("Vehicle", {"vid": 1}, "Init")
+    assert any(
+        isinstance(s, ErrorMicroStep) and s.error_kind == "abstract_instantiation"
+        for s in err_steps
+    )
+
+    ctx.generate(
+        "TurnOn",
+        "TrafficLight",
+        {"light_id": 1},
+        "TrafficLight",
+        {"light_id": 999},
+    )
+    steps = list(ctx.execute())
+    assert any(
+        isinstance(s, ErrorMicroStep) and s.error_kind == "unknown_target"
+        for s in steps
+    )
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-05")
 def test_integration_action_callback_wiring():
-    pass
+    captured: dict = {}
+
+    def turn_on_action(instance, args, scheduler):
+        ctx_ref = args["__ctx__"]
+        _v, br = ctx_ref.bridge("LogEvent", {"msg": "on"})
+        captured["bridge"] = br
+        light_key = {"light_id": instance["light_id"]}
+        gen_steps = ctx_ref.generate(
+            "Timer",
+            "TrafficLight",
+            light_key,
+            "TrafficLight",
+            light_key,
+        )
+        captured["gen"] = gen_steps
+        return {}
+
+    manifest = {
+        "class_defs": {
+            "TrafficLight": {
+                **DOMAIN_MANIFEST["class_defs"]["TrafficLight"],
+                "transition_table": {
+                    ("Idle", "TurnOn"): {"next_state": "Green", "action_fn": turn_on_action, "guard_fn": None},
+                    ("Green", "Timer"): {"next_state": "Yellow", "action_fn": _noop_action, "guard_fn": None},
+                },
+            },
+        },
+        "associations": {},
+        "generalizations": {},
+    }
+    ctx = SimulationContext(manifest, bridge_mocks=BRIDGE_MOCKS)
+    ctx.create_sync("TrafficLight", {"light_id": 1}, "Idle")
+    ctx.generate(
+        "TurnOn",
+        "TrafficLight",
+        {"light_id": 1},
+        "TrafficLight",
+        {"light_id": 1},
+        args={"__ctx__": ctx},
+    )
+    steps = list(ctx.execute())
+    types = [type(s).__name__ for s in steps]
+    # ActionExecuted should appear; GenerateDispatched is captured from action's
+    # enqueue return value (scheduler buffers but doesn't re-yield action returns).
+    assert "ActionExecuted" in types
+    assert any(isinstance(s, GenerateDispatched) for s in captured["gen"])
+    transitions = [s for s in steps if isinstance(s, TransitionFired)]
+    assert len(transitions) == 2  # Idle->Green, then Green->Yellow
+    assert transitions[0].to_state == "Green"
+    assert transitions[1].to_state == "Yellow"
+    assert "bridge" in captured  # bridge call happened inside action
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-05")
 def test_integration_delay_clock():
-    pass
+    ctx = SimulationContext(DOMAIN_MANIFEST, bridge_mocks=BRIDGE_MOCKS)
+    ctx.create_sync("TrafficLight", {"light_id": 1}, "Idle")
+    delayed = ctx.generate(
+        "TurnOn",
+        "TrafficLight",
+        {"light_id": 99},
+        "TrafficLight",
+        {"light_id": 1},
+        delay_ms=500.0,
+    )
+    assert any(isinstance(s, EventDelayed) for s in delayed)
+
+    pre = list(ctx.execute())
+    assert not [s for s in pre if isinstance(s, EventDelayExpired)]
+    assert not [s for s in pre if isinstance(s, TransitionFired)]
+
+    ctx.clock.advance(600)
+    post = list(ctx.execute())
+    assert any(isinstance(s, EventDelayExpired) for s in post)
+    assert any(isinstance(s, TransitionFired) for s in post)
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-05")
 def test_integration_select_any_many():
-    pass
+    ctx = SimulationContext(DOMAIN_MANIFEST)
+    for lid in ("t1", "t2", "t3"):
+        ctx.create_sync("TrafficLight", {"light_id": lid}, "Idle")
+
+    one = ctx.select_any("TrafficLight")
+    assert one is not None
+
+    many = ctx.select_many("TrafficLight")
+    assert len(many) == 3
+
+    filtered = ctx.select_many("TrafficLight", where=lambda i: i["light_id"] == "t2")
+    assert len(filtered) == 1
+    assert filtered[0]["light_id"] == "t2"
+
+    assert ctx.select_any("Controller") is None  # empty class
+    assert ctx.select_many("TrafficLight", where=lambda i: False) == []
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-05")
 def test_integration_load_scenario():
-    pass
+    manifest = _controller_with_start_manifest()
+    scenario = {
+        "instances": [
+            {"class": "TrafficLight", "identifier": {"light_id": "t1"}, "initial_state": "Idle", "attrs": {}},
+            {"class": "Controller", "identifier": {"ctrl_id": "c1"}, "initial_state": "Off", "attrs": {}},
+        ],
+        "events": [
+            {"class": "Controller", "instance": {"ctrl_id": "c1"}, "event": "Start", "args": {}},
+        ],
+    }
+    steps = list(run_simulation(manifest, scenario=scenario, bridge_mocks=BRIDGE_MOCKS))
+    instance_creates = [s for s in steps if isinstance(s, InstanceCreated)]
+    assert len(instance_creates) == 2
+    assert any(isinstance(s, SchedulerSelected) for s in steps)
+    assert any(isinstance(s, TransitionFired) and s.to_state == "Running" for s in steps)
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-05")
 def test_integration_multi_class_interaction():
-    pass
+    def start_action(instance, args, scheduler):
+        ctx_ref = args["__ctx__"]
+        ctx_ref.create_async("TrafficLight", {"light_id": "t1"}, "Idle")
+        return {}
+
+    manifest = {
+        "class_defs": {
+            "TrafficLight": {
+                **DOMAIN_MANIFEST["class_defs"]["TrafficLight"],
+            },
+            "Controller": {
+                **DOMAIN_MANIFEST["class_defs"]["Controller"],
+                "transition_table": {
+                    ("Off", "Start"): {"next_state": "Running", "action_fn": start_action, "guard_fn": None},
+                },
+            },
+        },
+        "associations": DOMAIN_MANIFEST["associations"],
+        "generalizations": {},
+    }
+    ctx = SimulationContext(manifest, bridge_mocks=BRIDGE_MOCKS)
+    ctx.create_sync("Controller", {"ctrl_id": "c1"}, "Off")
+    ctx.generate(
+        "Start",
+        "Controller",
+        {"ctrl_id": "c1"},
+        "Controller",
+        {"ctrl_id": "c1"},
+        args={"__ctx__": ctx},
+    )
+    steps = list(ctx.execute())
+    # Controller transitioned, async TrafficLight creation event processed,
+    # TrafficLight now exists in Idle state
+    assert any(isinstance(s, TransitionFired) and s.class_name == "Controller" for s in steps)
+    assert ctx.registry.lookup("TrafficLight", {"light_id": "t1"}) is not None
+    assert ctx.registry.get_state("TrafficLight", {"light_id": "t1"}) == "Idle"
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-05")
 def test_integration_paused_clock_blocks_delay():
-    pass
+    ctx = SimulationContext(DOMAIN_MANIFEST)
+    ctx.create_sync("TrafficLight", {"light_id": 1}, "Idle")
+    ctx.generate(
+        "TurnOn",
+        "TrafficLight",
+        {"light_id": 99},
+        "TrafficLight",
+        {"light_id": 1},
+        delay_ms=100.0,
+    )
+    ctx.clock.pause()
+    ctx.clock.advance(200)  # no-op while paused
+    paused_steps = list(ctx.execute())
+    assert not [s for s in paused_steps if isinstance(s, EventDelayExpired)]
+
+    ctx.clock.resume()
+    ctx.clock.advance(200)
+    resumed_steps = list(ctx.execute())
+    assert any(isinstance(s, EventDelayExpired) for s in resumed_steps)
+    assert any(isinstance(s, TransitionFired) for s in resumed_steps)
