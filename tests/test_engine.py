@@ -166,44 +166,163 @@ def test_engine_isolation_no_schema_imports():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-02")
+from engine.registry import InstanceRegistry
+
+
+def _make_registry() -> InstanceRegistry:
+    return InstanceRegistry(DOMAIN_MANIFEST["class_defs"])
+
+
 def test_registry_create_sync_delete_lookup():
-    pass
+    reg = _make_registry()
+    steps = reg.create_sync("TrafficLight", {"light_id": "main"}, initial_state="Idle")
+    assert len(steps) == 1
+    assert isinstance(steps[0], InstanceCreated)
+    assert steps[0].mode == "sync"
+    assert steps[0].class_name == "TrafficLight"
+    assert steps[0].instance_id == {"light_id": "main"}
+
+    inst = reg.lookup("TrafficLight", {"light_id": "main"})
+    assert inst is not None
+    assert inst["light_id"] == "main"
+    assert inst["curr_state"] == "Idle"
+
+    assert reg.lookup("TrafficLight", {"light_id": "nonexistent"}) is None
+
+    del_steps = reg.delete_sync("TrafficLight", {"light_id": "main"})
+    assert len(del_steps) == 1
+    assert isinstance(del_steps[0], InstanceDeleted)
+    assert del_steps[0].mode == "sync"
+    assert reg.lookup("TrafficLight", {"light_id": "main"}) is None
+
+    # Double-deletion is an ErrorMicroStep, not an exception
+    err = reg.delete_sync("TrafficLight", {"light_id": "main"})
+    assert len(err) == 1
+    assert isinstance(err[0], ErrorMicroStep)
+    assert err[0].error_kind == "double_deletion"
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-02")
 def test_registry_create_async():
-    pass
+    reg = _make_registry()
+    steps, evt = reg.create_async(
+        "TrafficLight", {"light_id": "async1"}, initial_state="Idle"
+    )
+    assert len(steps) == 1
+    assert isinstance(steps[0], InstanceCreated)
+    assert steps[0].mode == "async"
+    assert evt is not None
+    assert evt.event_type == "__creation__"
+    assert evt.target_class == "TrafficLight"
+    assert evt.target_id == {"light_id": "async1"}
+    # Instance is stored even before creation event processed
+    assert reg.lookup("TrafficLight", {"light_id": "async1"}) is not None
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-02")
 def test_registry_composite_identifier():
-    pass
+    composite_defs = {
+        "Sensor": {
+            "name": "Sensor",
+            "is_abstract": False,
+            "identifier_attrs": ["zone", "node"],
+            "attributes": {"zone": "str", "node": "int", "value": "float"},
+            "initial_state": "Off",
+            "final_states": [],
+            "transition_table": {},
+            "supertype": None,
+            "subtypes": [],
+        }
+    }
+    reg = InstanceRegistry(composite_defs)
+    reg.create_sync("Sensor", {"zone": "north", "node": 1}, initial_state="Off")
+    # Order-independent lookup
+    inst = reg.lookup("Sensor", {"node": 1, "zone": "north"})
+    assert inst is not None
+    assert inst["zone"] == "north"
+    assert inst["node"] == 1
+    # Different composite key — different instance
+    assert reg.lookup("Sensor", {"zone": "north", "node": 2}) is None
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-02")
 def test_registry_delete_async():
-    pass
+    reg = _make_registry()
+    reg.create_sync("TrafficLight", {"light_id": "x"}, initial_state="Idle")
+    evt = reg.delete_async("TrafficLight", {"light_id": "x"})
+    assert evt is not None
+    assert evt.event_type == "__deletion__"
+    # Instance still present until process_deletion
+    assert reg.lookup("TrafficLight", {"light_id": "x"}) is not None
+    steps = reg.process_deletion("TrafficLight", {"light_id": "x"})
+    assert len(steps) == 1
+    assert isinstance(steps[0], InstanceDeleted)
+    assert steps[0].mode == "async"
+    assert reg.lookup("TrafficLight", {"light_id": "x"}) is None
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-02")
 def test_registry_lookup_all():
-    pass
+    reg = _make_registry()
+    assert reg.lookup_all("TrafficLight") == []
+    reg.create_sync("TrafficLight", {"light_id": "a"}, initial_state="Idle")
+    assert len(reg.lookup_all("TrafficLight")) == 1
+    reg.create_sync("TrafficLight", {"light_id": "b"}, initial_state="Idle")
+    reg.create_sync("TrafficLight", {"light_id": "c"}, initial_state="Idle")
+    assert len(reg.lookup_all("TrafficLight")) == 3
+    # Other classes unaffected
+    assert reg.lookup_all("Controller") == []
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-02")
 def test_registry_get_set_state():
-    pass
+    reg = _make_registry()
+    reg.create_sync("TrafficLight", {"light_id": "s1"}, initial_state="Idle")
+    assert reg.get_state("TrafficLight", {"light_id": "s1"}) == "Idle"
+    reg.set_state("TrafficLight", {"light_id": "s1"}, "Green")
+    assert reg.get_state("TrafficLight", {"light_id": "s1"}) == "Green"
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-02")
 def test_registry_get_set_attr():
-    pass
+    reg = _make_registry()
+    reg.create_sync("TrafficLight", {"light_id": "a1"}, initial_state="Idle")
+    reg.set_attr("TrafficLight", {"light_id": "a1"}, "current_color", "red")
+    assert reg.get_attr("TrafficLight", {"light_id": "a1"}, "current_color") == "red"
 
 
-@pytest.mark.skip(reason="Implemented in plan 05.1-02")
 def test_registry_supertype_inheritance():
-    pass
+    """D-04: supertype attributes are merged into subtype instances at creation."""
+    class_defs = {
+        "Vehicle": {
+            "name": "Vehicle",
+            "is_abstract": True,
+            "identifier_attrs": ["vid"],
+            "attributes": {"vid": "int", "wheels": 4},
+            "initial_state": None,
+            "final_states": [],
+            "transition_table": {},
+            "supertype": None,
+            "subtypes": ["Car"],
+        },
+        "Car": {
+            "name": "Car",
+            "is_abstract": False,
+            "identifier_attrs": ["vid"],
+            "attributes": {"vid": "int", "trunk_size": 200},
+            "initial_state": "Parked",
+            "final_states": [],
+            "transition_table": {},
+            "supertype": "Vehicle",
+            "subtypes": [],
+        },
+    }
+    reg = InstanceRegistry(class_defs)
+    # Abstract instantiation rejected
+    err = reg.create_sync("Vehicle", {"vid": 1}, initial_state="X")
+    assert isinstance(err[0], ErrorMicroStep)
+    assert err[0].error_kind == "abstract_instantiation"
+
+    # Concrete subtype creation merges supertype attrs
+    reg.create_sync("Car", {"vid": 7}, initial_state="Parked")
+    inst = reg.lookup("Car", {"vid": 7})
+    assert inst is not None
+    assert inst["wheels"] == 4  # inherited from Vehicle
+    assert inst["trunk_size"] == 200  # own attribute
 
 
 @pytest.mark.skip(reason="Implemented in plan 05.1-02")
