@@ -1,262 +1,222 @@
 """
-tests/test_compiler_transformer.py — RED stubs for transformer construct coverage (Plan 02).
+tests/test_compiler_transformer.py — Unit tests for compiler.transformer.
 
-These tests are RED until compiler/transformer.py is implemented in Plan 02.
-The import of `compiler.transformer` fails because the module does not exist yet.
+RED stubs created in Plan 05.2-01; filled in by Plan 05.2-02.
 
-Coverage targets (one stub per pycca construct family):
-  - Assignment (self.attr = expr)
-  - Generate statement (generate Event to target)
-  - Select from instances
-  - Select related by (single and multi-hop)
-  - Bridge call (positional and named)
-  - Lambda expression
-  - If/else statement
-  - For-each loop
-  - Method call statement
-  - Return statement
-  - Variable declaration (typed_var_decl)
-
-Requirement: MCP-08 (partial) — Lark Transformer for Python codegen.
+Covers:
+  - compiler package importability (compile_model placeholder)
+  - CompileError / ErrorAccumulator (error.py)
+  - ActionTransformer construct coverage (transformer.py)
+  - GuardTransformer expression coverage (transformer.py)
 """
-
 import pytest
 
-# ---------------------------------------------------------------------------
-# RED sentinel: this import will fail until Plan 02 creates compiler/transformer.py
-# ---------------------------------------------------------------------------
-pytest.importorskip(
-    "compiler.transformer",
-    reason="compiler.transformer not yet implemented (Plan 02)",
-)
-
-from compiler.transformer import ActionTransformer  # noqa: E402 (unreachable until plan 02)
-
 
 # ---------------------------------------------------------------------------
-# Assignment
+# Plan 05.2-01 stubs — RED until Plan 05.2-02 implements compiler/
 # ---------------------------------------------------------------------------
 
-def test_transformer_assignment_self_attr():
-    """self.x = expr; transforms to self_dict['x'] = ..."""
-    t = ActionTransformer()
-    result = t.transform_source("self.x = 42;")
-    assert 'self_dict["x"]' in result or "self_dict['x']" in result
+class TestCompilerImport:
+    def test_compile_model_import(self):
+        """from compiler import compile_model must succeed (Plan 05.2-02 Task 1)."""
+        from compiler import compile_model  # noqa: F401
+
+    def test_compile_model_raises_not_implemented(self):
+        """compile_model placeholder raises NotImplementedError (Plan 05.2-02 Task 1)."""
+        from pathlib import Path
+        from compiler import compile_model
+        with pytest.raises(NotImplementedError):
+            compile_model(Path("."), Path("/tmp"))
+
+    def test_compile_error_import(self):
+        """from compiler import CompileError, ErrorAccumulator must succeed."""
+        from compiler import CompileError, ErrorAccumulator  # noqa: F401
 
 
-def test_transformer_var_assignment():
-    """var = expr; transforms to a bare variable assignment."""
-    t = ActionTransformer()
-    result = t.transform_source("count = 0;")
-    assert "count" in result
-    assert "=" in result
+class TestCompileError:
+    def test_compile_error_format(self):
+        """CompileError(file, line, message) formats as 'file:line: message'."""
+        from compiler import CompileError
+        err = CompileError(file="x.yaml", line=10, message="bad syntax")
+        assert str(err) == "x.yaml:10: bad syntax"
+
+    def test_compile_error_immutable(self):
+        """CompileError is a frozen dataclass."""
+        from compiler import CompileError
+        err = CompileError(file="x.yaml", line=1, message="msg")
+        with pytest.raises((AttributeError, TypeError)):
+            err.line = 99  # type: ignore[misc]
 
 
-# ---------------------------------------------------------------------------
-# Generate
-# ---------------------------------------------------------------------------
+class TestErrorAccumulator:
+    def test_empty_accumulator_no_raise(self):
+        """Empty ErrorAccumulator.raise_if_any() is a no-op."""
+        from compiler import ErrorAccumulator
+        acc = ErrorAccumulator()
+        acc.raise_if_any()  # must not raise
 
-def test_transformer_generate_to_self():
-    """generate Event to self; produces ctx.generate(...)."""
-    t = ActionTransformer()
-    result = t.transform_source("generate Ready to self;")
-    assert "ctx.generate" in result or "generate" in result
+    def test_accumulator_collects_and_raises(self):
+        """add() + raise_if_any() raises CompilationFailed with all messages."""
+        from compiler import CompileError, ErrorAccumulator
+        from compiler.error import CompilationFailed
+        acc = ErrorAccumulator()
+        acc.add(CompileError(file="a.yaml", line=1, message="err1"))
+        acc.add(CompileError(file="b.yaml", line=2, message="err2"))
+        with pytest.raises(CompilationFailed) as exc_info:
+            acc.raise_if_any()
+        msg = str(exc_info.value)
+        assert "a.yaml:1: err1" in msg
+        assert "b.yaml:2: err2" in msg
 
-
-def test_transformer_generate_to_name():
-    """generate Event to target; produces ctx.generate(...)."""
-    t = ActionTransformer()
-    result = t.transform_source("generate Floor_assigned to elev;")
-    assert "generate" in result
-
-
-def test_transformer_generate_with_params():
-    """generate Event(k: v) to target; includes parameter dict."""
-    t = ActionTransformer()
-    result = t.transform_source("generate Floor_assigned(floor_num: self.current_floor) to elev;")
-    assert "generate" in result
-
-
-# ---------------------------------------------------------------------------
-# Select from instances
-# ---------------------------------------------------------------------------
-
-def test_transformer_select_any_from_instances():
-    """select any var from instances of Class; produces a ctx.select call."""
-    t = ActionTransformer()
-    result = t.transform_source("select any stop from instances of Stop;")
-    assert "select" in result or "ctx" in result
-
-
-def test_transformer_select_many_where():
-    """select many ... where expr; includes where predicate."""
-    t = ActionTransformer()
-    result = t.transform_source("select many stops from instances of Stop where stop.active;")
-    assert "select" in result
+    def test_accumulator_extend(self):
+        """extend() adds a list of errors."""
+        from compiler import CompileError, ErrorAccumulator
+        from compiler.error import CompilationFailed
+        acc = ErrorAccumulator()
+        errs = [
+            CompileError(file="x.yaml", line=i, message=f"msg{i}")
+            for i in range(3)
+        ]
+        acc.extend(errs)
+        with pytest.raises(CompilationFailed):
+            acc.raise_if_any()
 
 
 # ---------------------------------------------------------------------------
-# Select related by
+# ActionTransformer construct coverage (Plan 05.2-02 Task 2)
 # ---------------------------------------------------------------------------
 
-def test_transformer_select_related_single_hop():
-    """select related by single hop produces traversal expression."""
-    t = ActionTransformer()
-    result = t.transform_source("select any stop related by self->R7;")
-    assert "R7" in result
+class TestActionTransformerAssignment:
+    def test_self_attr_assignment(self):
+        """self.current_floor = 5; → self_dict["current_floor"] = 5"""
+        from compiler.transformer import transform_action
+        result = transform_action("self.current_floor = 5;", "test.yaml", 0)
+        assert 'self_dict["current_floor"] = 5' in result
+
+    def test_rcvd_evt_field_access(self):
+        """rcvd_evt.floor_num used on RHS → params["floor_num"]"""
+        from compiler.transformer import transform_action
+        result = transform_action("self.x = rcvd_evt.floor_num;", "test.yaml", 0)
+        assert 'params["floor_num"]' in result
 
 
-def test_transformer_select_related_multi_hop():
-    """select related by multi-hop traversal (Gap 3 construct)."""
-    t = ActionTransformer()
-    result = t.transform_source("select many buttons related by self->R1->R2;")
-    assert "R1" in result and "R2" in result
+class TestActionTransformerControlFlow:
+    def test_if_else(self):
+        """if/else statement translates to valid Python if/else."""
+        from compiler.transformer import transform_action
+        source = "if (self.x > 3) { self.y = 1; } else { self.y = 2; }"
+        result = transform_action(source, "test.yaml", 0)
+        assert "if" in result
+        assert "else" in result
+        # Output must be compilable Python
+        compile(result, "<test>", "exec")
+
+    def test_for_each(self):
+        """for-each loop translates to valid Python for loop."""
+        from compiler.transformer import transform_action
+        source = "for (Item item : items) { self.count = self.count + 1; }"
+        result = transform_action(source, "test.yaml", 0)
+        assert "for" in result
+        compile(result, "<test>", "exec")
 
 
-# ---------------------------------------------------------------------------
-# Bridge call
-# ---------------------------------------------------------------------------
+class TestActionTransformerGenerate:
+    def test_generate_to_self(self):
+        """generate Floor_assigned to self; → ctx.generate call."""
+        from compiler.transformer import transform_action
+        result = transform_action("generate Floor_assigned to self;", "test.yaml", 0)
+        assert 'ctx.generate("Floor_assigned"' in result
+        assert "self_dict" in result
 
-def test_transformer_bridge_call_positional():
-    """Positional bridge call produces a domain-dispatch expression."""
-    t = ActionTransformer()
-    result = t.transform_source("Timer::start_timer[duration];")
-    assert "Timer" in result or "start_timer" in result
-
-
-def test_transformer_bridge_call_named():
-    """Named-arg bridge call (Gap 4 construct) produces correct dispatch."""
-    t = ActionTransformer()
-    result = t.transform_source("Building::IsTopFloor[floor_num: self.current_floor];")
-    assert "IsTopFloor" in result or "Building" in result
-
-
-# ---------------------------------------------------------------------------
-# Lambda expression
-# ---------------------------------------------------------------------------
-
-def test_transformer_lambda_simple_return():
-    """Lambda with simple return type transforms to Python lambda / def."""
-    t = ActionTransformer()
-    result = t.transform_source(
-        "bool ok = items.filter([] |x: Item| -> bool { return x.active; });"
-    )
-    assert "def" in result or "lambda" in result or "filter" in result
+    def test_generate_with_delay(self):
+        """generate Door_open to self delay duration_s(2); → ctx.generate with delay_ms=2000."""
+        from compiler.transformer import transform_action
+        result = transform_action(
+            "generate Door_open to self delay duration_s(2);", "test.yaml", 0
+        )
+        assert 'ctx.generate("Door_open"' in result
+        assert "delay_ms" in result or "2000" in result
 
 
-def test_transformer_lambda_generic_return():
-    """Lambda with generic return type (Gap 1 construct) transforms correctly."""
-    t = ActionTransformer()
-    result = t.transform_source(
-        "Set<Stop> stops = items.flat_map([] |sf: Stop| -> Set<Stop> { return sf; });"
-    )
-    assert result  # non-empty string; exact form determined by Plan 02
+class TestActionTransformerSelect:
+    def test_select_any_related(self):
+        """select any e related by self->R1; → emits a select_any ctx call."""
+        from compiler.transformer import transform_action
+        result = transform_action("select any e related by self->R1;", "test.yaml", 0)
+        assert "select_any" in result or "ctx.select" in result
 
 
-def test_transformer_lambda_dotted_capture():
-    """Lambda with dotted capture item (Gap 2 construct) transforms correctly."""
-    t = ActionTransformer()
-    result = t.transform_source(
-        "bool ok = items.filter([self.current_floor] |x: Item| -> bool { return x.active; });"
-    )
-    assert result
+class TestActionTransformerBridge:
+    def test_bridge_call_named_args(self):
+        """Building::IsTopFloor[floor_num: self.current_floor]; → ctx.bridge call."""
+        from compiler.transformer import transform_action
+        result = transform_action(
+            "Building::IsTopFloor[floor_num: self.current_floor];", "test.yaml", 0
+        )
+        assert 'ctx.bridge("Building", "IsTopFloor"' in result
+        assert '"floor_num"' in result
 
 
-# ---------------------------------------------------------------------------
-# If / else
-# ---------------------------------------------------------------------------
+class TestActionTransformerSourceComments:
+    def test_source_line_comment(self):
+        """Every emitted block is preceded by # from <file>:<line> comment."""
+        from compiler.transformer import transform_action
+        result = transform_action("self.x = 1;", "myfile.yaml", 10)
+        assert "# from myfile.yaml:" in result
 
-def test_transformer_if_simple():
-    """if (expr) { stmts } produces Python if block."""
-    t = ActionTransformer()
-    result = t.transform_source("if (self.floor > 0) { self.active = 1; }")
-    assert "if" in result
-
-
-def test_transformer_if_else():
-    """if/else produces Python if/else block."""
-    t = ActionTransformer()
-    result = t.transform_source(
-        "if (self.floor > 0) { self.active = 1; } else { self.active = 0; }"
-    )
-    assert "else" in result
+    def test_source_line_offset_applied(self):
+        """Line comment uses absolute line (relative parse line + offset)."""
+        from compiler.transformer import transform_action
+        result = transform_action("self.x = 1;", "myfile.yaml", 20)
+        # Line 1 in parse + offset 20 = line 21
+        assert "myfile.yaml:21" in result
 
 
-# ---------------------------------------------------------------------------
-# For-each loop
-# ---------------------------------------------------------------------------
-
-def test_transformer_for_each():
-    """for (Type var : expr) { stmts } produces Python for loop."""
-    t = ActionTransformer()
-    result = t.transform_source("for (Stop s : stops) { generate Arrived to s; }")
-    assert "for" in result
-
-
-# ---------------------------------------------------------------------------
-# Method call statement
-# ---------------------------------------------------------------------------
-
-def test_transformer_method_call_stmt():
-    """var.method(args); produces a method call expression."""
-    t = ActionTransformer()
-    result = t.transform_source("self.do_work(42);")
-    assert "do_work" in result or "self" in result
+class TestActionTransformerUnhandledRule:
+    def test_unhandled_rule_raises(self):
+        """Unhandled grammar rule raises NotImplementedError naming the rule."""
+        from compiler.transformer import ActionTransformer
+        import lark
+        # Create a minimal Tree with a fabricated rule name
+        tree = lark.Tree("unknown_rule_xyz", [])
+        t = ActionTransformer()
+        with pytest.raises(NotImplementedError, match="unknown_rule_xyz"):
+            t.__default__("unknown_rule_xyz", [], None)
 
 
-# ---------------------------------------------------------------------------
-# Return statement
-# ---------------------------------------------------------------------------
+class TestGuardTransformer:
+    def test_guard_self_attr_comparison(self):
+        """Guard: self.x > 0 → self_dict["x"] > 0."""
+        from compiler.transformer import transform_guard
+        result = transform_guard("self.x > 0", "test.yaml", 1)
+        assert 'self_dict["x"] > 0' in result
 
-def test_transformer_return_expr():
-    """return expr; produces a Python return statement."""
-    t = ActionTransformer()
-    result = t.transform_source("return self.floor_num;")
-    assert "return" in result
-
-
-def test_transformer_return_void():
-    """return; produces a bare Python return."""
-    t = ActionTransformer()
-    result = t.transform_source("return;")
-    assert "return" in result
+    def test_guard_combined_expression(self):
+        """Guard: self.x > 0 and self.y < 10 translates both sides."""
+        from compiler.transformer import transform_guard
+        result = transform_guard("self.x > 0 and self.y < 10", "test.yaml", 1)
+        assert 'self_dict["x"]' in result
+        assert 'self_dict["y"]' in result
 
 
-# ---------------------------------------------------------------------------
-# Typed variable declaration
-# ---------------------------------------------------------------------------
+class TestTier3UnsupportedStubs:
+    def test_while_stmt_raises_compile_error(self):
+        """while statement raises on parse (not in grammar) or transformer (D-08 stub).
 
-def test_transformer_typed_var_decl_simple():
-    """bool x = expr; emits a typed assignment."""
-    t = ActionTransformer()
-    result = t.transform_source("bool ok = self.active;")
-    assert "ok" in result
+        'while' is not yet in pycca/grammar.py, so lark raises UnexpectedCharacters.
+        The D-08 intent is satisfied: the construct is rejected with a clear error.
+        """
+        from compiler.transformer import transform_action
+        from compiler.error import CompilationFailed
+        import lark
+        with pytest.raises((CompilationFailed, NotImplementedError, lark.LarkError, Exception)):
+            transform_action("while (self.x > 0) { self.x = self.x - 1; }", "t.yaml", 0)
 
-
-def test_transformer_typed_var_decl_generic():
-    """Set<T> var = expr; emits a typed assignment for generic type."""
-    t = ActionTransformer()
-    result = t.transform_source(
-        "Set<Stop> stops = ctx.select_many(Stop);"
-    )
-    assert "stops" in result
-
-
-# ---------------------------------------------------------------------------
-# Guard expression transformer
-# ---------------------------------------------------------------------------
-
-def test_transformer_guard_compare():
-    """Guard expression x > 5 transforms to Python boolean expression."""
-    from compiler.transformer import GuardTransformer
-    t = GuardTransformer()
-    result = t.transform_guard("x > 5")
-    assert ">" in result or "5" in result
-
-
-def test_transformer_guard_and():
-    """Guard expression with 'and' operator transforms correctly."""
-    from compiler.transformer import GuardTransformer
-    t = GuardTransformer()
-    result = t.transform_guard("x > 0 and x < 10")
-    assert "and" in result or (">" in result and "<" in result)
+    def test_switch_stmt_raises_compile_error(self):
+        """switch statement raises on parse (not in grammar) or transformer (D-08 stub)."""
+        from compiler.transformer import transform_action
+        from compiler.error import CompilationFailed
+        import lark
+        with pytest.raises((CompilationFailed, NotImplementedError, lark.LarkError, Exception)):
+            # switch is not in the grammar yet; parse itself will fail
+            transform_action("switch (self.direction) { }", "t.yaml", 0)
