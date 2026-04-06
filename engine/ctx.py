@@ -45,6 +45,7 @@ class SimulationContext:
             generalizations=generalizations,
         )
         self._running = False
+        self.event_duration_warn_ns: int | None = None
 
     # ------------------------------------------------------------------
     # Event generation / cancellation

@@ -131,3 +131,37 @@ class ErrorMicroStep(MicroStep):
     message: str
     context: dict
     type: Literal["error"] = field(default="error", init=False)
+
+
+@dataclass(frozen=True)
+class EventCompleted(MicroStep):
+    target: str
+    name: str
+    duration_ns: int
+    type: Literal["event_completed"] = field(default="event_completed", init=False)
+
+
+@dataclass(frozen=True)
+class LongEventWarning(MicroStep):
+    target: str
+    name: str
+    duration_ns: int
+    threshold_ns: int
+    type: Literal["long_event_warning"] = field(default="long_event_warning", init=False)
+
+
+@dataclass(frozen=True)
+class SenescentEntered(MicroStep):
+    instance: str
+    state: str
+    settled_at: int
+    type: Literal["senescent_entered"] = field(default="senescent_entered", init=False)
+
+
+@dataclass(frozen=True)
+class SenescentExited(MicroStep):
+    instance: str
+    state: str
+    exited_at: int
+    by_event: str
+    type: Literal["senescent_exited"] = field(default="senescent_exited", init=False)
