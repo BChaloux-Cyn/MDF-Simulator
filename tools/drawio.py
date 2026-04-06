@@ -1051,47 +1051,10 @@ def _content_matches_state(
 def _yaml_to_canonical_state(domain: str, sd: StateDiagramFile) -> str:
     """Build canonical JSON string from a StateDiagramFile.
 
-    Used to compare YAML source against existing drawio content.
+    Delegates to schema.canonical_builder so compiler/ and tools/ share one path.
     """
-    from schema.drawio_canonical import CanonicalState, CanonicalTransition, CanonicalStateDiagram
-
-    # Build event_map for param lookup
-    event_map = {e.name: e for e in sd.events} if sd.events else {}
-
-    # States sorted by name
-    canonical_states = sorted(
-        [CanonicalState(name=st.name, entry_action=st.entry_action) for st in sd.states],
-        key=lambda s: s.name,
-    )
-
-    # Transitions sorted by (from_state, event, to)
-    canonical_transitions = []
-    for trans in sd.transitions:
-        event_def = event_map.get(trans.event)
-        if event_def and event_def.params:
-            params = ", ".join(f"{p.name}: {p.type}" for p in event_def.params)
-        else:
-            params = None
-        canonical_transitions.append(
-            CanonicalTransition(
-                from_state=trans.from_state,
-                to=trans.to,
-                event=trans.event,
-                params=params,
-                guard=trans.guard,
-            )
-        )
-    canonical_transitions.sort(key=lambda t: (t.from_state, t.event, t.to))
-
-    model = CanonicalStateDiagram(
-        type="state_diagram",
-        domain=domain,
-        class_name=sd.class_name,
-        initial_state=sd.initial_state,
-        states=canonical_states,
-        transitions=canonical_transitions,
-    )
-    return json.dumps(model.model_dump(by_alias=True), sort_keys=True)
+    from schema.canonical_builder import yaml_to_canonical_state_json
+    return yaml_to_canonical_state_json(domain, sd)
 
 
 def _drawio_to_canonical_state(drawio_path: Path) -> str | None:
@@ -1239,78 +1202,10 @@ def _drawio_to_canonical_state(drawio_path: Path) -> str | None:
 def _yaml_to_canonical_class(domain: str, cd: ClassDiagramFile) -> str:
     """Build canonical JSON string from a ClassDiagramFile.
 
-    Used to compare YAML source against existing drawio content.
+    Delegates to schema.canonical_builder so compiler/ and tools/ share one path.
     """
-    from schema.drawio_canonical import (
-        CanonicalClassEntry,
-        CanonicalAssociation,
-        CanonicalGeneralization,
-        CanonicalClassDiagram,
-    )
-
-    # Build gen_map: rname -> {supertype, subtypes} from partitions on supertype classes
-    gen_map: dict[str, dict] = {}
-    for cls in cd.classes:
-        if cls.partitions:
-            for p in cls.partitions:
-                gen_map[p.name] = {"supertype": cls.name, "subtypes": sorted(p.subtypes)}
-
-    # Classes sorted by name
-    canonical_classes = []
-    for cls in sorted(cd.classes, key=lambda c: c.name):
-        attrs = [
-            _attr_label(a.visibility, a.scope, a.name, a.type, a.identifier, a.referential)
-            for a in cls.attributes
-        ]
-        methods = [
-            _method_label(m.visibility, m.scope, m.name, m.params, m.return_type)
-            for m in cls.methods
-        ]
-        canonical_classes.append(
-            CanonicalClassEntry(
-                name=cls.name,
-                stereotype=cls.stereotype,
-                specializes=cls.specializes,
-                attributes=attrs,
-                methods=methods,
-            )
-        )
-
-    # Associations: skip any that are generalizations
-    canonical_assocs = []
-    for assoc in sorted(cd.associations, key=lambda a: a.name):
-        if assoc.name in gen_map:
-            continue
-        canonical_assocs.append(
-            CanonicalAssociation(
-                name=assoc.name,
-                point_1=assoc.point_1,
-                point_2=assoc.point_2,
-                mult_1_2=assoc.mult_1_to_2,
-                mult_2_1=assoc.mult_2_to_1,
-                phrase_1_2=_wrap_squarest(assoc.phrase_1_to_2),
-                phrase_2_1=_wrap_squarest(assoc.phrase_2_to_1),
-            )
-        )
-
-    # Generalizations from gen_map
-    canonical_gens = [
-        CanonicalGeneralization(
-            name=rname,
-            supertype=info["supertype"],
-            subtypes=info["subtypes"],  # already sorted above
-        )
-        for rname, info in sorted(gen_map.items())
-    ]
-
-    model = CanonicalClassDiagram(
-        type="class_diagram",
-        domain=domain.lower(),
-        classes=canonical_classes,
-        associations=canonical_assocs,
-        generalizations=canonical_gens,
-    )
-    return json.dumps(model.model_dump(by_alias=True), sort_keys=True)
+    from schema.canonical_builder import yaml_to_canonical_class_json
+    return yaml_to_canonical_class_json(domain, cd)
 
 
 def _drawio_to_canonical_class(drawio_path: Path) -> str | None:
