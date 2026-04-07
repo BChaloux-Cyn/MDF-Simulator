@@ -192,6 +192,35 @@ class TestLoader:
         with pytest.raises(CompilationFailed):
             load_model(tmp_path)  # tmp_path exists but has no subdirs
 
+    def test_load_missing_class_diagram_raises(self, tmp_path):
+        """Domain dir with no class-diagram.yaml raises CompilationFailed."""
+        domain_dir = tmp_path / "Test"
+        domain_dir.mkdir()
+        # No class-diagram.yaml — loader must raise
+        with pytest.raises(CompilationFailed):
+            load_model(tmp_path)
+
+    def test_load_types_yaml_loaded(self, tmp_path):
+        """Minimal model with types.yaml → loaded.types_raw is not None."""
+        domain_dir = tmp_path / "Test"
+        domain_dir.mkdir()
+        (domain_dir / "class-diagram.yaml").write_text(
+            "schema_version: '1.0.0'\n"
+            "domain: Test\n"
+            "classes: []\n"
+            "associations: []\n"
+            "generalizations: []\n",
+            encoding="utf-8",
+        )
+        (domain_dir / "types.yaml").write_text(
+            "schema_version: '1.0.0'\n"
+            "domain: Test\n"
+            "types: []\n",
+            encoding="utf-8",
+        )
+        loaded = load_model(tmp_path)
+        assert loaded.types_raw is not None
+
 
 # ---------------------------------------------------------------------------
 # (c) Senescent classifier (D-14)
@@ -522,3 +551,49 @@ class TransitionEntry(TypedDict):
     next_state: str | None
     action_fn: None
     guard_fn: None
+
+
+# ---------------------------------------------------------------------------
+# (h) _parse_attr_label edge cases
+# ---------------------------------------------------------------------------
+
+from compiler.manifest_builder import _parse_attr_label
+
+
+class TestParseAttrLabel:
+    def test_basic_public_attr(self):
+        result = _parse_attr_label("+ car_id: int")
+        assert result["name"] == "car_id"
+        assert result["type"] == "int"
+        assert result["visibility"] == "public"
+        assert result["scope"] == "instance"
+
+    def test_private_attr(self):
+        result = _parse_attr_label("- name: String")
+        assert result["visibility"] == "private"
+
+    def test_identifier_tag(self):
+        result = _parse_attr_label("- id: UniqueID {I1}")
+        assert result["identifier"] == [1]
+
+    def test_referential_tag(self):
+        result = _parse_attr_label("- id: UniqueID {I1, R6}")
+        assert result["identifier"] == [1]
+        assert result["referential"] == "R6"
+
+    def test_class_scope(self):
+        result = _parse_attr_label("+ <u>count</u>: int")
+        assert result["scope"] == "class"
+
+    def test_multiple_identifier_tags(self):
+        result = _parse_attr_label("- key: str {I1, I2}")
+        assert result["identifier"] == [1, 2]
+
+    def test_malformed_label_fallback(self):
+        result = _parse_attr_label("not a valid label at all!!!")
+        assert "raw" in result
+        assert result["type"] == "Unknown"
+
+    def test_protected_attr(self):
+        result = _parse_attr_label("# speed: float")
+        assert result["visibility"] == "protected"

@@ -368,3 +368,45 @@ def test_generate_init_module_valid_python():
     }
     src = generate_init_module(manifest)
     compile(src, "<test>", "exec")
+
+
+# ---------------------------------------------------------------------------
+# _strip_callables tests (Gap 3)
+# ---------------------------------------------------------------------------
+
+from compiler.packager import _strip_callables
+
+
+class TestStripCallables:
+    def test_callable_replaced_with_none(self):
+        """Lambda is replaced with None."""
+        assert _strip_callables(lambda: None) is None
+
+    def test_function_replaced_with_none(self):
+        """Regular def function is replaced with None."""
+        def my_fn():
+            pass
+        assert _strip_callables(my_fn) is None
+
+    def test_tuple_key_converted(self):
+        """Tuple dict key is converted to 'a::b' string."""
+        result = _strip_callables({("a", "b"): "val"})
+        assert result == {"a::b": "val"}
+
+    def test_nested_dict_recursive(self):
+        """Callable value inside nested dict is replaced with None."""
+        result = _strip_callables({"outer": {"inner": lambda: 42}})
+        assert result == {"outer": {"inner": None}}
+
+    def test_list_with_callable(self):
+        """Callable inside a list is replaced with None."""
+        result = _strip_callables([1, lambda: None, "x"])
+        assert result == [1, None, "x"]
+
+    def test_non_callable_passthrough(self):
+        """Dict with plain values passes through unchanged."""
+        assert _strip_callables({"k": 42}) == {"k": 42}
+
+    def test_string_passthrough(self):
+        """Plain string passes through unchanged."""
+        assert _strip_callables("hello") == "hello"
