@@ -4,11 +4,11 @@ validation — Model validation tools: validate_model, validate_domain, validate
 Implemented in plan 03-03 (Phase 3).
 Guard completeness added in plan 03-04.
 """
-import math
 from pathlib import Path
 
 import networkx as nx
 import yaml
+import z3
 from lark import UnexpectedInput
 from pydantic import ValidationError
 
@@ -513,9 +513,6 @@ def _check_reachability(sd: StateDiagramFile, domain: str) -> list[dict]:
 # Guard completeness helpers
 # ---------------------------------------------------------------------------
 
-_INF = math.inf
-
-
 def _load_types_map(domain_path: Path) -> dict | None:
     """Load types.yaml from domain_path. Returns {type_name: TypeDef} or None if absent/invalid."""
     types_path = domain_path / "types.yaml"
@@ -531,48 +528,161 @@ def _load_types_map(domain_path: Path) -> dict | None:
         return None
 
 
-def _normalize_interval(op: str, value: float) -> tuple[float, float]:
-    """
-    Convert a simple_compare (variable OP value) to a half-open interval [lo, hi).
+def _extract_var_names(tree) -> set[str]:
+    """Walk a guard parse tree and collect variable names from the left side of compare_expr nodes."""
+    from lark import Tree
+    names = set()
+    if not isinstance(tree, Tree):
+        return names
+    if tree.data == "compare_expr" and len(tree.children) == 3:
+        left = tree.children[0]
+        while isinstance(left, Tree) and left.data in {"add_expr", "mul_expr"}:
+            child_trees = [c for c in left.children if isinstance(c, Tree)]
+            if len(child_trees) == 1 and len(left.children) == 1:
+                left = child_trees[0]
+            else:
+                break
+        if isinstance(left, Tree) and left.data == "name":
+            names.add(str(left.children[0]))
+        elif isinstance(left, Tree) and left.data == "dotted_name":
+            names.add(str(left.children[1]))
+    for child in tree.children:
+        names |= _extract_var_names(child)
+    return names
 
-    Uses integer-compatible normalization:
-      <  N  -> (-inf, N)
-      <= N  -> (-inf, N+1)
-      >  N  -> (N+1, +inf)
-      >= N  -> (N, +inf)
-      == N  -> (N, N+1)  (single point, treated as unit interval)
-    """
-    if op == "<":
-        return (-_INF, value)
-    elif op == "<=":
-        return (-_INF, value + 1)
-    elif op == ">":
-        return (value + 1, _INF)
-    elif op == ">=":
-        return (value, _INF)
-    elif op == "==":
-        return (value, value + 1)
-    else:  # != or unrecognized — cannot analyze
+
+def _tree_to_z3(tree, z3_vars: dict, enum_maps: dict):
+    """Recursively convert a guard parse tree to a Z3 expression. Returns None if not analyzable."""
+    from lark import Tree
+    if not isinstance(tree, Tree):
+        return None
+
+    child_trees = [c for c in tree.children if isinstance(c, Tree)]
+
+    if tree.data == "or_expr":
+        if len(child_trees) == 2:
+            left = _tree_to_z3(child_trees[0], z3_vars, enum_maps)
+            right = _tree_to_z3(child_trees[1], z3_vars, enum_maps)
+            if left is None or right is None:
+                return None
+            return z3.Or(left, right)
+        elif len(child_trees) == 1:
+            return _tree_to_z3(child_trees[0], z3_vars, enum_maps)
+        return None
+
+    elif tree.data == "and_expr":
+        if len(child_trees) == 2:
+            left = _tree_to_z3(child_trees[0], z3_vars, enum_maps)
+            right = _tree_to_z3(child_trees[1], z3_vars, enum_maps)
+            if left is None or right is None:
+                return None
+            return z3.And(left, right)
+        elif len(child_trees) == 1:
+            return _tree_to_z3(child_trees[0], z3_vars, enum_maps)
+        return None
+
+    elif tree.data == "compare_expr":
+        if len(tree.children) == 3:
+            left_node = tree.children[0]
+            op = str(tree.children[1])
+            right_node = tree.children[2]
+
+            # Unwrap left to variable
+            left = left_node
+            while isinstance(left, Tree) and left.data in {"add_expr", "mul_expr"}:
+                lc = [c for c in left.children if isinstance(c, Tree)]
+                if len(lc) == 1 and len(left.children) == 1:
+                    left = lc[0]
+                else:
+                    return None
+            if not isinstance(left, Tree):
+                return None
+            if left.data == "name":
+                var_name = str(left.children[0])
+            elif left.data == "dotted_name":
+                var_name = str(left.children[1])
+            else:
+                return None
+            if var_name not in z3_vars:
+                return None
+            z3_var = z3_vars[var_name]
+
+            # Unwrap right to literal
+            right = right_node
+            while isinstance(right, Tree) and right.data in {"add_expr", "mul_expr"}:
+                rc = [c for c in right.children if isinstance(c, Tree)]
+                if len(rc) == 1 and len(right.children) == 1:
+                    right = rc[0]
+                else:
+                    return None
+            if not isinstance(right, Tree):
+                return None
+            if right.data == "number":
+                val_str = str(right.children[0])
+                if z3.is_int(z3_var):
+                    rhs = int(float(val_str))
+                else:
+                    rhs = float(val_str)
+            elif right.data == "name":
+                enum_map = enum_maps.get(var_name, {})
+                enum_val_name = str(right.children[0])
+                if enum_val_name not in enum_map:
+                    return None
+                rhs = enum_map[enum_val_name]
+            else:
+                return None
+
+            ops = {
+                "<": lambda a, b: a < b,
+                "<=": lambda a, b: a <= b,
+                ">": lambda a, b: a > b,
+                ">=": lambda a, b: a >= b,
+                "==": lambda a, b: a == b,
+                "!=": lambda a, b: a != b,
+            }
+            if op not in ops:
+                return None
+            return ops[op](z3_var, rhs)
+
+        elif len(tree.children) == 1:
+            child = tree.children[0]
+            return _tree_to_z3(child, z3_vars, enum_maps) if isinstance(child, Tree) else None
+        return None
+
+    elif tree.data in {"add_expr", "mul_expr"}:
+        if len(child_trees) == 1 and len(tree.children) == 1:
+            return _tree_to_z3(child_trees[0], z3_vars, enum_maps)
+        return None
+
+    else:
+        if len(child_trees) == 1:
+            return _tree_to_z3(child_trees[0], z3_vars, enum_maps)
         return None
 
 
-def _intervals_cover_range(intervals: list[tuple[float, float]], lo: float, hi: float) -> list[tuple[float, float]]:
-    """
-    Given sorted (lo, hi) half-open intervals, return list of gaps within [range_lo, range_hi).
-    Returns [] if full coverage, non-empty list of gap intervals otherwise.
-    """
-    gaps = []
-    current = lo
-    for (a, b) in sorted(intervals):
-        if a > current:
-            gaps.append((current, a))
-        if b > current:
-            current = b
-        if current >= hi:
-            break
-    if current < hi:
-        gaps.append((current, hi))
-    return gaps
+def _format_z3_value(val, var_name: str, enum_maps: dict) -> str:
+    """Format a Z3 model value as a human-readable string."""
+    if val is None:
+        return "?"
+    if var_name in enum_maps:
+        try:
+            idx = val.as_long()
+            inv_map = {v: k for k, v in enum_maps[var_name].items()}
+            return inv_map.get(idx, str(idx))
+        except Exception:
+            pass
+    try:
+        return str(val.as_long())
+    except Exception:
+        pass
+    try:
+        frac = val.as_fraction()
+        if frac.denominator == 1:
+            return str(frac.numerator)
+        return f"{float(frac):.6g}"
+    except Exception:
+        pass
+    return str(val)
 
 
 def _check_guard_completeness(
@@ -647,39 +757,132 @@ def _check_guard_completeness(
         if parse_failed:
             continue
 
-        # Unwrap precedence tower to find the core comparison node.
-        # The grammar produces: or_expr > and_expr > compare_expr > add_expr > ...
-        # A simple comparison like "x == y" is still wrapped in or_expr/and_expr
-        # with a single child at each level. Only flag as compound if there are
-        # actually multiple children at the or_expr or and_expr level.
-        def _unwrap_to_compare(tree):
-            """Unwrap single-child precedence wrappers. Return (core_tree, is_compound)."""
-            node = tree
-            while node.data in {"or_expr", "and_expr"}:
-                from lark import Tree
-                child_trees = [c for c in node.children if isinstance(c, Tree)]
-                if len(child_trees) > 1:
-                    return node, True  # genuinely compound
-                if len(child_trees) == 1:
-                    node = child_trees[0]
-                else:
-                    break
-            return node, False
-
-        unwrapped = []
-        has_compound = False
+        # Collect all variable names referenced across all guard trees
+        all_var_names: set[str] = set()
         for tree in parse_results:
-            core, compound = _unwrap_to_compare(tree)
-            if compound:
-                has_compound = True
-                break
-            unwrapped.append(core)
+            all_var_names |= _extract_var_names(tree)
 
-        if has_compound:
+        if not all_var_names:
+            continue
+
+        # For each variable, validate type and build Z3 variable + domain constraints
+        ev_params = event_params.get(event, {})
+        z3_vars: dict = {}
+        domain_constraints: list = []
+        enum_maps: dict = {}
+        skip = False
+
+        for var in sorted(all_var_names):
+            if var not in ev_params:
+                issues.append(_make_issue(
+                    issue=(
+                        f"Guard on '{from_state}' -> '{event}': variable '{var}' "
+                        f"is not a parameter of event '{event}'; "
+                        f"type cannot be determined at compile time"
+                    ),
+                    location=f"{loc_prefix}::transitions",
+                    value=var,
+                    fix="Use only event parameter names in guard expressions",
+                    severity="error",
+                ))
+                skip = True
+                continue
+
+            type_str = ev_params[var]
+
+            if type_str == "String":
+                issues.append(_make_issue(
+                    issue=(
+                        f"Guard on '{from_state}' -> '{event}': variable '{var}' "
+                        f"has type 'String' which is forbidden in guard expressions"
+                    ),
+                    location=f"{loc_prefix}::transitions",
+                    value=var,
+                    fix="Use an Enum or numeric type for guard variables",
+                    severity="error",
+                ))
+                skip = True
+                continue
+
+            type_def = types_map.get(type_str) if types_map else None
+
+            if type_def is not None and isinstance(type_def, ScalarType) and type_def.base == "String":
+                issues.append(_make_issue(
+                    issue=(
+                        f"Guard on '{from_state}' -> '{event}': variable '{var}' "
+                        f"has type '{type_str}' (String base) which is forbidden in guard expressions"
+                    ),
+                    location=f"{loc_prefix}::transitions",
+                    value=var,
+                    fix="Use an Enum or numeric type for guard variables",
+                    severity="error",
+                ))
+                skip = True
+                continue
+
+            if type_def is not None and isinstance(type_def, EnumType):
+                z3_var = z3.Int(var)
+                z3_vars[var] = z3_var
+                enum_maps[var] = {name: idx for idx, name in enumerate(type_def.values)}
+                n = len(type_def.values)
+                domain_constraints.append(z3.Or(*[z3_var == i for i in range(n)]))
+            elif type_str == "Integer" or (
+                type_def is not None
+                and isinstance(type_def, ScalarType)
+                and type_def.base == "Integer"
+            ):
+                z3_var = z3.Int(var)
+                z3_vars[var] = z3_var
+                if type_def is not None and isinstance(type_def, ScalarType) and type_def.range:
+                    lo, hi = int(type_def.range[0]), int(type_def.range[1])
+                else:
+                    lo, hi = -2_147_483_648, 2_147_483_647  # int32 default
+                domain_constraints.append(z3_var >= lo)
+                domain_constraints.append(z3_var <= hi)
+            elif type_str == "Real" or (
+                type_def is not None
+                and isinstance(type_def, ScalarType)
+                and type_def.base == "Real"
+            ):
+                z3_var = z3.Real(var)
+                z3_vars[var] = z3_var
+                if type_def is not None and isinstance(type_def, ScalarType) and type_def.range:
+                    lo, hi = float(type_def.range[0]), float(type_def.range[1])
+                else:
+                    lo, hi = -3.4028235e38, 3.4028235e38  # float32 default
+                domain_constraints.append(z3_var >= lo)
+                domain_constraints.append(z3_var <= hi)
+            else:
+                issues.append(_make_issue(
+                    issue=(
+                        f"Guard on '{from_state}' -> '{event}': variable '{var}' "
+                        f"has unresolvable type '{type_str}'"
+                    ),
+                    location=f"{loc_prefix}::transitions",
+                    value=var,
+                    fix="Ensure the variable's type is declared in types.yaml",
+                    severity="error",
+                ))
+                skip = True
+
+        if skip:
+            continue
+
+        # Convert each guard tree to a Z3 formula
+        guard_formulas = []
+        conversion_failed = False
+        for tree in parse_results:
+            formula = _tree_to_z3(tree, z3_vars, enum_maps)
+            if formula is None:
+                conversion_failed = True
+                break
+            guard_formulas.append(formula)
+
+        if conversion_failed:
             issues.append(_make_issue(
                 issue=(
-                    f"Guard completeness cannot be determined for transitions "
-                    f"from '{from_state}' on '{event}': compound AND/OR expression detected"
+                    f"Guard on '{from_state}' -> '{event}': guard expression is too complex "
+                    f"for completeness analysis (non-linear or unsupported construct)"
                 ),
                 location=f"{loc_prefix}::transitions",
                 value=f"({from_state}, {event})",
@@ -688,183 +891,45 @@ def _check_guard_completeness(
             ))
             continue
 
-        # Extract (variable, op, value) from compare_expr trees
-        # Only analyze if all unwrapped trees are compare_expr
-        if not all(t.data == "compare_expr" for t in unwrapped):
+        if not guard_formulas:
             continue
 
-        comparisons = []
-        for tree in unwrapped:
-            # compare_expr children: add_expr OP add_expr
-            # Unwrap add_expr > mul_expr > atom to get the leaf node
-            def _unwrap_atom(node):
-                """Unwrap single-child arithmetic wrappers to reach the atom."""
-                from lark import Tree
-                while isinstance(node, Tree) and node.data in {"add_expr", "mul_expr"}:
-                    child_trees = [c for c in node.children if isinstance(c, Tree)]
-                    if len(child_trees) == 1 and len(node.children) == 1:
-                        node = child_trees[0]
-                    else:
-                        break
-                return node
+        # Check satisfiability of NOT(g1 OR g2 OR ... OR gn) under domain constraints
+        solver = z3.Solver()
+        for constraint in domain_constraints:
+            solver.add(constraint)
+        combined = z3.Or(*guard_formulas) if len(guard_formulas) > 1 else guard_formulas[0]
+        solver.add(z3.Not(combined))
+        result = solver.check()
 
-            left_tree = _unwrap_atom(tree.children[0])
-            op_token = str(tree.children[1])
-            right_tree = _unwrap_atom(tree.children[2])
-
-            # Left side should be a name or dotted_name (variable)
-            if left_tree.data == "name":
-                var_name = str(left_tree.children[0])
-            elif left_tree.data == "dotted_name":
-                # e.g. rcvd_evt.floor_num — use the param name (second part)
-                var_name = str(left_tree.children[1])
-            else:
-                continue
-
-            # Right side should be a number, name (enum value), or dotted_name
-            comparisons.append((var_name, op_token, right_tree))
-
-        if not comparisons:
-            continue
-
-        # All comparisons should reference the same variable for completeness analysis
-        var_names = {c[0] for c in comparisons}
-        if len(var_names) != 1:
-            # Multiple variables — cannot determine completeness
-            continue
-
-        var_name = next(iter(var_names))
-
-        # Determine variable type from event params
-        ev_params = event_params.get(event, {})
-        if var_name not in ev_params:
-            # Variable not an event param — cannot determine type, skip
-            continue
-
-        type_str = ev_params[var_name]
-
-        # Check String type — forbidden in guards
-        if type_str == "String":
+        if result == z3.sat:
+            model = solver.model()
+            parts = []
+            for var in sorted(z3_vars.keys()):
+                val = model[z3_vars[var]]
+                parts.append(f"{var}={_format_z3_value(val, var, enum_maps)}")
+            counterexample = ", ".join(parts)
             issues.append(_make_issue(
                 issue=(
-                    f"Guard on '{from_state}' -> '{event}': variable '{var_name}' "
-                    f"has type 'String' which is forbidden in guard expressions"
+                    f"Incomplete guard on '{from_state}' -> '{event}': "
+                    f"no guard fires when {counterexample}"
                 ),
                 location=f"{loc_prefix}::transitions",
-                value=var_name,
-                fix="Use an Enum or numeric type for guard variables",
+                value=f"({from_state}, {event})",
+                fix="Add or extend guard expressions to cover all cases",
                 severity="error",
             ))
-            continue
-
-        # Resolve type from types_map
-        type_def = types_map.get(type_str) if types_map else None
-
-        # Check if type is a scalar String (via types_map)
-        if type_def is not None and isinstance(type_def, ScalarType) and type_def.base == "String":
+        elif result == z3.unknown:
             issues.append(_make_issue(
                 issue=(
-                    f"Guard on '{from_state}' -> '{event}': variable '{var_name}' "
-                    f"has type '{type_str}' (String base) which is forbidden in guard expressions"
+                    f"Z3 could not determine guard completeness for "
+                    f"'{from_state}' -> '{event}'"
                 ),
                 location=f"{loc_prefix}::transitions",
-                value=var_name,
-                fix="Use an Enum or numeric type for guard variables",
-                severity="error",
+                value=f"({from_state}, {event})",
+                severity="warning",
             ))
-            continue
-
-        # Enum completeness check
-        if type_def is not None and isinstance(type_def, EnumType):
-            # Extract compared values (right-hand side name tokens)
-            guard_values = set()
-            for _, op, right_tree in comparisons:
-                if right_tree.data == "name":
-                    guard_values.add(str(right_tree.children[0]))
-                elif right_tree.data == "number":
-                    # Number compared against enum param — treat as string literal
-                    guard_values.add(str(right_tree.children[0]))
-            missing = sorted(set(type_def.values) - guard_values)
-            if missing:
-                issues.append(_make_issue(
-                    issue=(
-                        f"Enum guard on '{from_state}' -> '{event}': "
-                        f"variable '{var_name}' (type '{type_str}') "
-                        f"is missing values: {', '.join(missing)}"
-                    ),
-                    location=f"{loc_prefix}::transitions",
-                    value=missing,
-                    fix=f"Add transitions for: {', '.join(missing)}",
-                    severity="error",
-                ))
-            continue
-
-        # Integer/Real interval analysis
-        is_numeric = (
-            type_str in ("Integer", "Real")
-            or (type_def is not None and isinstance(type_def, ScalarType) and type_def.base in ("Integer", "Real"))
-        )
-        if not is_numeric:
-            # Unknown or struct type — skip
-            continue
-
-        intervals = []
-        analysis_failed = False
-        for _, op, right_tree in comparisons:
-            if right_tree.data not in ("number", "name"):
-                analysis_failed = True
-                break
-            try:
-                val = float(str(right_tree.children[0]))
-            except ValueError:
-                analysis_failed = True
-                break
-            interval = _normalize_interval(op, val)
-            if interval is None:
-                analysis_failed = True
-                break
-            intervals.append(interval)
-
-        if analysis_failed or not intervals:
-            continue
-
-        # Determine range bounds
-        scalar_range = None
-        if type_def is not None and isinstance(type_def, ScalarType) and type_def.range:
-            scalar_range = type_def.range
-
-        if scalar_range:
-            range_lo, range_hi = float(scalar_range[0]), float(scalar_range[1]) + 1  # inclusive hi -> exclusive
-            gaps = _intervals_cover_range(intervals, range_lo, range_hi)
-            if gaps:
-                gap_strs = [f"[{g[0]}, {g[1]})" for g in gaps]
-                issues.append(_make_issue(
-                    issue=(
-                        f"Guard coverage gap on '{from_state}' -> '{event}': "
-                        f"variable '{var_name}' has uncovered intervals: {', '.join(gap_strs)}"
-                    ),
-                    location=f"{loc_prefix}::transitions",
-                    value=f"({from_state}, {event})",
-                    fix="Add guard expressions to cover the missing intervals",
-                    severity="warning",
-                ))
-        else:
-            # No range — check for gaps between defined intervals
-            sorted_ivs = sorted(intervals)
-            for i in range(len(sorted_ivs) - 1):
-                hi = sorted_ivs[i][1]
-                next_lo = sorted_ivs[i + 1][0]
-                if hi < next_lo:
-                    issues.append(_make_issue(
-                        issue=(
-                            f"Guard coverage gap on '{from_state}' -> '{event}': "
-                            f"variable '{var_name}' has gap between {hi} and {next_lo}"
-                        ),
-                        location=f"{loc_prefix}::transitions",
-                        value=f"({from_state}, {event})",
-                        fix="Add a guard expression to cover the gap",
-                        severity="warning",
-                    ))
+        # z3.unsat → complete, no issue
 
     return issues
 

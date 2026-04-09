@@ -653,7 +653,7 @@ transitions:
 
 
 def test_guard_interval_gap(tmp_path, monkeypatch):
-    """Integer guard 'x < 5' and 'x > 5' returns a severity='warning' about the gap at x == 5."""
+    """Integer guard 'x < 5' and 'x > 5' returns a severity='error' about the gap at x == 5."""
     monkeypatch.chdir(tmp_path)
     state_yaml = """\
 schema_version: "1.0.0"
@@ -683,9 +683,12 @@ transitions:
     from tools import validation
     importlib.reload(validation)
     result = validation.validate_domain("Hydraulics")
-    gap_issues = [i for i in result if "gap" in i["issue"].lower() or "coverage" in i["issue"].lower()]
-    assert len(gap_issues) >= 1, f"Expected interval gap warning, got: {result}"
-    assert gap_issues[0]["severity"] == "warning"
+    gap_issues = [
+        i for i in result
+        if "gap" in i["issue"].lower() or "coverage" in i["issue"].lower() or "incomplete" in i["issue"].lower()
+    ]
+    assert len(gap_issues) >= 1, f"Expected interval gap error, got: {result}"
+    assert gap_issues[0]["severity"] == "error"
 
 
 def test_guard_interval_full_coverage(tmp_path, monkeypatch):
@@ -828,8 +831,8 @@ def test_elevator_model_no_partition_errors(monkeypatch):
     assert partition_issues == [], f"Elevator model has partition errors: {partition_issues}"
 
 
-def test_guard_complex_expression_warning(tmp_path, monkeypatch):
-    """Guard containing 'and'/'or' returns severity='warning' (cannot determine completeness)."""
+def test_guard_multi_variable_incomplete_error(tmp_path, monkeypatch):
+    """Multi-variable AND guard 'pressure > 10 and flow > 5' returns severity='error' with counterexample."""
     monkeypatch.chdir(tmp_path)
     state_yaml = """\
 schema_version: "1.0.0"
@@ -856,12 +859,544 @@ transitions:
     from tools import validation
     importlib.reload(validation)
     result = validation.validate_domain("Hydraulics")
-    complex_issues = [
+    incomplete_issues = [
         i for i in result
-        if "complex" in i["issue"].lower() or "cannot" in i["issue"].lower() or "completeness" in i["issue"].lower()
+        if "incomplete" in i["issue"].lower() or "no guard fires" in i["issue"].lower()
     ]
-    assert len(complex_issues) >= 1, f"Expected complex guard warning, got: {result}"
-    assert complex_issues[0]["severity"] == "warning"
+    assert len(incomplete_issues) >= 1, f"Expected incomplete guard error, got: {result}"
+    assert incomplete_issues[0]["severity"] == "error"
+
+
+REAL_TYPES_YAML = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+types:
+  - name: Pressure
+    base: Real
+    range: [0, 200]
+"""
+
+
+def test_guard_compound_single_var_or_complete(tmp_path, monkeypatch):
+    """Single guard 'pressure < 5 or pressure >= 5' covers all values — no issue."""
+    monkeypatch.chdir(tmp_path)
+    state_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+class: Valve
+initial_state: Idle
+events:
+  - name: Pressure_changed
+    params:
+      - name: pressure
+        type: Pressure
+states:
+  - name: Idle
+  - name: Active
+transitions:
+  - from: Idle
+    to: Active
+    event: Pressure_changed
+    guard: "pressure < 5 or pressure >= 5"
+"""
+    _write_guard_model(tmp_path, state_yaml, INTEGER_TYPES_YAML)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    gap_issues = [
+        i for i in result
+        if "incomplete" in i["issue"].lower() or "gap" in i["issue"].lower()
+    ]
+    assert gap_issues == [], f"Expected no completeness issues, got: {gap_issues}"
+
+
+def test_guard_compound_single_var_or_gap(tmp_path, monkeypatch):
+    """Single guard 'pressure < 5 or pressure > 5' leaves pressure==5 uncovered — error."""
+    monkeypatch.chdir(tmp_path)
+    state_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+class: Valve
+initial_state: Idle
+events:
+  - name: Pressure_changed
+    params:
+      - name: pressure
+        type: Pressure
+states:
+  - name: Idle
+  - name: Active
+transitions:
+  - from: Idle
+    to: Active
+    event: Pressure_changed
+    guard: "pressure < 5 or pressure > 5"
+"""
+    _write_guard_model(tmp_path, state_yaml, INTEGER_TYPES_YAML)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    gap_issues = [
+        i for i in result
+        if "incomplete" in i["issue"].lower() or "no guard fires" in i["issue"].lower()
+    ]
+    assert len(gap_issues) >= 1, f"Expected incomplete guard error, got: {result}"
+    assert gap_issues[0]["severity"] == "error"
+    assert "pressure=5" in gap_issues[0]["issue"]
+
+
+def test_guard_multi_var_complete(tmp_path, monkeypatch):
+    """Two guards 'pressure <= 5' / 'pressure > 5' with an unconstrained 'temp' param — no issue."""
+    monkeypatch.chdir(tmp_path)
+    state_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+class: Valve
+initial_state: Idle
+events:
+  - name: Pressure_changed
+    params:
+      - name: pressure
+        type: Pressure
+      - name: temp
+        type: Integer
+states:
+  - name: Idle
+  - name: Low
+  - name: High
+transitions:
+  - from: Idle
+    to: Low
+    event: Pressure_changed
+    guard: "pressure <= 5"
+  - from: Idle
+    to: High
+    event: Pressure_changed
+    guard: "pressure > 5"
+"""
+    _write_guard_model(tmp_path, state_yaml, INTEGER_TYPES_YAML)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    gap_issues = [
+        i for i in result
+        if "incomplete" in i["issue"].lower() or "gap" in i["issue"].lower()
+    ]
+    assert gap_issues == [], f"Expected no completeness issues, got: {gap_issues}"
+
+
+def test_guard_real_type_complete_boundary(tmp_path, monkeypatch):
+    """Real type guards 'pressure <= 5.0' and 'pressure > 5.0' cover all values — no issue."""
+    monkeypatch.chdir(tmp_path)
+    state_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+class: Valve
+initial_state: Idle
+events:
+  - name: Pressure_changed
+    params:
+      - name: pressure
+        type: Pressure
+states:
+  - name: Idle
+  - name: Low
+  - name: High
+transitions:
+  - from: Idle
+    to: Low
+    event: Pressure_changed
+    guard: "pressure <= 5.0"
+  - from: Idle
+    to: High
+    event: Pressure_changed
+    guard: "pressure > 5.0"
+"""
+    _write_guard_model(tmp_path, state_yaml, REAL_TYPES_YAML)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    gap_issues = [
+        i for i in result
+        if "incomplete" in i["issue"].lower() or "gap" in i["issue"].lower()
+    ]
+    assert gap_issues == [], f"Expected no completeness issues for real boundary, got: {gap_issues}"
+
+
+def test_guard_real_type_gap_boundary(tmp_path, monkeypatch):
+    """Real type guards 'pressure <= 5.0' and 'pressure >= 6.0' leave (5.0, 6.0) uncovered — error."""
+    monkeypatch.chdir(tmp_path)
+    state_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+class: Valve
+initial_state: Idle
+events:
+  - name: Pressure_changed
+    params:
+      - name: pressure
+        type: Pressure
+states:
+  - name: Idle
+  - name: Low
+  - name: High
+transitions:
+  - from: Idle
+    to: Low
+    event: Pressure_changed
+    guard: "pressure <= 5.0"
+  - from: Idle
+    to: High
+    event: Pressure_changed
+    guard: "pressure >= 6.0"
+"""
+    _write_guard_model(tmp_path, state_yaml, REAL_TYPES_YAML)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    gap_issues = [
+        i for i in result
+        if "incomplete" in i["issue"].lower() or "no guard fires" in i["issue"].lower()
+    ]
+    assert len(gap_issues) >= 1, f"Expected real gap error, got: {result}"
+    assert gap_issues[0]["severity"] == "error"
+
+
+def test_guard_integer_type_no_gap_adjacent(tmp_path, monkeypatch):
+    """Integer guards 'pressure <= 5' and 'pressure >= 6' are adjacent — no integer gap, no issue."""
+    monkeypatch.chdir(tmp_path)
+    state_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+class: Valve
+initial_state: Idle
+events:
+  - name: Pressure_changed
+    params:
+      - name: pressure
+        type: Pressure
+states:
+  - name: Idle
+  - name: Low
+  - name: High
+transitions:
+  - from: Idle
+    to: Low
+    event: Pressure_changed
+    guard: "pressure <= 5"
+  - from: Idle
+    to: High
+    event: Pressure_changed
+    guard: "pressure >= 6"
+"""
+    _write_guard_model(tmp_path, state_yaml, INTEGER_TYPES_YAML)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    gap_issues = [
+        i for i in result
+        if "incomplete" in i["issue"].lower() or "gap" in i["issue"].lower()
+    ]
+    assert gap_issues == [], f"Expected no integer gap for adjacent bounds, got: {gap_issues}"
+
+
+def test_guard_unknown_variable_error(tmp_path, monkeypatch):
+    """Guard referencing a variable not in event params returns severity='error'."""
+    monkeypatch.chdir(tmp_path)
+    state_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+class: Valve
+initial_state: Idle
+events:
+  - name: Pressure_changed
+    params:
+      - name: pressure
+        type: Pressure
+states:
+  - name: Idle
+  - name: Active
+transitions:
+  - from: Idle
+    to: Active
+    event: Pressure_changed
+    guard: "bogus_var > 10"
+"""
+    _write_guard_model(tmp_path, state_yaml, INTEGER_TYPES_YAML)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    unknown_issues = [
+        i for i in result
+        if "bogus_var" in i["issue"] and ("cannot be determined" in i["issue"] or "not a parameter" in i["issue"])
+    ]
+    assert len(unknown_issues) >= 1, f"Expected unknown variable error, got: {result}"
+    assert unknown_issues[0]["severity"] == "error"
+
+
+def test_guard_enum_via_z3_missing(tmp_path, monkeypatch):
+    """Enum guard missing one value is caught via Z3 path — error naming the missing value."""
+    monkeypatch.chdir(tmp_path)
+    state_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+class: Valve
+initial_state: Idle
+events:
+  - name: Mode_changed
+    params:
+      - name: mode
+        type: ValveMode
+states:
+  - name: Idle
+  - name: Manual
+  - name: Auto
+transitions:
+  - from: Idle
+    to: Manual
+    event: Mode_changed
+    guard: "mode == Manual"
+  - from: Idle
+    to: Auto
+    event: Mode_changed
+    guard: "mode == Auto"
+"""
+    _write_guard_model(tmp_path, state_yaml, ENUM_TYPES_YAML)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    enum_issues = [
+        i for i in result
+        if "Locked" in i["issue"] or "incomplete" in i["issue"].lower()
+    ]
+    assert len(enum_issues) >= 1, f"Expected missing enum value error via Z3 path, got: {result}"
+    assert enum_issues[0]["severity"] == "error"
+    assert "Locked" in enum_issues[0]["issue"]
+
+
+MULTI_VAR_TYPES_YAML = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+types:
+  - name: Pressure
+    base: Integer
+    range: [0, 200]
+  - name: Flow
+    base: Integer
+    range: [0, 100]
+"""
+
+ENUM_INTEGER_TYPES_YAML = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+types:
+  - name: ValveMode
+    base: enum
+    values: [Manual, Auto, Locked]
+  - name: Pressure
+    base: Integer
+    range: [0, 200]
+"""
+
+
+def test_guard_two_var_complete(tmp_path, monkeypatch):
+    """Two guards using two variables that together cover all (pressure, flow) pairs — no issue.
+
+    T1: pressure <= 5 and flow <= 10  (covers low-pressure/low-flow corner)
+    T2: pressure > 5 or flow > 10    (covers everything else)
+    NOT(T1 OR T2) is UNSAT.
+    """
+    monkeypatch.chdir(tmp_path)
+    state_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+class: Valve
+initial_state: Idle
+events:
+  - name: Reading
+    params:
+      - name: pressure
+        type: Pressure
+      - name: flow
+        type: Flow
+states:
+  - name: Idle
+  - name: LowLow
+  - name: Other
+transitions:
+  - from: Idle
+    to: LowLow
+    event: Reading
+    guard: "pressure <= 5 and flow <= 10"
+  - from: Idle
+    to: Other
+    event: Reading
+    guard: "pressure > 5 or flow > 10"
+"""
+    _write_guard_model(tmp_path, state_yaml, MULTI_VAR_TYPES_YAML)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    gap_issues = [
+        i for i in result
+        if "incomplete" in i["issue"].lower() or "gap" in i["issue"].lower()
+    ]
+    assert gap_issues == [], f"Expected no completeness issues for two-var coverage, got: {gap_issues}"
+
+
+def test_guard_two_var_incomplete(tmp_path, monkeypatch):
+    """Two guards using two variables that leave combinations uncovered — error with counterexample.
+
+    T1: pressure > 10 and flow > 20
+    T2: pressure <= 5
+    Uncovered: pressure in (5, 10], any flow; and pressure > 10 with flow <= 20.
+    Both pressure and flow must appear in the counterexample.
+    """
+    monkeypatch.chdir(tmp_path)
+    state_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+class: Valve
+initial_state: Idle
+events:
+  - name: Reading
+    params:
+      - name: pressure
+        type: Pressure
+      - name: flow
+        type: Flow
+states:
+  - name: Idle
+  - name: HighHigh
+  - name: Low
+transitions:
+  - from: Idle
+    to: HighHigh
+    event: Reading
+    guard: "pressure > 10 and flow > 20"
+  - from: Idle
+    to: Low
+    event: Reading
+    guard: "pressure <= 5"
+"""
+    _write_guard_model(tmp_path, state_yaml, MULTI_VAR_TYPES_YAML)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    gap_issues = [
+        i for i in result
+        if "incomplete" in i["issue"].lower() or "no guard fires" in i["issue"].lower()
+    ]
+    assert len(gap_issues) >= 1, f"Expected incomplete guard error, got: {result}"
+    assert gap_issues[0]["severity"] == "error"
+    issue_text = gap_issues[0]["issue"]
+    assert "pressure=" in issue_text, f"Expected pressure in counterexample, got: {issue_text}"
+    assert "flow=" in issue_text, f"Expected flow in counterexample, got: {issue_text}"
+
+
+def test_guard_enum_and_integer_incomplete(tmp_path, monkeypatch):
+    """Enum + integer guard where one enum value is only partially covered — error.
+
+    Guards: 'mode == Manual and pressure > 100', 'mode == Auto', 'mode == Locked'
+    Uncovered: mode == Manual with pressure <= 100.
+    """
+    monkeypatch.chdir(tmp_path)
+    state_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+class: Valve
+initial_state: Idle
+events:
+  - name: Mode_changed
+    params:
+      - name: mode
+        type: ValveMode
+      - name: pressure
+        type: Pressure
+states:
+  - name: Idle
+  - name: ManualHigh
+  - name: Auto
+  - name: Locked
+transitions:
+  - from: Idle
+    to: ManualHigh
+    event: Mode_changed
+    guard: "mode == Manual and pressure > 100"
+  - from: Idle
+    to: Auto
+    event: Mode_changed
+    guard: "mode == Auto"
+  - from: Idle
+    to: Locked
+    event: Mode_changed
+    guard: "mode == Locked"
+"""
+    _write_guard_model(tmp_path, state_yaml, ENUM_INTEGER_TYPES_YAML)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    gap_issues = [
+        i for i in result
+        if "incomplete" in i["issue"].lower() or "no guard fires" in i["issue"].lower()
+    ]
+    assert len(gap_issues) >= 1, f"Expected incomplete guard error for enum+integer, got: {result}"
+    assert gap_issues[0]["severity"] == "error"
+    assert "Manual" in gap_issues[0]["issue"]
+
+
+def test_guard_four_variables(tmp_path, monkeypatch):
+    """Two guards over 4 variables with AND/OR mix leave a middle range uncovered — error.
+
+    T1: a > 5 and b > 5 and c > 5 and d > 5   (all-high case)
+    T2: a <= 3 or b <= 3 or c <= 3 or d <= 3   (at least one low)
+    Uncovered: all four values simultaneously in (3, 5], e.g. a=4, b=4, c=4, d=4.
+    All 4 variable names must appear in the counterexample.
+    """
+    monkeypatch.chdir(tmp_path)
+    state_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+class: Valve
+initial_state: Idle
+events:
+  - name: Sensor_reading
+    params:
+      - name: a
+        type: Integer
+      - name: b
+        type: Integer
+      - name: c
+        type: Integer
+      - name: d
+        type: Integer
+states:
+  - name: Idle
+  - name: AllHigh
+  - name: AnyLow
+transitions:
+  - from: Idle
+    to: AllHigh
+    event: Sensor_reading
+    guard: "a > 5 and b > 5 and c > 5 and d > 5"
+  - from: Idle
+    to: AnyLow
+    event: Sensor_reading
+    guard: "a <= 3 or b <= 3 or c <= 3 or d <= 3"
+"""
+    _write_guard_model(tmp_path, state_yaml)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    gap_issues = [
+        i for i in result
+        if "incomplete" in i["issue"].lower() or "no guard fires" in i["issue"].lower()
+    ]
+    assert len(gap_issues) >= 1, f"Expected incomplete guard error for 4-variable guard, got: {result}"
+    assert gap_issues[0]["severity"] == "error"
+    issue_text = gap_issues[0]["issue"]
+    for var in ("a=", "b=", "c=", "d="):
+        assert var in issue_text, f"Expected '{var}' in counterexample, got: {issue_text}"
 
 
 # ---------------------------------------------------------------------------
