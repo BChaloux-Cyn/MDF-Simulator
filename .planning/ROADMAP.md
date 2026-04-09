@@ -188,7 +188,13 @@ Plans:
   3. `simulate_domain(domain, scenario)` manages full object instance pool across a domain
   4. `simulate_class(class, events)` runs isolated single-class simulation with stripped-down context
   5. Two identical scenario runs produce identical micro-step output (determinism verified end-to-end)
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 05.3-01-PLAN.md — Wave 0 test scaffold + fixtures + runtime directories
+- [ ] 05.3-02-PLAN.md — ctx API extension: __instance_key__, generated-code-facing methods (create/delete/relate/select_*)
+- [ ] 05.3-03-PLAN.md — Bundle loader + ENGINE_VERSION + scenario Pydantic schema + preflight multiplicity check
+- [ ] 05.3-04-PLAN.md — simulate_domain/simulate_class MCP tools + trigger evaluator + scenario_runner + elevator E2E verification
 
 ### Phase 5.4: GDB Command Language + CLI
 **Goal**: Define and implement a GDB-style command set for interacting with running simulations — inspect instances, show queues, step through events, control the clock.
