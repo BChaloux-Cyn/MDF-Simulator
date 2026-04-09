@@ -3,7 +3,7 @@
 
 ## System Overview
 
-`mdf-sim` is a Python library and MCP server for authoring, validating, and simulating Shlaer-Mellor / Executable UML domain models. The system accepts domain models expressed as YAML files, validates their structural and behavioral correctness, compiles them to a self-contained `.mdfbundle` artifact, and executes simulations using run-to-completion xUML semantics. The primary architectural style is a layered pipeline: a schema layer defines the model grammar, a tools layer exposes model I/O and validation as MCP tools, a compiler layer transforms valid YAML into executable Python, and an engine layer runs the resulting bundles.
+`mdf-sim` is a Python library for authoring, validating, and simulating Shlaer-Mellor / Executable UML domain models. The system accepts domain models expressed as YAML files, validates their structural and behavioral correctness, compiles them to a self-contained `.mdfbundle` artifact, and executes simulations using run-to-completion xUML semantics. The primary architectural style is a layered pipeline: a schema layer defines the model grammar, a tools layer exposes model I/O and validation as MCP tools, a compiler layer transforms valid YAML into executable Python, and an engine layer runs the resulting bundles.
 
 ---
 
@@ -15,11 +15,10 @@ graph TD
     SCHEMA["schema/\nPydantic models"]
     CANONICAL["schema/ canonical builder\nYAML → CanonicalDiagram"]
     PYCCA["pycca/\nLark action language parser"]
-    TOOLS["tools/\nMCP tool implementations"]
+    TOOLS["tools/\nTool implementations"]
     COMPILER["compiler/\nModel compiler"]
     BUNDLE[".mdfbundle\n(zip artifact)"]
     ENGINE["engine/\nSimulation runtime"]
-    SERVER["server.py\nMCP server (FastMCP)"]
     CLI["cli/\nTest harness + GUI"]
 
     YAML --> SCHEMA
@@ -30,9 +29,7 @@ graph TD
     PYCCA --> TOOLS
     COMPILER --> BUNDLE
     BUNDLE --> ENGINE
-    TOOLS --> SERVER
     ENGINE --> CLI
-    ENGINE --> SERVER
 ```
 
 ---
@@ -45,7 +42,7 @@ A typical path from model authoring to simulation output:
 2. **MCP tools** (`read_model`, `write_model`, `validate_model`) read and validate YAML through `schema/yaml_schema.py` Pydantic models. Validation also invokes `pycca/grammar.py` to parse guard expressions embedded in state diagrams.
 3. **Compiler** (`compiler.compile_model`) walks the model root via `compiler/loader.py`, converts YAML schema objects to canonical form (`schema/canonical_builder.py`), builds a `DomainManifest` TypedDict (`compiler/manifest_builder.py`), generates one Python module per concrete class (`compiler/codegen.py`), and writes a deterministic `.mdfbundle` zip (`compiler/packager.py`).
 4. **Engine** (`engine.run_simulation`) accepts the `DomainManifest` plus an optional scenario dict and yields a stream of `MicroStep` records as the scheduler dequeues and dispatches events.
-5. **CLI / GUI** (`cli/test_harness.py`, `cli/gui.py`) or the MCP `simulation` tool consume the micro-step stream for test assertions or interactive debugging.
+5. **CLI / GUI** (`cli/test_harness.py`, `cli/gui.py`) consume the micro-step stream for test assertions or interactive debugging.
 
 ---
 
@@ -77,9 +74,9 @@ schema/         Pydantic v2 models for all YAML file types (class diagrams, stat
                 diagrams, types, domain registry). Also holds the canonical builder
                 and Draw.io schema models used by both the tools and compiler layers.
 
-tools/          MCP tool implementations exposed via server.py: model_io (read/write
-                YAML), validation (structural + behavioral checks), drawio (render /
-                sync diagrams), simulation (thin engine wrapper).
+tools/          Tool implementations: model_io (read/write YAML), validation
+                (structural + behavioral checks), drawio (render / sync diagrams),
+                simulation (thin engine wrapper).
 
 pycca/          Lark-based parser for the MDF action language DSL. Exports
                 GUARD_PARSER (guard expressions only) and STATEMENT_PARSER (full
@@ -97,8 +94,6 @@ engine/         Simulation runtime framework. Zero imports from schema/, tools/,
 
 cli/            CLI test harness (test_harness.py) and GUI debugger (gui.py).
                 Entry points: mdf-sim-test, mdf-sim-gui.
-
-server.py       FastMCP server entry point. Registers all MCP tools from tools/.
 
 tests/          pytest suite covering schema, tools, compiler, engine, and elevator
                 example model.
@@ -118,4 +113,4 @@ examples/       Reference models. elevator/ is a multi-domain elevator control
 - **D-11:** `compiler/` must not import from `engine/`. The compiler produces bundles that the engine loads; they communicate only through the `.mdfbundle` artifact and the `DomainManifest` TypedDict shape.
 - **Run-to-completion:** The scheduler enforces that one event processes fully — including all generated events enqueued — before the next event is selected.
 - **Deterministic bundles:** `compiler/packager.py` writes zip entries in sorted order with a fixed timestamp (`(2020, 1, 1, 0, 0, 0)`) so bundle bytes are stable across builds for the same model.
-- **No raises in MCP tools:** All tool functions return structured issue dicts and never raise; errors surface as list entries with `issue`, `location`, `value`, `fix`, and `severity` fields.
+- **No raises in tools:** All tool functions return structured issue dicts and never raise; errors surface as list entries with `issue`, `location`, `value`, `fix`, and `severity` fields.

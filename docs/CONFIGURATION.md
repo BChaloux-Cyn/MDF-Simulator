@@ -9,7 +9,7 @@ parameters passed directly to the engine and tools.
 
 ## Model Directory Structure
 
-All tools and the MCP server operate relative to the current working directory. A valid project
+All tools operate relative to the current working directory. A valid project
 must contain a `.design/model/` directory with the following layout:
 
 ```
@@ -215,21 +215,6 @@ scenario = {
     ],
 }
 ```
-
----
-
-## MCP Server
-
-The MCP server (`server.py`) exposes tools to Claude Desktop and compatible IDE integrations.
-It has no configuration file — tool behavior is determined by the working directory when the
-server starts.
-
-```bash
-# Start the MCP server
-.venv/Scripts/python -m mcp run server.py
-```
-
-<!-- VERIFY: MCP client registration steps and any mcp configuration file path required by Claude Desktop -->
 
 ---
 

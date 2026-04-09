@@ -1,7 +1,7 @@
 <!-- generated-by: gsd-doc-writer -->
 # mdf-simulator
 
-A Python library implementing an MDF (Model-Driven Framework) simulator with MCP server tools for working with Shlaer-Mellor / Executable UML domain models.
+A Python library implementing an MDF (Model-Driven Framework) simulator for Shlaer-Mellor / Executable UML domain models.
 
 ## Installation
 
@@ -17,14 +17,7 @@ uv pip install -r requirements.txt
 ## Quick Start
 
 1. Place your domain YAML files under `.design/model/` in the working directory.
-2. Use the Python API directly or start the MCP server:
-
-```bash
-# Start the MCP server (for Claude Desktop / IDE integrations)
-.venv/Scripts/python -m mcp run server.py
-```
-
-3. Validate your model:
+2. Validate your model:
 
 ```python
 from tools.validation import validate_model
@@ -85,7 +78,7 @@ Without `force=True`, diagrams are skipped when the YAML structure is unchanged,
 
 ```
 schema/         Pydantic models for all YAML file types
-tools/          MCP tool implementations (model_io, validation, drawio, simulation)
+tools/          Tool implementations (model_io, validation, drawio, simulation)
 pycca/          Lark-based guard and statement parser
 engine/         Simulation engine
 compiler/       Model compiler

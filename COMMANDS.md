@@ -24,13 +24,6 @@ pip-compile requirements.in
 .venv/Scripts/python -m pytest tests/test_pycca.py::test_arriving_action_new_syntax -v
 ```
 
-## MCP Server
-
-```bash
-# Start the MCP server (used by Claude Desktop / IDE integrations)
-.venv/Scripts/python -m mcp run server.py
-```
-
 ## Model Tools (Python API)
 
 All model tools operate relative to the current working directory, expecting

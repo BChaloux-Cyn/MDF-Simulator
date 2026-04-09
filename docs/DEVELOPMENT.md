@@ -24,21 +24,13 @@ The project is a Python package (`mdf-sim`) built with Hatchling. The installabl
 |--------|---------|
 | `schema/` | Pydantic models for all YAML file types |
 | `pycca/` | Lark-based guard and statement parser |
-| `tools/` | MCP tool implementations (model_io, validation, drawio, simulation) |
+| `tools/` | Tool implementations (model_io, validation, drawio, simulation) |
 | `engine/` | Simulation engine |
 | `cli/` | CLI test harness and GUI debugger |
 
 Entry points defined in `pyproject.toml`:
 - `mdf-sim-test` → `cli.test_harness:main`
 - `mdf-sim-gui` → `cli.gui:main`
-
-## Running the MCP Server
-
-```bash
-.venv/Scripts/python -m mcp run server.py
-```
-
-The server exposes all model tools (validation, model_io, drawio, simulation) over the MCP protocol for use with Claude Desktop or IDE integrations.
 
 ## Code Style
 
