@@ -51,11 +51,18 @@ enqueue(event):
         → standard queue
     else:
         → standard queue
+
+tick_delay_queue() on each expired entry:
+    strip delay_ms, then re-route using the same priority/standard rules:
+    if sender == target (class + id both match):
+        → priority queue
+    else:
+        → standard queue
 ```
 
-The delay check is applied before the self/cross check. A self-directed event with
-`delay_ms > 0` enters the delay queue and arrives on the standard queue when it
-expires — it never uses the priority path (rule 4).
+The delay check is applied before the self/cross check at enqueue time. When a
+delayed event expires, `tick_delay_queue()` re-applies the normal routing rules —
+a self-directed delayed event arrives on the priority queue, not the standard queue.
 
 ### Why three queues
 

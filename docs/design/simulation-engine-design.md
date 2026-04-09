@@ -48,14 +48,14 @@ The following rules define the execution domain semantics the engine must implem
 1. If `sending_instance_id == target_instance_id` → **priority queue**
 2. If `sending_instance_id != target_instance_id` → **standard queue** (even if same class)
 3. Creation events → **standard queue** always (never priority, per pycca spec)
-4. Delayed events → **delay queue** first; move to standard queue when expired (never priority)
+4. Delayed events → **delay queue** first; on expiry, re-routed using the normal priority/standard rules (self-directed → priority, cross-instance → standard)
 5. At most one delayed signal of a given event type per sender-instance / receiver-instance pair may be pending at any time. Posting a second cancels the first.
 
 ### Scheduler
 
 6. Always check priority queue before standard queue
 7. After each event completes (including all generated events enqueued), check priority queue again before dequeuing from standard
-8. Delay queue only feeds standard queue — never dispatched directly
+8. Delay queue feeds priority or standard queue on expiry — never dispatched directly
 9. Scheduler halts when all three queues are empty
 
 ### Run-to-Completion

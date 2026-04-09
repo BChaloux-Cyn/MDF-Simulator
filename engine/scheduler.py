@@ -209,7 +209,7 @@ class ThreeQueueScheduler:
         now = self._clock.now()
         while self._delay and self._delay[0][0] <= now:
             _, _, event = heapq.heappop(self._delay)
-            # Strip delay_ms before re-enqueuing as a standard-queue event
+            # Strip delay_ms and re-route using normal priority/standard rules
             unwrapped = Event(
                 event_type=event.event_type,
                 sender_class=event.sender_class,
@@ -219,7 +219,11 @@ class ThreeQueueScheduler:
                 args=dict(event.args),
                 delay_ms=None,
             )
-            self._standard.append(unwrapped)
+            queue = self._classify_queue(unwrapped)
+            if queue == "priority":
+                self._priority.append(unwrapped)
+            else:
+                self._standard.append(unwrapped)
             steps.append(
                 EventDelayExpired(
                     event_type=event.event_type,

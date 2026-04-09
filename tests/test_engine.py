@@ -503,6 +503,30 @@ def test_scheduler_delay_feeds_standard():
     assert selected[0].queue == "standard"
 
 
+def test_self_directed_delay_expires_to_priority():
+    """Expired self-directed delayed event routes to priority, not standard."""
+    sched, reg, clock = _make_scheduler()
+    reg.create_sync("TrafficLight", {"light_id": 1}, initial_state="Green")
+
+    sched.enqueue(Event(
+        event_type="Timer",
+        sender_class="TrafficLight", sender_id={"light_id": 1},
+        target_class="TrafficLight", target_id={"light_id": 1},
+        delay_ms=100.0,
+    ))
+
+    steps_before = list(sched.execute())
+    assert not [s for s in steps_before if isinstance(s, SchedulerSelected)]
+
+    clock.advance(150)
+    steps_after = list(sched.execute())
+    expired = [s for s in steps_after if isinstance(s, EventDelayExpired)]
+    selected = [s for s in steps_after if isinstance(s, SchedulerSelected)]
+    assert len(expired) == 1
+    assert len(selected) == 1
+    assert selected[0].queue == "priority"
+
+
 def test_run_to_completion():
     """SC-04 / D-18-19: events generated in an action don't fire mid-event."""
     sched, reg, _ = _make_scheduler()
