@@ -91,8 +91,8 @@ examples/       Reference models (elevator case study)
 ## Key References
 
 - [`COMMANDS.md`](COMMANDS.md) — Setup, test, and tool invocation recipes
-- [`pycca/SYNTAX.md`](pycca/SYNTAX.md) — MDF action language syntax reference
-- [`schema/COMPILATION.md`](schema/COMPILATION.md) — How schema elements compile into pycca-accessible names
+- [`docs/design/SYNTAX.md`](docs/design/SYNTAX.md) — MDF action language syntax reference
+- [`docs/design/COMPILATION.md`](docs/design/COMPILATION.md) — How schema elements compile into pycca-accessible names
 - [Upstream pycca manual](https://tcl-cm3.sourceforge.net/pycca.html) — Reference for the original Shlaer-Mellor code generator
 
 ## Running Tests

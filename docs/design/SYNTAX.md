@@ -340,7 +340,7 @@ unrelate <var1> from <var2> across R<N>;
 ```
 
 > **Note:** M:M associations are modeled as two 1:M associations via a
-> linking class (see schema/COMPILATION.md section 4.3). Each `relate`
+> linking class (see docs/design/COMPILATION.md section 4.3). Each `relate`
 > is a standard two-endpoint operation — no special syntax is needed.
 
 Examples:

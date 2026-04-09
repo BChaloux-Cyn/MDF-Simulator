@@ -51,8 +51,8 @@ Summary of the process:
   The original pycca code generator for Shlaer-Mellor models. Our MDF action language
   is inspired by (but not derived from) this tool. Useful for reference on storage
   strategies, relationship formalization, event generation patterns, and generalization.
-- **`pycca/SYNTAX.md`** — MDF action language syntax reference
-- **`schema/COMPILATION.md`** — How schema elements compile into pycca-accessible names
+- **`docs/design/SYNTAX.md`** — MDF action language syntax reference
+- **`docs/design/COMPILATION.md`** — How schema elements compile into pycca-accessible names
 
 ## Key Directories
 

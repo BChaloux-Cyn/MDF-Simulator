@@ -1,7 +1,7 @@
 # Elevator Model Audit
 
 Audit of the elevator example model against the rules defined in
-`pycca/SYNTAX.md` and `schema/COMPILATION.md`.
+`docs/design/SYNTAX.md` and `docs/design/COMPILATION.md`.
 
 Date: 2026-03-18
 
@@ -382,7 +382,7 @@ else { self.next_direction = Stopped; }
 
 ## Documentation Ambiguity: Where Clause Name Resolution
 
-**Files:** pycca/SYNTAX.md §2, schema/COMPILATION.md §11.1
+**Files:** docs/design/SYNTAX.md §2, docs/design/COMPILATION.md §11.1
 
 The model consistently uses bare attribute names in `where` clauses to
 reference the candidate instance's attributes:
