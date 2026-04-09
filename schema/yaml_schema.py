@@ -264,7 +264,6 @@ class Transition(BaseModel):
     to: str
     event: str
     guard: str | None = None
-    action: str | None = None
 
 
 class StateDiagramFile(SchemaVersionMixin):

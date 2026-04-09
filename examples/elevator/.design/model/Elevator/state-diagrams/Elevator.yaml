@@ -20,6 +20,7 @@ states:
   - name: Idle
   - name: Departing
     entry_action: |
+      self.next_stop_floor = rcvd_evt.floor_num;
       if (self.next_stop_floor > self.current_floor) {
           self.direction = Up;
       } else {
@@ -78,6 +79,7 @@ states:
       generate Arrived to self;
   - name: Exchanging
     entry_action: |
+      self.next_stop_floor = rcvd_evt.floor_num;
       // Find the specific DestFloorButton for the current floor and notify it
       Set<DestFloorButton> dest_buttons = select many related by self->R4
           where [self.current_floor] |btn: DestFloorButton| -> Boolean {
@@ -109,7 +111,6 @@ transitions:
   - from: Idle
     to: Departing
     event: Floor_assigned
-    action: "self.next_stop_floor = rcvd_evt.floor_num;"
 
   # Departing sets direction and indicators, enters Moving
   - from: Departing
@@ -138,7 +139,6 @@ transitions:
   - from: Exchanging
     to: Exchanging
     event: Floor_assigned
-    action: "self.next_stop_floor = rcvd_evt.floor_num;"
 
   # Door closes — check if we have work
   - from: Exchanging

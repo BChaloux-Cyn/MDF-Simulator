@@ -18,6 +18,8 @@ events:
 states:
   - name: Idle
     entry_action: |-
+      select any req related by self->R2;
+      if (req != empty) { generate Door_closed to req; }
       self.direction = Stopped;
       self.next_stop_floor = 0;
       select any req from instances of Request where request_id == self.r14_request_id;
@@ -29,16 +31,21 @@ states:
       }
   - name: Moving_Up
     entry_action: |-
+      self.next_stop_floor = rcvd_evt.target_floor;
+      self.current_floor = rcvd_evt.current_floor;
       self.direction = Up;
       select any shaft related by self->R11;
       generate Move_up to shaft;
   - name: Moving_Down
     entry_action: |-
+      self.next_stop_floor = rcvd_evt.target_floor;
+      self.current_floor = rcvd_evt.current_floor;
       self.direction = Down;
       select any shaft related by self->R11;
       generate Move_down to shaft;
   - name: Stopping
     entry_action: |-
+      self.current_floor = rcvd_evt.current_floor;
       self.direction = Stopped;
       select any shaft related by self->R11;
       generate Stop to shaft;
@@ -63,12 +70,10 @@ transitions:
     to: Moving_Up
     event: Request_assigned
     guard: "rcvd_evt.target_floor > self.current_floor"
-    action: "self.next_stop_floor = rcvd_evt.target_floor;"
   - from: Idle
     to: Moving_Down
     event: Request_assigned
     guard: "rcvd_evt.target_floor < self.current_floor"
-    action: "self.next_stop_floor = rcvd_evt.target_floor;"
   - from: Idle
     to: At_Floor
     event: Request_assigned
@@ -77,31 +82,24 @@ transitions:
     to: Stopping
     event: Floor_reached
     guard: "rcvd_evt.current_floor == self.next_stop_floor"
-    action: "self.current_floor = rcvd_evt.current_floor;"
   - from: Moving_Up
     to: Moving_Up
     event: Floor_reached
     guard: "rcvd_evt.current_floor != self.next_stop_floor"
-    action: "self.current_floor = rcvd_evt.current_floor;"
   - from: Moving_Down
     to: Stopping
     event: Floor_reached
     guard: "rcvd_evt.current_floor == self.next_stop_floor"
-    action: "self.current_floor = rcvd_evt.current_floor;"
   - from: Moving_Down
     to: Moving_Down
     event: Floor_reached
     guard: "rcvd_evt.current_floor != self.next_stop_floor"
-    action: "self.current_floor = rcvd_evt.current_floor;"
   - from: Stopping
     to: At_Floor
     event: Stopped
   - from: At_Floor
     to: Idle
     event: Door_closed
-    action: |-
-      select any req related by self->R2;
-      if (req != empty) { generate Door_closed to req; }
   - from: At_Floor
     to: Idle
     event: Service_complete

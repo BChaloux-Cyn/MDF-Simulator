@@ -123,11 +123,9 @@ Any change that alters the canonical JSON causes a re-render:
 ### What does not trigger a re-render
 
 Changes to YAML fields that are not part of the canonical schema are invisible to the comparison and therefore never trigger a re-render:
-- Transition `action` bodies
-- Event parameter default values
 - Comments in the YAML
 
-This is intentional: those fields do not appear in the diagram and should not cause layout destruction.
+This is intentional: comments do not appear in the diagram and should not cause layout destruction.
 
 ### drawio_to_canonical_*
 
