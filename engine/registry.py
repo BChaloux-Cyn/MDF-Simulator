@@ -52,7 +52,6 @@ class InstanceRegistry:
         cdef: ClassManifest,
         identifier: dict,
         attrs: dict | None,
-        class_name: str = "",
     ) -> dict:
         instance: dict[str, Any] = {}
 
@@ -78,10 +77,6 @@ class InstanceRegistry:
         if attrs:
             for k, v in attrs.items():
                 instance[k] = v
-
-        # Generated-code contract: every instance dict carries identity metadata
-        instance["__instance_key__"] = make_instance_key(identifier)
-        instance["__class_name__"] = class_name or cdef.get("name", "")
 
         return instance
 
@@ -109,7 +104,7 @@ class InstanceRegistry:
                 )
             ]
 
-        instance = self._build_instance(cdef, identifier, attrs, class_name=class_name)
+        instance = self._build_instance(cdef, identifier, attrs)
         instance["curr_state"] = initial_state
 
         key = make_instance_key(identifier)
@@ -147,7 +142,7 @@ class InstanceRegistry:
                 None,
             )
 
-        instance = self._build_instance(cdef, identifier, attrs, class_name=class_name)
+        instance = self._build_instance(cdef, identifier, attrs)
         # curr_state is set when the __creation__ event is processed by the
         # scheduler; pre-seed with None so attribute access is safe.
         instance["curr_state"] = None

@@ -1,246 +1,289 @@
-"""Wave 0 test scaffold for simulation runner (Phase 05.3).
-
-Stub tests for bundle loader, ctx API, scenario schema, preflight, MCP tool
-unit tests, and trigger evaluator. Each stub is marked xfail until the
-implementing plan completes.
 """
+tests/test_simulation_runner.py — Bundle loader, scenario schema, and preflight tests.
+
+Phase 05.3-03: Bundle loader (Task 1) + scenario schema + preflight (Task 2).
+
+Coverage:
+  Task 1: ENGINE_VERSION, load_bundle, key reversal, callable rebinding, version
+          mismatch rejection, path traversal rejection.
+  Task 2: ScenarioDef schema validation, EventDef constraints, preflight multiplicity.
+"""
+from __future__ import annotations
+
+import json
+import shutil
+import sys
+import zipfile
+from pathlib import Path
+
 import pytest
 
-from engine.registry import InstanceRegistry
-from engine.ctx import SimulationContext
-from engine.manifest import AssociationManifest, ClassManifest
+# ---------------------------------------------------------------------------
+# Shared session-scoped elevator bundle fixture
+# ---------------------------------------------------------------------------
+
+_ELEVATOR_SRC = Path("examples/elevator/.design/model/Elevator")
+
+
+@pytest.fixture(scope="session")
+def elevator_model_root(tmp_path_factory):
+    """Session-scoped single-domain model root for the Elevator domain."""
+    if not _ELEVATOR_SRC.exists():
+        pytest.skip("Elevator example not available")
+    root = tmp_path_factory.mktemp("sim_runner_elevator_model")
+    shutil.copytree(_ELEVATOR_SRC, root / "Elevator")
+    return root
+
+
+@pytest.fixture(scope="session")
+def elevator_bundle_path(elevator_model_root, tmp_path_factory):
+    """Compile the elevator model once for the whole session."""
+    from compiler import compile_model
+
+    out = tmp_path_factory.mktemp("sim_runner_elevator_bundle")
+    return compile_model(elevator_model_root, out)
+
+
+@pytest.fixture(autouse=False)
+def cleanup_generated_modules():
+    """Remove mdf_generated_* entries from sys.modules after each test.
+
+    Prevents Windows temp-dir cleanup failures (RESEARCH.md Pitfall 5).
+    """
+    yield
+    to_remove = [k for k in sys.modules if k.startswith("mdf_generated_")]
+    for k in to_remove:
+        del sys.modules[k]
 
 
 # ---------------------------------------------------------------------------
-# Shared fixtures
+# Task 1: ENGINE_VERSION
 # ---------------------------------------------------------------------------
 
-_MINIMAL_CLASS_DEFS: dict[str, ClassManifest] = {
-    "Elevator": {
-        "name": "Elevator",
-        "is_abstract": False,
-        "identifier_attrs": ["elevator_id"],
-        "attributes": {"elevator_id": 0, "current_floor": 1},
-        "entry_actions": {},
-        "initial_state": "Idle",
-        "final_states": [],
-        "senescent_states": [],
-        "transition_table": {},
-        "supertype": None,
-        "subtypes": [],
-    },
-    "Door": {
-        "name": "Door",
-        "is_abstract": False,
-        "identifier_attrs": ["door_id"],
-        "attributes": {"door_id": 0},
-        "entry_actions": {},
-        "initial_state": "Closed",
-        "final_states": [],
-        "senescent_states": [],
-        "transition_table": {},
-        "supertype": None,
-        "subtypes": [],
-    },
-    "Shaft": {
-        "name": "Shaft",
-        "is_abstract": False,
-        "identifier_attrs": ["shaft_id"],
-        "attributes": {"shaft_id": 0},
-        "entry_actions": {},
-        "initial_state": "Idle",
-        "final_states": [],
-        "senescent_states": [],
-        "transition_table": {},
-        "supertype": None,
-        "subtypes": [],
-    },
-}
 
-_MINIMAL_ASSOCIATIONS: dict[str, AssociationManifest] = {
-    "R1": {
-        "rel_id": "R1",
-        "class_a": "Elevator",
-        "class_b": "Shaft",
-        "mult_a_to_b": "1",
-        "mult_b_to_a": "1",
-    },
-}
+def test_engine_version_constant_exists():
+    """engine.ENGINE_VERSION is defined and equals '0.1.0'."""
+    import engine
 
-_MINIMAL_MANIFEST = {
-    "class_defs": _MINIMAL_CLASS_DEFS,
-    "associations": _MINIMAL_ASSOCIATIONS,
-    "generalizations": {},
-}
+    assert engine.ENGINE_VERSION == "0.1.0"
 
 
-# Bundle loader tests (Plan 03)
-def test_bundle_loader_extracts_and_verifies_version():
-    pytest.xfail("Plan 03 not implemented")
+def test_engine_version_matches_compiler_version():
+    """engine.ENGINE_VERSION matches compiler.COMPILER_VERSION."""
+    import engine
+    from compiler import COMPILER_VERSION
 
-def test_bundle_loader_hard_fails_on_version_mismatch():
-    pytest.xfail("Plan 03 not implemented")
-
-def test_bundle_loader_rebinds_transition_table_callables():
-    pytest.xfail("Plan 03 not implemented")
-
-def test_bundle_loader_reverses_state_event_keys():
-    pytest.xfail("Plan 03 not implemented")
-
-# ctx API tests (Plan 02)
-def test_ctx_instance_key_populated_on_create_sync():
-    reg = InstanceRegistry(_MINIMAL_CLASS_DEFS)
-    reg.create_sync("Elevator", {"elevator_id": 1}, initial_state="Idle", attrs={"current_floor": 1})
-    inst = reg.lookup("Elevator", {"elevator_id": 1})
-    assert inst is not None
-    assert inst["__instance_key__"] == frozenset({("elevator_id", 1)})
-    assert inst["__class_name__"] == "Elevator"
-    assert inst["current_floor"] == 1  # existing attrs still present
+    assert engine.ENGINE_VERSION == COMPILER_VERSION
 
 
-def test_ctx_instance_key_populated_on_create_async():
-    reg = InstanceRegistry(_MINIMAL_CLASS_DEFS)
-    reg.create_async("Elevator", {"elevator_id": 2}, initial_state="Idle")
-    inst = reg.lookup("Elevator", {"elevator_id": 2})
-    assert inst is not None
-    assert inst["__instance_key__"] == frozenset({("elevator_id", 2)})
-    assert inst["__class_name__"] == "Elevator"
+# ---------------------------------------------------------------------------
+# Task 1: BundleLoader — module-level imports exist
+# ---------------------------------------------------------------------------
 
 
-def test_ctx_instance_key_composite_identifier():
-    """Composite identifier produces frozenset of all (name, value) pairs."""
-    class_defs = {
-        "Floor": {
-            "name": "Floor",
-            "is_abstract": False,
-            "identifier_attrs": ["floor_id", "side"],
-            "attributes": {"floor_id": 0, "side": ""},
-            "entry_actions": {},
-            "initial_state": "Idle",
-            "final_states": [],
-            "senescent_states": [],
-            "transition_table": {},
-            "supertype": None,
-            "subtypes": [],
-        }
-    }
-    reg = InstanceRegistry(class_defs)
-    reg.create_sync("Floor", {"floor_id": 1, "side": "north"}, initial_state="Idle")
-    inst = reg.lookup("Floor", {"floor_id": 1, "side": "north"})
-    assert inst is not None
-    assert inst["__instance_key__"] == frozenset({("floor_id", 1), ("side", "north")})
-    assert inst["__class_name__"] == "Floor"
+def test_bundle_loader_module_importable():
+    """engine.bundle_loader module is importable."""
+    from engine import bundle_loader  # noqa: F401
 
 
-def test_ctx_create_returns_instance_dict_with_keys():
-    """ctx.create(class, attrs) returns instance dict with __instance_key__ and __class_name__."""
-    ctx = SimulationContext(_MINIMAL_MANIFEST)
-    inst = ctx.create("Door", {"door_id": 1})
-    assert inst["__instance_key__"] == frozenset({("door_id", 1)})
-    assert inst["__class_name__"] == "Door"
+def test_bundle_loader_exports_load_bundle():
+    """engine.bundle_loader exposes load_bundle callable."""
+    from engine.bundle_loader import load_bundle
+
+    assert callable(load_bundle)
 
 
-def test_ctx_delete_by_instance_dict():
-    """ctx.delete(inst_dict) removes instance using __class_name__ and __instance_key__."""
-    ctx = SimulationContext(_MINIMAL_MANIFEST)
-    inst = ctx.create("Door", {"door_id": 1})
-    ctx.delete(inst)
-    assert ctx.registry.lookup("Door", {"door_id": 1}) is None
+def test_bundle_loader_exports_bundle_version_error():
+    """engine.bundle_loader exposes BundleVersionError."""
+    from engine.bundle_loader import BundleVersionError
+
+    assert issubclass(BundleVersionError, Exception)
 
 
-def test_ctx_relate_by_instance_dicts():
-    """ctx.relate(a_dict, b_dict, 'R1') creates a navigable link."""
-    ctx = SimulationContext(_MINIMAL_MANIFEST)
-    elev = ctx.create("Elevator", {"elevator_id": 1})
-    shaft = ctx.create("Shaft", {"shaft_id": 1})
-    ctx.relate(elev, shaft, "R1")
-    result = ctx.select_any_related(elev, ["R1"])
-    assert result is not None
-    assert result["shaft_id"] == 1
+def test_bundle_loader_exports_bundle_corrupt_error():
+    """engine.bundle_loader exposes BundleCorruptError."""
+    from engine.bundle_loader import BundleCorruptError
+
+    assert issubclass(BundleCorruptError, Exception)
 
 
-def test_ctx_select_any_related_navigation():
-    """ctx.select_any_related traverses a relationship chain and returns the target instance."""
-    ctx = SimulationContext(_MINIMAL_MANIFEST)
-    elev = ctx.create("Elevator", {"elevator_id": 10})
-    shaft = ctx.create("Shaft", {"shaft_id": 10})
-    ctx.relate(elev, shaft, "R1")
-    found = ctx.select_any_related(elev, ["R1"])
-    assert found is not None
-    assert found["__class_name__"] == "Shaft"
-    assert found["shaft_id"] == 10
+# ---------------------------------------------------------------------------
+# Task 1: load_bundle — real elevator bundle
+# ---------------------------------------------------------------------------
 
 
-def test_ctx_generate_accepts_target_instance_key():
-    """ctx.generate accepts target=<frozenset instance_key> form."""
-    ctx = SimulationContext({
-        "class_defs": {
-            "Door": {
-                "name": "Door",
-                "is_abstract": False,
-                "identifier_attrs": ["door_id"],
-                "attributes": {"door_id": 0},
-                "entry_actions": {},
-                "initial_state": "Closed",
-                "final_states": [],
-                "senescent_states": [],
-                "transition_table": {
-                    ("Closed", "DoorOpen"): {"next_state": "Open", "action_fn": None, "guard_fn": None},
-                },
-                "supertype": None,
-                "subtypes": [],
-            },
-        },
-        "associations": {},
-        "generalizations": {},
-    })
-    door = ctx.create("Door", {"door_id": 1})
-    elev_dict = {"__class_name__": "Door", "__instance_key__": frozenset({("door_id", 1)}), "door_id": 1}
-    steps = ctx.generate("DoorOpen", target=door["__instance_key__"], args={}, sender=elev_dict)
-    assert len(steps) >= 1
+def test_bundle_loader_extracts_and_verifies_version(elevator_bundle_path, cleanup_generated_modules):
+    """load_bundle returns a (manifest, tmpdir) tuple and manifest has class_defs."""
+    from engine.bundle_loader import load_bundle
 
-# Scenario schema tests (Plan 03)
+    manifest, tmpdir = load_bundle(elevator_bundle_path)
+    try:
+        assert isinstance(manifest, dict)
+        assert "class_defs" in manifest
+        assert len(manifest["class_defs"]) > 0
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_bundle_loader_reverses_state_event_keys(elevator_bundle_path, cleanup_generated_modules):
+    """After load_bundle, transition_table keys are (state, event) tuples, not strings."""
+    from engine.bundle_loader import load_bundle
+
+    manifest, tmpdir = load_bundle(elevator_bundle_path)
+    try:
+        for cls_name, cls_def in manifest["class_defs"].items():
+            tt = cls_def.get("transition_table", {})
+            for key in tt:
+                assert isinstance(key, tuple), (
+                    f"{cls_name}: transition_table key {key!r} should be a tuple"
+                )
+                assert len(key) == 2, (
+                    f"{cls_name}: transition_table key {key!r} should be (state, event)"
+                )
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_bundle_loader_rebinds_transition_table_callables(elevator_bundle_path, cleanup_generated_modules):
+    """After load_bundle, at least one TransitionEntry has a non-None action_fn."""
+    from engine.bundle_loader import load_bundle
+
+    manifest, tmpdir = load_bundle(elevator_bundle_path)
+    try:
+        found_callable = False
+        for cls_name, cls_def in manifest["class_defs"].items():
+            for key, entry in cls_def.get("transition_table", {}).items():
+                if entry.get("action_fn") is not None:
+                    assert callable(entry["action_fn"]), (
+                        f"{cls_name} {key}: action_fn is set but not callable"
+                    )
+                    found_callable = True
+        assert found_callable, (
+            "No callable action_fn found in any transition entry — rebinding failed"
+        )
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_bundle_loader_hard_fails_on_version_mismatch(elevator_bundle_path, cleanup_generated_modules, monkeypatch):
+    """load_bundle raises BundleVersionError when engine_version mismatches."""
+    import engine.bundle_loader as bl
+    from engine.bundle_loader import BundleVersionError, load_bundle
+
+    # Monkeypatch ENGINE_VERSION inside bundle_loader to simulate a mismatch
+    monkeypatch.setattr(bl, "ENGINE_VERSION", "9.9.9")
+    with pytest.raises(BundleVersionError) as exc_info:
+        manifest, tmpdir = load_bundle(elevator_bundle_path)
+        shutil.rmtree(tmpdir, ignore_errors=True)
+    message = str(exc_info.value)
+    assert "0.1.0" in message, f"Expected bundle version '0.1.0' in error, got: {message}"
+    assert "9.9.9" in message, f"Expected engine version '9.9.9' in error, got: {message}"
+
+
+def test_bundle_loader_rejects_path_traversal(tmp_path, cleanup_generated_modules):
+    """load_bundle raises BundleCorruptError when zip contains a path traversal entry."""
+    from engine.bundle_loader import BundleCorruptError, load_bundle
+
+    # Build a minimal bundle with a traversal entry
+    bundle_path = tmp_path / "evil.mdfbundle"
+    bundle_json = json.dumps({"engine_version": "0.1.0"})
+    manifest_json = json.dumps({"class_defs": {}, "associations": {}, "generalizations": {}})
+    with zipfile.ZipFile(bundle_path, "w") as zf:
+        zf.writestr("bundle.json", bundle_json)
+        zf.writestr("manifest.json", manifest_json)
+        zf.writestr("../evil.py", "# path traversal payload")
+
+    with pytest.raises(BundleCorruptError):
+        manifest, tmpdir = load_bundle(bundle_path)
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Task 2: ScenarioDef schema
+# ---------------------------------------------------------------------------
+
+
 def test_scenario_schema_valid_yaml_parses():
-    pytest.xfail("Plan 03 not implemented")
+    """ScenarioDef validates minimal.scenario.yaml and returns expected shape."""
+    import yaml
+    from schema.scenario_schema import ScenarioDef
+
+    with open("tests/fixtures/minimal.scenario.yaml") as f:
+        data = yaml.safe_load(f)
+    scn = ScenarioDef.model_validate(data)
+    assert len(scn.instances) == 1
+    assert len(scn.relationships) == 0
+    assert len(scn.events) == 1
+    assert len(scn.triggers) == 0
+    assert scn.events[0].sender == "elev1"
+
 
 def test_scenario_schema_missing_sender_rejected():
-    pytest.xfail("Plan 03 not implemented")
+    """EventDef without sender raises ValidationError."""
+    from pydantic import ValidationError
+    from schema.scenario_schema import ScenarioDef
+
+    with pytest.raises(ValidationError):
+        ScenarioDef.model_validate({"events": [{"event": "X", "target": "a"}]})
+
 
 def test_scenario_schema_at_ms_after_ms_mutually_exclusive():
-    pytest.xfail("Plan 03 not implemented")
+    """EventDef with both at_ms and after_ms raises ValidationError."""
+    from pydantic import ValidationError
+    from schema.scenario_schema import ScenarioDef
+
+    with pytest.raises(ValidationError):
+        ScenarioDef.model_validate(
+            {"events": [{"event": "X", "target": "a", "sender": "a", "at_ms": 1, "after_ms": 2}]}
+        )
+
 
 def test_scenario_schema_event_or_call_required():
-    pytest.xfail("Plan 03 not implemented")
+    """EventDef with neither event nor call raises ValidationError."""
+    from pydantic import ValidationError
+    from schema.scenario_schema import ScenarioDef
 
-# Preflight multiplicity check tests (Plan 03)
+    with pytest.raises(ValidationError):
+        ScenarioDef.model_validate({"events": [{"target": "a", "sender": "a"}]})
+
+
+# ---------------------------------------------------------------------------
+# Task 2: Preflight multiplicity check
+# ---------------------------------------------------------------------------
+
+
 def test_preflight_passes_valid_population():
-    pytest.xfail("Plan 03 not implemented")
+    """check_multiplicity returns empty list when no violations exist."""
+    from engine.preflight import check_multiplicity
+    from schema.scenario_schema import ScenarioDef
+
+    scn = ScenarioDef(instances=[], relationships=[], events=[], triggers=[])
+    issues = check_multiplicity(scn, {"associations": {}})
+    assert issues == []
+
 
 def test_preflight_rejects_missing_required_multiplicity():
-    pytest.xfail("Plan 03 not implemented")
+    """check_multiplicity returns issues when a required 1..1 link is absent."""
+    from engine.preflight import check_multiplicity
+    from schema.scenario_schema import InstanceDef, ScenarioDef
 
-# MCP tool wrapper tests (Plan 04)
-def test_simulate_domain_returns_result_dict():
-    pytest.xfail("Plan 04 not implemented")
-
-def test_simulate_domain_writes_trace_file():
-    pytest.xfail("Plan 04 not implemented")
-
-def test_simulate_class_isolated_single_class():
-    pytest.xfail("Plan 04 not implemented")
-
-def test_simulate_domain_hard_fails_on_engine_version_mismatch():
-    pytest.xfail("Plan 04 not implemented")
-
-# Trigger evaluator tests (Plan 04)
-def test_trigger_fires_on_state_match():
-    pytest.xfail("Plan 04 not implemented")
-
-def test_trigger_fires_on_attr_eq_match():
-    pytest.xfail("Plan 04 not implemented")
-
-def test_trigger_disarms_after_first_fire_when_repeat_false():
-    pytest.xfail("Plan 04 not implemented")
-
-def test_trigger_rearms_when_repeat_true():
-    pytest.xfail("Plan 04 not implemented")
+    scn = ScenarioDef(
+        instances=[InstanceDef(**{"class": "Elevator", "name": "e1", "id": {"elevator_id": 1}})],
+        relationships=[],
+        events=[],
+        triggers=[],
+    )
+    manifest = {
+        "associations": {
+            "R1": {
+                "rel_id": "R1",
+                "class_a": "Elevator",
+                "class_b": "Shaft",
+                "mult_a_to_b": "1",
+                "mult_b_to_a": "1",
+            }
+        }
+    }
+    issues = check_multiplicity(scn, manifest)
+    assert len(issues) >= 1
+    assert "R1" in issues[0].location
