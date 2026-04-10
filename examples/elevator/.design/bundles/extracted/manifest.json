@@ -1,0 +1,562 @@
+{
+  "associations": {
+    "R1": {
+      "class_a": "Elevator",
+      "class_b": "Shaft",
+      "mult_a_to_b": "1",
+      "mult_b_to_a": "1",
+      "rel_id": "R1"
+    },
+    "R2": {
+      "class_a": "Shaft",
+      "class_b": "ShaftFloor",
+      "mult_a_to_b": "0..*",
+      "mult_b_to_a": "1",
+      "rel_id": "R2"
+    },
+    "R3": {
+      "class_a": "Floor",
+      "class_b": "ShaftFloor",
+      "mult_a_to_b": "0..*",
+      "mult_b_to_a": "1",
+      "rel_id": "R3"
+    },
+    "R4": {
+      "class_a": "Elevator",
+      "class_b": "DestFloorButton",
+      "mult_a_to_b": "2..*",
+      "mult_b_to_a": "1",
+      "rel_id": "R4"
+    },
+    "R5": {
+      "class_a": "Floor",
+      "class_b": "DestFloorButton",
+      "mult_a_to_b": "0..*",
+      "mult_b_to_a": "1",
+      "rel_id": "R5"
+    },
+    "R6": {
+      "class_a": "Floor",
+      "class_b": "FloorCallButton",
+      "mult_a_to_b": "0..2",
+      "mult_b_to_a": "1",
+      "rel_id": "R6"
+    },
+    "R7": {
+      "class_a": "Elevator",
+      "class_b": "CarDoor",
+      "mult_a_to_b": "1",
+      "mult_b_to_a": "1",
+      "rel_id": "R7"
+    },
+    "R8": {
+      "class_a": "ShaftFloor",
+      "class_b": "ShaftDoor",
+      "mult_a_to_b": "1",
+      "mult_b_to_a": "1",
+      "rel_id": "R8"
+    }
+  },
+  "class_defs": {
+    "CarDoor": {
+      "attributes": {
+        "door_id": {
+          "identifier": [
+            1
+          ],
+          "name": "door_id",
+          "referential": null,
+          "scope": "instance",
+          "type": "UniqueID",
+          "visibility": "private"
+        }
+      },
+      "entry_actions": {
+        "Closed": "Elevator elev = self->R7;\ngenerate Door_closed to elev;\n",
+        "Closing": "// Tell the paired ShaftDoor to close \u2014 it will report back when done\nElevator elev = self->R7;\nSet<ShaftFloor> shaft_floors = select many related by elev->R1->R2;\nSet<ShaftFloor> current_sf = shaft_floors.filter(\n    [elev.current_floor] |s: ShaftFloor| -> Boolean {\n        Floor f = s->R3;\n        return f.floor_num == elev.current_floor;\n    });\nShaftFloor sf = current_sf.peek_front();\nShaftDoor sd = sf->R8;\ngenerate Close_cmd to sd;\n",
+        "Open": "generate Close_cmd to self delay duration_s(5);\n",
+        "Opening": "// Tell the paired ShaftDoor to open \u2014 it will report back when done\nElevator elev = self->R7;\nSet<ShaftFloor> shaft_floors = select many related by elev->R1->R2;\nSet<ShaftFloor> current_sf = shaft_floors.filter(\n    [elev.current_floor] |s: ShaftFloor| -> Boolean {\n        Floor f = s->R3;\n        return f.floor_num == elev.current_floor;\n    });\nShaftFloor sf = current_sf.peek_front();\nShaftDoor sd = sf->R8;\ngenerate Open_cmd to sd;\n"
+      },
+      "final_states": [],
+      "identifier_attrs": [
+        "door_id"
+      ],
+      "initial_state": "Closed",
+      "is_abstract": false,
+      "name": "CarDoor",
+      "senescent_states": [
+        "Closed",
+        "Closing",
+        "Opening"
+      ],
+      "subtypes": [],
+      "supertype": "Door",
+      "transition_table": {
+        "Closed::Closed_now": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Closed"
+        },
+        "Closed::Open_cmd": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Opening"
+        },
+        "Closing::Closed_now": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Closed"
+        },
+        "Open::Close_cmd": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Closing"
+        },
+        "Opening::Opened": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Open"
+        }
+      }
+    },
+    "DestFloorButton": {
+      "attributes": {
+        "pressed_at": {
+          "identifier": null,
+          "name": "pressed_at",
+          "referential": null,
+          "scope": "instance",
+          "type": "Timestamp",
+          "visibility": "private"
+        },
+        "r4_elevator_id": {
+          "identifier": [
+            1
+          ],
+          "name": "r4_elevator_id",
+          "referential": "R4",
+          "scope": "instance",
+          "type": "UniqueID",
+          "visibility": "private"
+        },
+        "r5_floor_num": {
+          "identifier": [
+            1
+          ],
+          "name": "r5_floor_num",
+          "referential": "R5",
+          "scope": "instance",
+          "type": "FloorNumber",
+          "visibility": "private"
+        }
+      },
+      "entry_actions": {
+        "Idle": null,
+        "Lit": null
+      },
+      "final_states": [
+        "Idle",
+        "Lit"
+      ],
+      "identifier_attrs": [
+        "r4_elevator_id",
+        "r5_floor_num"
+      ],
+      "initial_state": "Idle",
+      "is_abstract": false,
+      "name": "DestFloorButton",
+      "senescent_states": [
+        "Idle",
+        "Lit"
+      ],
+      "subtypes": [],
+      "supertype": null,
+      "transition_table": {
+        "Idle::Activated": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Lit"
+        },
+        "Lit::Floor_served": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Idle"
+        }
+      }
+    },
+    "Door": {
+      "attributes": {
+        "door_id": {
+          "identifier": [
+            1
+          ],
+          "name": "door_id",
+          "referential": null,
+          "scope": "instance",
+          "type": "UniqueID",
+          "visibility": "private"
+        }
+      },
+      "entry_actions": {},
+      "final_states": [],
+      "identifier_attrs": [
+        "door_id"
+      ],
+      "initial_state": null,
+      "is_abstract": false,
+      "name": "Door",
+      "senescent_states": [],
+      "subtypes": [
+        "CarDoor",
+        "ShaftDoor"
+      ],
+      "supertype": null,
+      "transition_table": {}
+    },
+    "Elevator": {
+      "attributes": {
+        "current_floor": {
+          "identifier": null,
+          "name": "current_floor",
+          "referential": null,
+          "scope": "instance",
+          "type": "FloorNumber",
+          "visibility": "private"
+        },
+        "direction": {
+          "identifier": null,
+          "name": "direction",
+          "referential": null,
+          "scope": "instance",
+          "type": "Direction",
+          "visibility": "private"
+        },
+        "elevator_id": {
+          "identifier": [
+            1
+          ],
+          "name": "elevator_id",
+          "referential": null,
+          "scope": "instance",
+          "type": "UniqueID",
+          "visibility": "private"
+        },
+        "next_stop_floor": {
+          "identifier": null,
+          "name": "next_stop_floor",
+          "referential": null,
+          "scope": "instance",
+          "type": "FloorNumber",
+          "visibility": "private"
+        }
+      },
+      "entry_actions": {
+        "Arriving": "Direction prev_direction = self.direction;\nself.direction = None;\n\n// Find lit DestFloorButtons (excluding current floor)\nSet<DestFloorButton> lit_btns = self._get_lit_buttons();\n\nif (lit_btns.is_empty()) {\n    // No destination buttons \u2014 check for lit FloorCallButtons\n    Set<ShaftFloor> shaft_floors = select many related by self->R1->R2;\n    Set<FloorCallButton> lit_calls = shaft_floors.flat_map(\n        [] |sf: ShaftFloor| -> Set<FloorCallButton> {\n            Floor f = sf->R3;\n            return select many related by f->R6\n                where [] |btn: FloorCallButton| -> Boolean {\n                    return btn.curr_state == Lit;\n                };\n        });\n\n    if (lit_calls.is_empty()) {\n        // No work at all \u2014 go Idle when door closes\n        self.next_stop_floor = self.current_floor;\n        generate Arrived to self;\n        return;\n    }\n\n    // Pick the earliest pressed FloorCallButton\n    List<FloorCallButton> sorted_calls = lit_calls.sort(\n        [] |a: FloorCallButton, b: FloorCallButton| -> Boolean {\n            return a.pressed_at < b.pressed_at;\n        });\n    FloorCallButton earliest = sorted_calls.peek_front();\n    Floor target_floor = earliest->R6;\n    self.next_stop_floor = target_floor.floor_num;\n    generate Arrived to self;\n    return;\n}\n\nself.next_stop_floor = self._pick_next_stop(lit_btns, prev_direction);\ngenerate Arrived to self;\n",
+        "Departing": "self.next_stop_floor = rcvd_evt.floor_num;\nif (self.next_stop_floor > self.current_floor) {\n    self.direction = Up;\n} else {\n    self.direction = Down;\n}\ngenerate Ready to self;\n",
+        "Exchanging": "self.next_stop_floor = rcvd_evt.floor_num;\n// Find the specific DestFloorButton for the current floor and notify it\nSet<DestFloorButton> dest_buttons = select many related by self->R4\n    where [self.current_floor] |btn: DestFloorButton| -> Boolean {\n        Floor f = btn->R5;\n        return btn.curr_state == Lit and f.floor_num == self.current_floor;\n    };\ngenerate Floor_served to dest_buttons;\n\n// Notify FloorCallButtons at current floor \u2014 transitions Lit->Idle\nSet<ShaftFloor> shaft_floors = select many related by self->R1->R2;\nSet<ShaftFloor> current_sf = shaft_floors.filter(\n    [self.current_floor] |s: ShaftFloor| -> Boolean {\n        Floor f = s->R3;\n        return f.floor_num == self.current_floor;\n    });\nShaftFloor sf = current_sf.peek_front();\nFloor floor = sf->R3;\nSet<FloorCallButton> call_buttons = select many related by floor->R6\n    where [] |btn: FloorCallButton| -> Boolean {\n        return btn.curr_state == Lit;\n    };\ngenerate Call_served to call_buttons;\n\n// Open the car door \u2014 it will open the paired shaft door\nCarDoor car_door = self->R7;\ngenerate Open_cmd to car_door;\n",
+        "Floor_Updating": "self.current_floor = rcvd_evt.floor_num;\nif (self.current_floor == self.next_stop_floor) {\n    generate At_Destination to self;\n} else {\n    generate Continue to self;\n}\n",
+        "Idle": null,
+        "Moving": null
+      },
+      "final_states": [
+        "Idle",
+        "Moving"
+      ],
+      "identifier_attrs": [
+        "elevator_id"
+      ],
+      "initial_state": "Idle",
+      "is_abstract": false,
+      "name": "Elevator",
+      "senescent_states": [
+        "Exchanging",
+        "Idle",
+        "Moving"
+      ],
+      "subtypes": [],
+      "supertype": null,
+      "transition_table": {
+        "Arriving::Arrived": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Exchanging"
+        },
+        "Departing::Ready": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Moving"
+        },
+        "Exchanging::Door_closed": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Idle"
+        },
+        "Exchanging::Floor_assigned": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Exchanging"
+        },
+        "Floor_Updating::At_Destination": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Arriving"
+        },
+        "Floor_Updating::Continue": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Moving"
+        },
+        "Idle::Door_closed": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Idle"
+        },
+        "Idle::Floor_assigned": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Departing"
+        },
+        "Moving::Floor_reached": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Floor_Updating"
+        }
+      }
+    },
+    "Floor": {
+      "attributes": {
+        "floor_num": {
+          "identifier": [
+            1
+          ],
+          "name": "floor_num",
+          "referential": null,
+          "scope": "instance",
+          "type": "FloorNumber",
+          "visibility": "private"
+        },
+        "is_bottom_floor": {
+          "identifier": null,
+          "name": "is_bottom_floor",
+          "referential": null,
+          "scope": "instance",
+          "type": "Boolean",
+          "visibility": "private"
+        },
+        "is_top_floor": {
+          "identifier": null,
+          "name": "is_top_floor",
+          "referential": null,
+          "scope": "instance",
+          "type": "Boolean",
+          "visibility": "private"
+        }
+      },
+      "entry_actions": {},
+      "final_states": [],
+      "identifier_attrs": [
+        "floor_num"
+      ],
+      "initial_state": null,
+      "is_abstract": false,
+      "name": "Floor",
+      "senescent_states": [],
+      "subtypes": [],
+      "supertype": null,
+      "transition_table": {}
+    },
+    "FloorCallButton": {
+      "attributes": {
+        "button_id": {
+          "identifier": [
+            1
+          ],
+          "name": "button_id",
+          "referential": null,
+          "scope": "instance",
+          "type": "UniqueID",
+          "visibility": "private"
+        },
+        "direction": {
+          "identifier": null,
+          "name": "direction",
+          "referential": null,
+          "scope": "instance",
+          "type": "CallDirection",
+          "visibility": "private"
+        },
+        "pressed_at": {
+          "identifier": null,
+          "name": "pressed_at",
+          "referential": null,
+          "scope": "instance",
+          "type": "Timestamp",
+          "visibility": "private"
+        }
+      },
+      "entry_actions": {
+        "Idle": null,
+        "Lit": "// If the elevator is idle, wake it up\nFloor floor = self->R6;\nOptional<ShaftFloor> sf = select any related by floor->R3;\nif (sf.has_value()) {\n    ShaftFloor shaft_floor = sf.value();\n    Elevator elev = shaft_floor->R2->R1;\n    if (elev.curr_state == Idle) {\n        generate Floor_assigned(floor_num: floor.floor_num) to elev;\n    }\n}\n"
+      },
+      "final_states": [
+        "Idle"
+      ],
+      "identifier_attrs": [
+        "button_id"
+      ],
+      "initial_state": "Idle",
+      "is_abstract": false,
+      "name": "FloorCallButton",
+      "senescent_states": [
+        "Idle",
+        "Lit"
+      ],
+      "subtypes": [],
+      "supertype": null,
+      "transition_table": {
+        "Idle::Activated": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Lit"
+        },
+        "Lit::Call_served": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Idle"
+        }
+      }
+    },
+    "Shaft": {
+      "attributes": {
+        "shaft_id": {
+          "identifier": [
+            1
+          ],
+          "name": "shaft_id",
+          "referential": null,
+          "scope": "instance",
+          "type": "UniqueID",
+          "visibility": "private"
+        }
+      },
+      "entry_actions": {},
+      "final_states": [],
+      "identifier_attrs": [
+        "shaft_id"
+      ],
+      "initial_state": null,
+      "is_abstract": false,
+      "name": "Shaft",
+      "senescent_states": [],
+      "subtypes": [],
+      "supertype": null,
+      "transition_table": {}
+    },
+    "ShaftDoor": {
+      "attributes": {
+        "door_id": {
+          "identifier": [
+            1
+          ],
+          "name": "door_id",
+          "referential": null,
+          "scope": "instance",
+          "type": "UniqueID",
+          "visibility": "private"
+        }
+      },
+      "entry_actions": {
+        "Closed": "// Notify the paired CarDoor that we are closed\nCarDoor cd = self->R8->R2->R1->R7;\ngenerate Closed_now to cd;\n",
+        "Closing": "generate Done_closing to self delay duration_s(10);\n",
+        "Open": "// Notify the paired CarDoor that we are open\nCarDoor cd = self->R8->R2->R1->R7;\ngenerate Opened to cd;\n",
+        "Opening": "generate Done_opening to self delay duration_s(10);\n"
+      },
+      "final_states": [],
+      "identifier_attrs": [
+        "door_id"
+      ],
+      "initial_state": "Closed",
+      "is_abstract": false,
+      "name": "ShaftDoor",
+      "senescent_states": [
+        "Closed",
+        "Open"
+      ],
+      "subtypes": [],
+      "supertype": "Door",
+      "transition_table": {
+        "Closed::Open_cmd": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Opening"
+        },
+        "Closing::Done_closing": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Closed"
+        },
+        "Open::Close_cmd": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Closing"
+        },
+        "Opening::Done_opening": {
+          "action_fn": null,
+          "guard_fn": null,
+          "next_state": "Open"
+        }
+      }
+    },
+    "ShaftFloor": {
+      "attributes": {
+        "r2_shaft_id": {
+          "identifier": [
+            1
+          ],
+          "name": "r2_shaft_id",
+          "referential": "R2",
+          "scope": "instance",
+          "type": "UniqueID",
+          "visibility": "private"
+        },
+        "r3_floor_num": {
+          "identifier": [
+            1
+          ],
+          "name": "r3_floor_num",
+          "referential": "R3",
+          "scope": "instance",
+          "type": "FloorNumber",
+          "visibility": "private"
+        },
+        "sensor_id": {
+          "identifier": null,
+          "name": "sensor_id",
+          "referential": null,
+          "scope": "instance",
+          "type": "Integer",
+          "visibility": "private"
+        }
+      },
+      "entry_actions": {},
+      "final_states": [],
+      "identifier_attrs": [
+        "r2_shaft_id",
+        "r3_floor_num"
+      ],
+      "initial_state": null,
+      "is_abstract": false,
+      "name": "ShaftFloor",
+      "senescent_states": [],
+      "subtypes": [],
+      "supertype": null,
+      "transition_table": {}
+    }
+  },
+  "generalizations": {
+    "Door": [
+      "CarDoor",
+      "ShaftDoor"
+    ]
+  }
+}
