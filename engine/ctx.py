@@ -50,6 +50,7 @@ class SimulationContext:
             clock=self.clock,
             class_defs=class_defs,
             generalizations=generalizations,
+            ctx=self,
         )
         self._running = False
         # The instance whose action is currently executing (set by scheduler

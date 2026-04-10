@@ -52,11 +52,15 @@ class ThreeQueueScheduler:
         clock: SimulationClock,
         class_defs: dict[str, ClassManifest],
         generalizations: dict[str, list[str]] | None = None,
+        ctx: Any = None,
     ):
         self._registry = registry
         self._clock = clock
         self._class_defs = class_defs
         self._generalizations = generalizations or {}
+        # SimulationContext back-reference; set after construction so generated
+        # action functions can call ctx.generate() / ctx.bridge() (D-35 / D-36).
+        self._ctx: Any = ctx
 
         self._priority: deque[Event] = deque()
         self._standard: deque[Event] = deque()
@@ -202,6 +206,39 @@ class ThreeQueueScheduler:
                 )
             ]
         return []
+
+    @staticmethod
+    def _is_generated_action(fn) -> bool:
+        """Return True if fn uses the generated-code (ctx, self_dict, params) signature.
+
+        Generated modules name their first parameter 'ctx'. Test helpers typically
+        use 'instance' or '*_a'. We use inspect to check without importing schema/.
+        """
+        import inspect
+        try:
+            sig = inspect.signature(fn)
+            params = list(sig.parameters)
+            return bool(params) and params[0] == "ctx"
+        except (ValueError, TypeError):
+            return False
+
+    def _invoke_action(self, action_fn, instance: dict, args: dict):
+        """Call an action function with the appropriate signature.
+
+        Generated code uses (ctx, self_dict, params) where ctx is the
+        SimulationContext. Legacy test actions use (instance, args, scheduler)
+        or (instance, args). This method dispatches based on the first
+        parameter name:
+
+          - First param 'ctx'  → generated-code shape: (ctx, instance, args)
+          - Otherwise          → legacy shape: (instance, args, self) or (instance, args)
+        """
+        if self._ctx is not None and self._is_generated_action(action_fn):
+            return action_fn(self._ctx, instance, args)
+        try:
+            return action_fn(instance, args, self)
+        except TypeError:
+            return action_fn(instance, args)
 
     def tick_delay_queue(self) -> list[MicroStep]:
         """Move expired delayed events to the standard queue (rule 8)."""
@@ -402,11 +439,7 @@ class ThreeQueueScheduler:
             assignments: dict = {}
             if action_fn is not None:
                 instance = self._registry.lookup(concrete_class, concrete_id)
-                try:
-                    ret = action_fn(instance, dict(event.args), self)
-                except TypeError:
-                    # Allow simpler 2-arg signatures
-                    ret = action_fn(instance, dict(event.args))
+                ret = self._invoke_action(action_fn, instance, dict(event.args))
                 if isinstance(ret, dict):
                     assignments = ret
                 yield ActionExecuted(
@@ -473,10 +506,7 @@ class ThreeQueueScheduler:
             try:
                 action_fn = entry["action_fn"]
                 instance = self._registry.lookup(target_class, target_id)
-                try:
-                    ret = action_fn(instance, dict(event.args), self)
-                except TypeError:
-                    ret = action_fn(instance, dict(event.args))
+                ret = self._invoke_action(action_fn, instance, dict(event.args))
                 yield ActionExecuted(
                     pycca_line=getattr(action_fn, "__name__", "<entry>"),
                     assignments_made=ret if isinstance(ret, dict) else {},
