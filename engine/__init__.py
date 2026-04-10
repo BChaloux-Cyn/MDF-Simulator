@@ -1,4 +1,6 @@
 """engine - MDF simulation engine runtime framework."""
+
+ENGINE_VERSION = "0.1.0"  # must match compiler.COMPILER_VERSION
 from engine.microstep import (
     MicroStep,
     SchedulerSelected,
