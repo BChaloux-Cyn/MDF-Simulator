@@ -19,9 +19,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Validation Tool** - Implement validate_model with graph reachability, structural checks, and pycca pre-parser (completed 2026-03-09)
 - [x] **Phase 4: Draw.io Tools** - Implement render_to_drawio, validate_drawio, and sync_from_drawio against the locked canonical schema (completed 2026-03-11)
 - [ ] **Phase 5: Simulation Engine** (umbrella — compiler approach, not interpreter; see 05-CONTEXT.md)
-  - [ ] **Phase 5.1: Runtime Framework** - Instance registry, relationship link store, three-queue scheduler, ctx runtime, micro-step stream, bridge mocks, simulation clock
-  - [ ] **Phase 5.2: Model Compiler** - Lark Transformer (action bodies + guards → Python), type system mapping, transition table generation, opaque zip bundle packaging
-  - [ ] **Phase 5.3: Simulation Runner + Verification** - Bundle loader, scenario input, elevator model end-to-end verification, MCP tool wrappers (simulate_domain + simulate_class)
+  - [x] **Phase 5.1: Runtime Framework** - Instance registry, relationship link store, three-queue scheduler, ctx runtime, micro-step stream, bridge mocks, simulation clock (completed 2026-04-07)
+  - [x] **Phase 5.2: Model Compiler** - Lark Transformer (action bodies + guards → Python), type system mapping, transition table generation, opaque zip bundle packaging (completed 2026-04-09)
+  - [x] **Phase 5.3: Simulation Runner + Verification** - Bundle loader, scenario input, elevator model end-to-end verification, MCP tool wrappers (simulate_domain + simulate_class) (completed 2026-04-10)
   - [ ] **Phase 5.4: GDB Command Language + CLI** - Command set definition, state inspection, step/continue/reset, clock control, attach to running simulation
   - [ ] **Phase 5.5: Breakpoint Injection** - Action-line breakpoints, property watchpoints, event breakpoints, hook injection into generated code templates
 - [ ] **Phase 6: CLI Test Harness** - YAML test script schema, engine runner, mid-sequence and final-state assertion evaluation, mdf-sim-test entry point
@@ -157,11 +157,11 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 05.1-01-PLAN.md — Data types (micro-steps, Event, manifest spec) + Wave 0 test scaffold
-- [ ] 05.1-02-PLAN.md — Instance registry + relationship link store (SC-01, SC-02)
-- [ ] 05.1-03-PLAN.md — Simulation clock + bridge mock registry (SC-09)
-- [ ] 05.1-04-PLAN.md — Three-queue scheduler with dispatch, run-to-completion, polymorphic routing (SC-03..SC-07)
-- [ ] 05.1-05-PLAN.md — SimulationContext (ctx) + run_simulation generator + integration tests (SC-08, SC-10, SC-11)
+- [x] 05.1-01-PLAN.md — Data types (micro-steps, Event, manifest spec) + Wave 0 test scaffold
+- [x] 05.1-02-PLAN.md — Instance registry + relationship link store (SC-01, SC-02)
+- [x] 05.1-03-PLAN.md — Simulation clock + bridge mock registry (SC-09)
+- [x] 05.1-04-PLAN.md — Three-queue scheduler with dispatch, run-to-completion, polymorphic routing (SC-03..SC-07)
+- [x] 05.1-05-PLAN.md — SimulationContext (ctx) + run_simulation generator + integration tests (SC-08, SC-10, SC-11)
 
 ### Phase 5.2: Model Compiler
 **Goal**: Lark Transformer compiles pycca action bodies and guards into Python source. Compiler generates one file per class (transition tables + action functions), a domain manifest, and packages everything into an opaque self-contained zip bundle.
@@ -176,7 +176,12 @@ Plans:
   6. Opaque zip bundle contains generated code + copied framework — self-contained and portable
   7. Elevator model compiles to a bundle without errors
   8. Same model input produces identical bundle output (deterministic)
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [x] 05.2-01-PLAN.md — Lark Transformer: pycca action bodies + guards → Python source
+- [x] 05.2-02-PLAN.md — Type system mapping, codegen (transition tables + action functions), bundle packager
+- [x] 05.2-03-PLAN.md — Elevator model compile acceptance + determinism tests
 
 ### Phase 5.3: Simulation Runner + Verification
 **Goal**: Load compiled bundles, execute simulations, verify the elevator model produces correct micro-step output. Expose as `simulate_domain()` and `simulate_class()` MCP tool wrappers.
@@ -191,10 +196,21 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 05.3-01-PLAN.md — Wave 0 test scaffold + fixtures + runtime directories
-- [ ] 05.3-02-PLAN.md — ctx API extension: __instance_key__, generated-code-facing methods (create/delete/relate/select_*)
-- [ ] 05.3-03-PLAN.md — Bundle loader + ENGINE_VERSION + scenario Pydantic schema + preflight multiplicity check
-- [ ] 05.3-04-PLAN.md — simulate_domain/simulate_class MCP tools + trigger evaluator + scenario_runner + elevator E2E verification
+- [x] 05.3-01-PLAN.md — Wave 0 test scaffold + fixtures + runtime directories
+- [x] 05.3-02-PLAN.md — ctx API extension: __instance_key__, generated-code-facing methods (create/delete/relate/select_*)
+- [x] 05.3-03-PLAN.md — Bundle loader + ENGINE_VERSION + scenario Pydantic schema + preflight multiplicity check
+- [x] 05.3-04-PLAN.md — simulate_domain/simulate_class MCP tools + trigger evaluator + scenario_runner + elevator E2E verification
+
+### Phase 05.3.1: elevator-scenario-simulation-validation (INSERTED)
+
+**Goal:** Fix compiler action-assignment direction and compile missing action bodies so that five elevator scenarios (door cycle, direct travel, button-triggered travel, full end-to-end, passenger round-trip) execute correctly in the simulation engine with the expected micro-step output
+**Requirements**: MCP-08 (partial — scenario validation)
+**Depends on:** Phase 05.3
+**Plans:** 2 plans
+
+Plans:
+- [ ] 05.3.1-01-PLAN.md — Core compiler fixes: action-assignment direction, enum scoping, None keyword, guard sibling table format, silent exception handling
+- [ ] 05.3.1-02-PLAN.md — Transformer fixes for missing action bodies + 5 scenario YAML files + integration test suite
 
 ### Phase 5.4: GDB Command Language + CLI
 **Goal**: Define and implement a GDB-style command set for interacting with running simulations — inspect instances, show queues, step through events, control the clock.
@@ -269,10 +285,11 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Draw.io Tools | 3/3 | Complete | 2026-03-11 |
 | 04.1. Model Development and Compiler Testing | 6/6 | Complete | 2026-04-05 |
 | 04.2. Body of Knowledge and Modeling Process | 0/TBD | In planning | - |
-| 5. Simulation Engine (umbrella) | — | Context gathered | - |
-| 5.1. Runtime Framework | 0/5 | Planned | - |
-| 5.2. Model Compiler | 0/TBD | Not started | - |
-| 5.3. Simulation Runner + Verification | 0/TBD | Not started | - |
+| 5. Simulation Engine (umbrella) | — | In progress (5.1–5.3 done) | - |
+| 5.1. Runtime Framework | 5/5 | Complete | 2026-04-07 |
+| 5.2. Model Compiler | 3/3 | Complete | 2026-04-09 |
+| 5.3. Simulation Runner + Verification | 4/4 | Complete | 2026-04-10 |
+| 05.3.1. Elevator Scenario Simulation Validation | 0/2 | In planning | - |
 | 5.4. GDB Command Language + CLI | 0/TBD | Not started | - |
 | 5.5. Breakpoint Injection | 0/TBD | Not started | - |
 | 6. CLI Test Harness | 0/TBD | Not started | - |
@@ -281,4 +298,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 ---
 *Roadmap created: 2026-03-05 for milestone v1.0 Foundation*
-*Last updated: 2026-04-05 — Phase 5.1 planned: 5 plans in 3 waves*
+*Last updated: 2026-04-10 — Phase 05.3.1 planned (2 plans, 2 waves)*
