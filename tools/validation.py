@@ -545,7 +545,11 @@ def _extract_var_names(tree) -> set[str]:
         if isinstance(left, Tree) and left.data == "name":
             names.add(str(left.children[0]))
         elif isinstance(left, Tree) and left.data == "dotted_name":
-            names.add(str(left.children[1]))
+            # Only extract rcvd_evt.param references as guard variables.
+            # self.attr references are class attributes, not event parameters,
+            # and must not be type-checked against event param types.
+            if str(left.children[0]) == "rcvd_evt":
+                names.add(str(left.children[1]))
     for child in tree.children:
         names |= _extract_var_names(child)
     return names
