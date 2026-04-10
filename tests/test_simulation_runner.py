@@ -6,6 +6,74 @@ implementing plan completes.
 """
 import pytest
 
+from engine.registry import InstanceRegistry
+from engine.ctx import SimulationContext
+from engine.manifest import AssociationManifest, ClassManifest
+
+
+# ---------------------------------------------------------------------------
+# Shared fixtures
+# ---------------------------------------------------------------------------
+
+_MINIMAL_CLASS_DEFS: dict[str, ClassManifest] = {
+    "Elevator": {
+        "name": "Elevator",
+        "is_abstract": False,
+        "identifier_attrs": ["elevator_id"],
+        "attributes": {"elevator_id": 0, "current_floor": 1},
+        "entry_actions": {},
+        "initial_state": "Idle",
+        "final_states": [],
+        "senescent_states": [],
+        "transition_table": {},
+        "supertype": None,
+        "subtypes": [],
+    },
+    "Door": {
+        "name": "Door",
+        "is_abstract": False,
+        "identifier_attrs": ["door_id"],
+        "attributes": {"door_id": 0},
+        "entry_actions": {},
+        "initial_state": "Closed",
+        "final_states": [],
+        "senescent_states": [],
+        "transition_table": {},
+        "supertype": None,
+        "subtypes": [],
+    },
+    "Shaft": {
+        "name": "Shaft",
+        "is_abstract": False,
+        "identifier_attrs": ["shaft_id"],
+        "attributes": {"shaft_id": 0},
+        "entry_actions": {},
+        "initial_state": "Idle",
+        "final_states": [],
+        "senescent_states": [],
+        "transition_table": {},
+        "supertype": None,
+        "subtypes": [],
+    },
+}
+
+_MINIMAL_ASSOCIATIONS: dict[str, AssociationManifest] = {
+    "R1": {
+        "rel_id": "R1",
+        "class_a": "Elevator",
+        "class_b": "Shaft",
+        "mult_a_to_b": "1",
+        "mult_b_to_a": "1",
+    },
+}
+
+_MINIMAL_MANIFEST = {
+    "class_defs": _MINIMAL_CLASS_DEFS,
+    "associations": _MINIMAL_ASSOCIATIONS,
+    "generalizations": {},
+}
+
+
 # Bundle loader tests (Plan 03)
 def test_bundle_loader_extracts_and_verifies_version():
     pytest.xfail("Plan 03 not implemented")
@@ -21,25 +89,115 @@ def test_bundle_loader_reverses_state_event_keys():
 
 # ctx API tests (Plan 02)
 def test_ctx_instance_key_populated_on_create_sync():
-    pytest.xfail("Plan 02 not implemented")
+    reg = InstanceRegistry(_MINIMAL_CLASS_DEFS)
+    reg.create_sync("Elevator", {"elevator_id": 1}, initial_state="Idle", attrs={"current_floor": 1})
+    inst = reg.lookup("Elevator", {"elevator_id": 1})
+    assert inst is not None
+    assert inst["__instance_key__"] == frozenset({("elevator_id", 1)})
+    assert inst["__class_name__"] == "Elevator"
+    assert inst["current_floor"] == 1  # existing attrs still present
+
 
 def test_ctx_instance_key_populated_on_create_async():
-    pytest.xfail("Plan 02 not implemented")
+    reg = InstanceRegistry(_MINIMAL_CLASS_DEFS)
+    reg.create_async("Elevator", {"elevator_id": 2}, initial_state="Idle")
+    inst = reg.lookup("Elevator", {"elevator_id": 2})
+    assert inst is not None
+    assert inst["__instance_key__"] == frozenset({("elevator_id", 2)})
+    assert inst["__class_name__"] == "Elevator"
 
-def test_ctx_generate_accepts_target_instance_key():
-    pytest.xfail("Plan 02 not implemented")
+
+def test_ctx_instance_key_composite_identifier():
+    """Composite identifier produces frozenset of all (name, value) pairs."""
+    class_defs = {
+        "Floor": {
+            "name": "Floor",
+            "is_abstract": False,
+            "identifier_attrs": ["floor_id", "side"],
+            "attributes": {"floor_id": 0, "side": ""},
+            "entry_actions": {},
+            "initial_state": "Idle",
+            "final_states": [],
+            "senescent_states": [],
+            "transition_table": {},
+            "supertype": None,
+            "subtypes": [],
+        }
+    }
+    reg = InstanceRegistry(class_defs)
+    reg.create_sync("Floor", {"floor_id": 1, "side": "north"}, initial_state="Idle")
+    inst = reg.lookup("Floor", {"floor_id": 1, "side": "north"})
+    assert inst is not None
+    assert inst["__instance_key__"] == frozenset({("floor_id", 1), ("side", "north")})
+    assert inst["__class_name__"] == "Floor"
+
 
 def test_ctx_create_returns_instance_dict_with_keys():
-    pytest.xfail("Plan 02 not implemented")
+    """ctx.create(class, attrs) returns instance dict with __instance_key__ and __class_name__."""
+    ctx = SimulationContext(_MINIMAL_MANIFEST)
+    inst = ctx.create("Door", {"door_id": 1})
+    assert inst["__instance_key__"] == frozenset({("door_id", 1)})
+    assert inst["__class_name__"] == "Door"
+
 
 def test_ctx_delete_by_instance_dict():
-    pytest.xfail("Plan 02 not implemented")
+    """ctx.delete(inst_dict) removes instance using __class_name__ and __instance_key__."""
+    ctx = SimulationContext(_MINIMAL_MANIFEST)
+    inst = ctx.create("Door", {"door_id": 1})
+    ctx.delete(inst)
+    assert ctx.registry.lookup("Door", {"door_id": 1}) is None
+
 
 def test_ctx_relate_by_instance_dicts():
-    pytest.xfail("Plan 02 not implemented")
+    """ctx.relate(a_dict, b_dict, 'R1') creates a navigable link."""
+    ctx = SimulationContext(_MINIMAL_MANIFEST)
+    elev = ctx.create("Elevator", {"elevator_id": 1})
+    shaft = ctx.create("Shaft", {"shaft_id": 1})
+    ctx.relate(elev, shaft, "R1")
+    result = ctx.select_any_related(elev, ["R1"])
+    assert result is not None
+    assert result["shaft_id"] == 1
+
 
 def test_ctx_select_any_related_navigation():
-    pytest.xfail("Plan 02 not implemented")
+    """ctx.select_any_related traverses a relationship chain and returns the target instance."""
+    ctx = SimulationContext(_MINIMAL_MANIFEST)
+    elev = ctx.create("Elevator", {"elevator_id": 10})
+    shaft = ctx.create("Shaft", {"shaft_id": 10})
+    ctx.relate(elev, shaft, "R1")
+    found = ctx.select_any_related(elev, ["R1"])
+    assert found is not None
+    assert found["__class_name__"] == "Shaft"
+    assert found["shaft_id"] == 10
+
+
+def test_ctx_generate_accepts_target_instance_key():
+    """ctx.generate accepts target=<frozenset instance_key> form."""
+    ctx = SimulationContext({
+        "class_defs": {
+            "Door": {
+                "name": "Door",
+                "is_abstract": False,
+                "identifier_attrs": ["door_id"],
+                "attributes": {"door_id": 0},
+                "entry_actions": {},
+                "initial_state": "Closed",
+                "final_states": [],
+                "senescent_states": [],
+                "transition_table": {
+                    ("Closed", "DoorOpen"): {"next_state": "Open", "action_fn": None, "guard_fn": None},
+                },
+                "supertype": None,
+                "subtypes": [],
+            },
+        },
+        "associations": {},
+        "generalizations": {},
+    })
+    door = ctx.create("Door", {"door_id": 1})
+    elev_dict = {"__class_name__": "Door", "__instance_key__": frozenset({("door_id", 1)}), "door_id": 1}
+    steps = ctx.generate("DoorOpen", target=door["__instance_key__"], args={}, sender=elev_dict)
+    assert len(steps) >= 1
 
 # Scenario schema tests (Plan 03)
 def test_scenario_schema_valid_yaml_parses():
