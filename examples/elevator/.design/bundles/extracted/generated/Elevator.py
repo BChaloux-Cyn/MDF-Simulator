@@ -59,6 +59,11 @@ def action_Moving_entry(
     pass
 
 
+# from elevator/Elevator.yaml:0
+def guard_Exchanging_Door_closed(self_dict: dict, params: dict) -> bool:
+    return self_dict["next_stop_floor"] == self_dict["current_floor"]
+
+
 TRANSITION_TABLE: dict = {
     ("Arriving", "Arrived"): {
         "next_state": "Exchanging",
@@ -73,7 +78,7 @@ TRANSITION_TABLE: dict = {
     ("Exchanging", "Door_closed"): {
         "next_state": "Idle",
         "action_fn": action_Exchanging_entry,
-        "guard_fn": None,
+        "guard_fn": guard_Exchanging_Door_closed,
     },
     ("Exchanging", "Floor_assigned"): {
         "next_state": "Exchanging",

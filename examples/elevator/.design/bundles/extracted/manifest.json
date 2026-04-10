@@ -288,7 +288,7 @@
         },
         "Exchanging::Door_closed": {
           "action_fn": null,
-          "guard_fn": null,
+          "guard_fn": "self.next_stop_floor == self.current_floor",
           "next_state": "Idle"
         },
         "Exchanging::Floor_assigned": {

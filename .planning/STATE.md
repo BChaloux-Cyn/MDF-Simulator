@@ -132,6 +132,7 @@ Recent decisions affecting current work:
 ### Roadmap Evolution
 
 - Phase 04.1 inserted after Phase 4: Model Development and Compiler Testing (URGENT)
+- Phase 05.3.1 inserted after Phase 05.3: Elevator Scenario Simulation Validation (URGENT)
 
 ### Pending Todos
 

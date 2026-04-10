@@ -114,7 +114,8 @@ def _build_transition_table(
       event_ignored       → cell present with next_state=None, action_fn=None, guard_fn=None
       can't_happen        → cell absent (KeyError in scheduler → ErrorMicroStep)
 
-    action_fn and guard_fn are left as None — Plan 04 codegen fills them.
+    action_fn is left as None — Plan 04 codegen fills it.
+    guard_fn stores the raw guard expression string (or None) for codegen to compile.
     """
     table: dict[tuple[str, str], TransitionEntry] = {}
 
@@ -123,7 +124,7 @@ def _build_transition_table(
         entry: TransitionEntry = {
             "next_state": trans.to,
             "action_fn": None,
-            "guard_fn": None,
+            "guard_fn": trans.guard,
         }
         table[key] = entry
 
