@@ -1,12 +1,15 @@
 """
-tests/test_simulation_runner.py — Bundle loader, scenario schema, and preflight tests.
+tests/test_simulation_runner.py — Bundle loader, scenario schema, preflight,
+trigger evaluator, and scenario runner tests.
 
 Phase 05.3-03: Bundle loader (Task 1) + scenario schema + preflight (Task 2).
+Phase 05.3-04: TriggerEvaluator + run_scenario (Task 1).
 
 Coverage:
-  Task 1: ENGINE_VERSION, load_bundle, key reversal, callable rebinding, version
+  05.3-03 Task 1: ENGINE_VERSION, load_bundle, key reversal, callable rebinding, version
           mismatch rejection, path traversal rejection.
-  Task 2: ScenarioDef schema validation, EventDef constraints, preflight multiplicity.
+  05.3-03 Task 2: ScenarioDef schema validation, EventDef constraints, preflight multiplicity.
+  05.3-04 Task 1: TriggerEvaluator fires/disarms, attr+state match, run_scenario alias resolution.
 """
 from __future__ import annotations
 
@@ -287,3 +290,217 @@ def test_preflight_rejects_missing_required_multiplicity():
     issues = check_multiplicity(scn, manifest)
     assert len(issues) >= 1
     assert "R1" in issues[0].location
+
+
+# ---------------------------------------------------------------------------
+# Phase 05.3-04 Task 1: TriggerEvaluator
+# ---------------------------------------------------------------------------
+
+def _make_fake_instance(class_name: str, identifier: dict, state: str, **attrs) -> dict:
+    """Build a minimal instance dict that mimics what the registry produces."""
+    from engine.event import make_instance_key
+    inst = dict(attrs)
+    inst.update(identifier)
+    inst["curr_state"] = state
+    inst["__class_name__"] = class_name
+    inst["__instance_key__"] = make_instance_key(identifier)
+    return inst
+
+
+def _make_minimal_manifest(class_name: str = "Elevator") -> dict:
+    """Build a minimal manifest for use in unit tests (no real transitions needed)."""
+    return {
+        "class_defs": {
+            class_name: {
+                "name": class_name,
+                "identifier_attrs": ["elevator_id"],
+                "initial_state": "Idle",
+                "transition_table": {},
+                "attributes": {},
+            }
+        },
+        "associations": {},
+        "generalizations": {},
+    }
+
+
+def test_trigger_fires_on_state_match():
+    """TriggerEvaluator fires trigger when instance is in specified state."""
+    from schema.scenario_schema import TriggerCondition, TriggerAction, TriggerDef
+    from engine.trigger import TriggerEvaluator
+
+    e1 = _make_fake_instance("Elevator", {"elevator_id": 1}, "Idle")
+    aliases = {"e1": e1}
+    trig = TriggerDef(
+        when=TriggerCondition(instance="e1", state="Idle"),
+        then=TriggerAction(event="X", target="e1", sender="e1"),
+        repeat=False,
+    )
+    evaluator = TriggerEvaluator([trig], aliases)
+
+    # Create a minimal fake ctx (trigger reads inst["curr_state"] directly)
+    class FakeCtx:
+        pass
+
+    fired = evaluator.evaluate(FakeCtx())
+    assert len(fired) == 1
+    assert fired[0] is trig
+
+
+def test_trigger_disarms_after_first_fire_when_repeat_false():
+    """Trigger with repeat=False fires once, then is disarmed."""
+    from schema.scenario_schema import TriggerCondition, TriggerAction, TriggerDef
+    from engine.trigger import TriggerEvaluator
+
+    e1 = _make_fake_instance("Elevator", {"elevator_id": 1}, "Idle")
+    aliases = {"e1": e1}
+    trig = TriggerDef(
+        when=TriggerCondition(instance="e1", state="Idle"),
+        then=TriggerAction(event="X", target="e1", sender="e1"),
+        repeat=False,
+    )
+    evaluator = TriggerEvaluator([trig], aliases)
+
+    class FakeCtx:
+        pass
+
+    fired1 = evaluator.evaluate(FakeCtx())
+    fired2 = evaluator.evaluate(FakeCtx())
+    assert len(fired1) == 1
+    assert len(fired2) == 0
+
+
+def test_trigger_rearms_when_repeat_true():
+    """Trigger with repeat=True fires every time the condition is met."""
+    from schema.scenario_schema import TriggerCondition, TriggerAction, TriggerDef
+    from engine.trigger import TriggerEvaluator
+
+    e1 = _make_fake_instance("Elevator", {"elevator_id": 1}, "Idle")
+    aliases = {"e1": e1}
+    trig = TriggerDef(
+        when=TriggerCondition(instance="e1", state="Idle"),
+        then=TriggerAction(event="X", target="e1", sender="e1"),
+        repeat=True,
+    )
+    evaluator = TriggerEvaluator([trig], aliases)
+
+    class FakeCtx:
+        pass
+
+    fired1 = evaluator.evaluate(FakeCtx())
+    fired2 = evaluator.evaluate(FakeCtx())
+    assert len(fired1) == 1
+    assert len(fired2) == 1
+
+
+def test_trigger_fires_on_attr_eq_match():
+    """Trigger fires only when instance attribute equals specified value."""
+    from schema.scenario_schema import TriggerCondition, TriggerAction, TriggerDef
+    from engine.trigger import TriggerEvaluator
+
+    e1 = _make_fake_instance("Elevator", {"elevator_id": 1}, "Moving", current_floor=2)
+    aliases = {"e1": e1}
+    trig = TriggerDef(
+        when=TriggerCondition(instance="e1", attr="current_floor", eq=2),
+        then=TriggerAction(event="ArrivalSignal", target="e1", sender="e1"),
+        repeat=False,
+    )
+    evaluator = TriggerEvaluator([trig], aliases)
+
+    class FakeCtx:
+        pass
+
+    # Matches (current_floor == 2)
+    fired = evaluator.evaluate(FakeCtx())
+    assert len(fired) == 1
+
+    # Simulate floor change, re-arm manually
+    e1["current_floor"] = 3
+    evaluator.armed[0].armed = True  # manually re-arm to confirm attr check is independent
+    fired2 = evaluator.evaluate(FakeCtx())
+    assert len(fired2) == 0
+
+
+def test_trigger_both_state_and_attr_must_match():
+    """Trigger with state+attr requires both conditions (AND logic, D-19)."""
+    from schema.scenario_schema import TriggerCondition, TriggerAction, TriggerDef
+    from engine.trigger import TriggerEvaluator
+
+    e1 = _make_fake_instance("Elevator", {"elevator_id": 1}, "Idle", current_floor=1)
+    aliases = {"e1": e1}
+    trig = TriggerDef(
+        when=TriggerCondition(instance="e1", state="Idle", attr="current_floor", eq=2),
+        then=TriggerAction(event="X", target="e1", sender="e1"),
+        repeat=False,
+    )
+    evaluator = TriggerEvaluator([trig], aliases)
+
+    class FakeCtx:
+        pass
+
+    # State matches but attr does not (current_floor=1, want 2)
+    fired = evaluator.evaluate(FakeCtx())
+    assert len(fired) == 0
+
+    # Both match now
+    e1["current_floor"] = 2
+    fired2 = evaluator.evaluate(FakeCtx())
+    assert len(fired2) == 1
+
+
+def test_trigger_fire_limit_raises_on_exceed():
+    """TriggerEvaluator raises RuntimeError after exceeding TRIGGER_FIRE_LIMIT fires."""
+    from schema.scenario_schema import TriggerCondition, TriggerAction, TriggerDef
+    from engine.trigger import TriggerEvaluator, TRIGGER_FIRE_LIMIT
+
+    e1 = _make_fake_instance("Elevator", {"elevator_id": 1}, "Idle")
+    aliases = {"e1": e1}
+    trig = TriggerDef(
+        when=TriggerCondition(instance="e1", state="Idle"),
+        then=TriggerAction(event="X", target="e1", sender="e1"),
+        repeat=True,  # infinite loop candidate
+    )
+    evaluator = TriggerEvaluator([trig], aliases)
+    # Manually set total_fires to just below the limit
+    evaluator.total_fires = TRIGGER_FIRE_LIMIT
+
+    class FakeCtx:
+        pass
+
+    with pytest.raises(RuntimeError, match="Trigger fire limit"):
+        evaluator.evaluate(FakeCtx())
+
+
+def test_run_scenario_yields_micro_steps_and_resolves_aliases():
+    """run_scenario yields micro-steps from ctx.execute() after setup."""
+    from engine.ctx import SimulationContext
+    from engine.scenario_runner import run_scenario
+    from schema.scenario_schema import ScenarioDef, InstanceDef, EventDef
+
+    manifest = _make_minimal_manifest("Elevator")
+    # Add a transition so the scheduler can process the event
+    manifest["class_defs"]["Elevator"]["transition_table"] = {
+        ("Idle", "Floor_assigned"): {
+            "to_state": "Departing",
+            "action_fn": None,
+            "guard_fn": None,
+        }
+    }
+
+    scenario = ScenarioDef(
+        instances=[
+            InstanceDef(**{"class": "Elevator", "name": "elev1", "id": {"elevator_id": 1}, "state": "Idle"})
+        ],
+        relationships=[],
+        events=[
+            EventDef(event="Floor_assigned", target="elev1", sender="elev1", args={"floor_num": 3})
+        ],
+        triggers=[],
+    )
+
+    ctx = SimulationContext(manifest)
+    steps = list(run_scenario(ctx, scenario, manifest))
+    assert len(steps) > 0
+    # The instance should have been created (aliases resolved)
+    inst = ctx.registry.lookup("Elevator", {"elevator_id": 1})
+    assert inst is not None
