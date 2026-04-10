@@ -1,14 +1,18 @@
+# Minimal scenario fixture for schema validation tests (Plan 05.3-03).
+# 1 instance, 0 relationships, 1 event, 0 triggers.
 instances:
   - class: Elevator
     name: elev1
-    id: {elevator_id: 1}
+    id:
+      elevator_id: 1
     state: Idle
-    attrs: {current_floor: 1}
+
 relationships: []
+
 events:
-  - event: FloorRequested
+  - event: Arrive
     target: elev1
     sender: elev1
-    args: {floor: 2}
-    at_ms: 0
+    at_ms: 0.0
+
 triggers: []
