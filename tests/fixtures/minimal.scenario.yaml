@@ -1,0 +1,14 @@
+instances:
+  - class: Elevator
+    name: elev1
+    id: {elevator_id: 1}
+    state: Idle
+    attrs: {current_floor: 1}
+relationships: []
+events:
+  - event: FloorRequested
+    target: elev1
+    sender: elev1
+    args: {floor: 2}
+    at_ms: 0
+triggers: []
