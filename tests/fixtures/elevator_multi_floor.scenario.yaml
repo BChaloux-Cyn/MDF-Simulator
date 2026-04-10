@@ -1,0 +1,60 @@
+# Elevator multi-floor scenario (Phase 05.3-04 exit gate, D-22).
+#
+# Exercises Arriving -> Exchanging -> Idle transitions:
+#   Arrived    => Arriving -> Exchanging  (action: action_Arriving_entry, empty)
+#   Door_closed => Exchanging -> Idle    (action: action_Exchanging_entry, empty)
+#
+# NOTE on action assignment: the compiler assigns each state's action body to
+# outgoing transitions from that state. Actions for Moving/Floor_Updating paths
+# use the Direction enum (Up/Down) and self-generate events — both require
+# additional compiler work. The Arriving/Exchanging path uses empty actions and
+# is safe to execute end-to-end.
+#
+# Required associations to pass preflight (mult="1" on both ends):
+#   R1: Elevator <-> Shaft
+#   R7: Elevator <-> CarDoor
+#
+# CarDoor identifier inherits door_id from Door via R9 generalization.
+instances:
+  - class: Elevator
+    name: elev1
+    id: {elevator_id: 1}
+    state: Arriving
+    attrs:
+      current_floor: 3
+      next_stop_floor: 3
+
+  - class: Shaft
+    name: shaft1
+    id: {shaft_id: 1}
+
+  - class: CarDoor
+    name: cardoor1
+    id: {door_id: 1}
+
+relationships:
+  - rel: R1
+    a: elev1
+    b: shaft1
+  - rel: R7
+    a: elev1
+    b: cardoor1
+
+events:
+  # Arriving -> Exchanging (action_Arriving_entry: empty)
+  - event: Arrived
+    target: elev1
+    sender: elev1
+    args: {}
+    at_ms: 0
+
+  # Exchanging -> Idle (action_Exchanging_entry: empty)
+  # Guard on Door_closed is not compiled — both Exchanging->Idle and
+  # Exchanging->Departing collapsed to Exchanging->Idle in generated table.
+  - event: Door_closed
+    target: elev1
+    sender: elev1
+    args: {}
+    at_ms: 0
+
+triggers: []

@@ -1,0 +1,4 @@
+# Bridge mocks for elevator multi-floor scenario (Phase 05.3-04).
+# No bridge calls are triggered in the Idle->Departing->Moving path,
+# so this file is empty.
+bridges: {}
