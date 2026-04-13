@@ -501,3 +501,8 @@ def test_run_scenario_yields_micro_steps_and_resolves_aliases():
     # The instance should have been created (aliases resolved)
     inst = ctx.registry.lookup("Elevator", {"elevator_id": 1})
     assert inst is not None
+    # Verify the transition actually fired (not silently swallowed as an error)
+    from engine.microstep import TransitionFired
+    fired = [s for s in steps if isinstance(s, TransitionFired)]
+    assert len(fired) == 1, f"Expected 1 TransitionFired, got: {fired}"
+    assert fired[0].to_state == "Departing"
