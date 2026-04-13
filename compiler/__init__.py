@@ -83,16 +83,18 @@ def compile_model(model_root: Path, output_dir: Path) -> Path:
     # Build type_registry from types_raw if present
     type_registry: dict = {}
     if loaded.types_raw is not None:
-        for enum_def in getattr(loaded.types_raw, "enums", []):
-            type_registry[enum_def.name] = {
-                "kind": "enum",
-                "members": list(enum_def.values),
-            }
-        for typedef in getattr(loaded.types_raw, "typedefs", []):
-            type_registry[typedef.name] = {
-                "kind": "typedef",
-                "base": typedef.base_type,
-            }
+        for type_def in getattr(loaded.types_raw, "types", []):
+            if getattr(type_def, "base", None) == "enum":
+                type_registry[type_def.name] = {
+                    "kind": "enum",
+                    "members": list(getattr(type_def, "values", [])),
+                }
+            elif hasattr(type_def, "base_type"):
+                # Legacy typedef form
+                type_registry[type_def.name] = {
+                    "kind": "typedef",
+                    "base": type_def.base_type,
+                }
 
     generated_files: dict[str, str] = {}
     acc = ErrorAccumulator()

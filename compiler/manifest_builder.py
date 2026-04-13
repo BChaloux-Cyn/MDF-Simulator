@@ -177,9 +177,12 @@ def build_class_manifest(
         # Has own SM → Case A (entity super) or Case C (active super, redefines)
         transition_table = _build_transition_table(sd)
         initial_state = sd.initial_state
+        # Final states: states with no outgoing transitions (true xUML final states).
+        # States without entry actions are NOT final — they are common resting states.
+        states_with_outgoing = {s for (s, _e) in _build_transition_table(sd).keys()}
         final_states = sorted(
             st.name for st in sd.states
-            if st.entry_action is None or "delete" in (st.entry_action or "").lower()
+            if st.name not in states_with_outgoing
         )
         entry_actions = {st.name: st.entry_action for st in sd.states}
         senescent_states = classify_senescent_states(sd, parser)

@@ -15,7 +15,7 @@ states:
       if (sf.has_value()) {
           ShaftFloor shaft_floor = sf.value();
           Elevator elev = shaft_floor->R2->R1;
-          if (elev.curr_state == Idle) {
+          if (elev.curr_state == "Idle") {
               generate Floor_assigned(floor_num: floor.floor_num) to elev;
           }
       }

@@ -1,0 +1,132 @@
+# Scenario 2: Direct Floor Travel (Phase 05.3.1-02)
+#
+# Exercises the full Elevator travel state machine when Floor_assigned is
+# sent directly (no FloorCallButton involved).
+#
+# Expected Elevator path:
+#   Idle -> Departing -> Moving -> Floor_Updating -> Arriving -> Exchanging -> Idle
+#
+# Notes:
+# - Departing entry: sets next_stop_floor=3, direction=Up, generates Ready
+# - Moving: waits for Floor_reached trigger
+# - Floor_Updating entry: checks current_floor==next_stop_floor -> At_Destination
+# - Arriving entry: sets next_stop_floor=current_floor, generates Arrived
+# - Exchanging entry: notifies buttons, generates Open_cmd to CarDoor
+# - CarDoor Opening -> trigger Done_opening bypass
+# - CarDoor Open -> trigger Close_cmd bypass
+# - CarDoor Closing -> trigger Done_closing to ShaftDoor bypass
+# - ShaftDoor Closed -> Closed_now to CarDoor -> Door_closed to Elevator
+# - Exchanging -> Idle (guard: next_stop_floor == current_floor)
+#
+# Required associations for preflight:
+#   R1: Elevator <-> Shaft (both "1")
+#   R7: Elevator <-> CarDoor (both "1")
+#   R8: ShaftFloor <-> ShaftDoor (both "1")
+#   R2: ShaftFloor references Shaft
+#   R3: ShaftFloor references Floor
+
+instances:
+  - class: Elevator
+    name: elev1
+    id: {elevator_id: 1}
+    state: Idle
+    attrs:
+      current_floor: 1
+      next_stop_floor: 1
+
+  - class: Shaft
+    name: shaft1
+    id: {shaft_id: 1}
+
+  - class: Floor
+    name: floor3
+    id: {floor_num: 3}
+    attrs:
+      is_top_floor: true
+      is_bottom_floor: false
+
+  - class: ShaftFloor
+    name: sf3
+    id: {r2_shaft_id: 1, r3_floor_num: 3}
+    attrs:
+      sensor_id: 103
+
+  - class: CarDoor
+    name: cardoor1
+    id: {door_id: 1}
+    state: Closed
+
+  - class: ShaftDoor
+    name: shaftdoor3
+    id: {door_id: 3}
+    state: Closed
+
+relationships:
+  - rel: R1
+    a: elev1
+    b: shaft1
+  - rel: R2
+    a: shaft1
+    b: sf3
+  - rel: R3
+    a: floor3
+    b: sf3
+  - rel: R7
+    a: elev1
+    b: cardoor1
+  - rel: R8
+    a: sf3
+    b: shaftdoor3
+
+events:
+  # Direct floor assignment — bypasses FloorCallButton
+  - event: Floor_assigned
+    target: elev1
+    sender: elev1
+    args: {floor_num: 3}
+    at_ms: 0
+
+triggers:
+  # When Elevator enters Moving, inject Floor_reached to simulate arrival at floor 3
+  - when:
+      instance: elev1
+      state: Moving
+    then:
+      event: Floor_reached
+      target: elev1
+      sender: elev1
+      args: {floor_num: 3}
+    repeat: false
+
+  # ShaftDoor Opening entry uses delay — bypass it
+  - when:
+      instance: shaftdoor3
+      state: Opening
+    then:
+      event: Done_opening
+      target: shaftdoor3
+      sender: shaftdoor3
+      args: {}
+    repeat: false
+
+  # CarDoor Open entry uses delay — bypass it
+  - when:
+      instance: cardoor1
+      state: Open
+    then:
+      event: Close_cmd
+      target: cardoor1
+      sender: cardoor1
+      args: {}
+    repeat: false
+
+  # ShaftDoor Closing entry uses delay — bypass it
+  - when:
+      instance: shaftdoor3
+      state: Closing
+    then:
+      event: Done_closing
+      target: shaftdoor3
+      sender: shaftdoor3
+      args: {}
+    repeat: false

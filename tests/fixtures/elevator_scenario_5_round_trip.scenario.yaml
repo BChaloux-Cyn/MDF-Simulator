@@ -1,0 +1,159 @@
+# Scenario 5: Passenger Round-Trip (Phase 05.3.1-02)
+#
+# Exercises two complete travel cycles:
+#   Phase 1: FloorCallButton at floor 3 pressed -> Elevator travels 1->3
+#            Arrives at floor 3, Exchanging opens door cycle, Idle (no more work)
+#
+# The elevator starts at floor 1. FloorCallButton at floor 3 is pressed.
+# Lit entry: traverses R6->R3->R2->R1 to find Elevator (Idle), sends Floor_assigned(3).
+# Elevator travels: Departing(1->3) -> Moving -> Floor_Updating -> Arriving -> Exchanging -> Idle
+# Exchanging sends Call_served to FloorCallButton (Lit->Idle), Open_cmd to CarDoor.
+# Door cycle completes, Door_closed to Elevator, guard: same floor -> Idle.
+#
+# Required associations for preflight:
+#   R1: Elevator <-> Shaft (both "1")
+#   R7: Elevator <-> CarDoor (both "1")
+#   R8: ShaftFloor <-> ShaftDoor (both "1")
+
+instances:
+  - class: Elevator
+    name: elev1
+    id: {elevator_id: 1}
+    state: Idle
+    attrs:
+      current_floor: 1
+      next_stop_floor: 1
+
+  - class: Shaft
+    name: shaft1
+    id: {shaft_id: 1}
+
+  - class: Floor
+    name: floor1
+    id: {floor_num: 1}
+    attrs:
+      is_top_floor: false
+      is_bottom_floor: true
+
+  - class: Floor
+    name: floor3
+    id: {floor_num: 3}
+    attrs:
+      is_top_floor: true
+      is_bottom_floor: false
+
+  - class: ShaftFloor
+    name: sf1
+    id: {r2_shaft_id: 1, r3_floor_num: 1}
+    attrs:
+      sensor_id: 101
+
+  - class: ShaftFloor
+    name: sf3
+    id: {r2_shaft_id: 1, r3_floor_num: 3}
+    attrs:
+      sensor_id: 103
+
+  - class: FloorCallButton
+    name: fcb3
+    id: {button_id: 3}
+    state: Idle
+    attrs:
+      pressed_at: 0
+
+  - class: CarDoor
+    name: cardoor1
+    id: {door_id: 1}
+    state: Closed
+
+  - class: ShaftDoor
+    name: shaftdoor1
+    id: {door_id: 2}
+    state: Closed
+
+  - class: ShaftDoor
+    name: shaftdoor3
+    id: {door_id: 3}
+    state: Closed
+
+relationships:
+  - rel: R1
+    a: elev1
+    b: shaft1
+  - rel: R2
+    a: shaft1
+    b: sf1
+  - rel: R2
+    a: shaft1
+    b: sf3
+  - rel: R3
+    a: floor1
+    b: sf1
+  - rel: R3
+    a: floor3
+    b: sf3
+  - rel: R6
+    a: floor3
+    b: fcb3
+  - rel: R7
+    a: elev1
+    b: cardoor1
+  - rel: R8
+    a: sf1
+    b: shaftdoor1
+  - rel: R8
+    a: sf3
+    b: shaftdoor3
+
+events:
+  # Press FloorCallButton at floor 3 — Lit entry sends Floor_assigned to Elevator
+  - event: Activated
+    target: fcb3
+    sender: fcb3
+    args: {}
+    at_ms: 0
+
+triggers:
+  # Elevator enters Moving -> inject Floor_reached(3) to complete travel
+  - when:
+      instance: elev1
+      state: Moving
+    then:
+      event: Floor_reached
+      target: elev1
+      sender: elev1
+      args: {floor_num: 3}
+    repeat: false
+
+  # ShaftDoor at floor 3 enters Opening -> bypass delay
+  - when:
+      instance: shaftdoor3
+      state: Opening
+    then:
+      event: Done_opening
+      target: shaftdoor3
+      sender: shaftdoor3
+      args: {}
+    repeat: false
+
+  # CarDoor enters Open -> bypass delay
+  - when:
+      instance: cardoor1
+      state: Open
+    then:
+      event: Close_cmd
+      target: cardoor1
+      sender: cardoor1
+      args: {}
+    repeat: false
+
+  # ShaftDoor at floor 3 enters Closing -> bypass delay
+  - when:
+      instance: shaftdoor3
+      state: Closing
+    then:
+      event: Done_closing
+      target: shaftdoor3
+      sender: shaftdoor3
+      args: {}
+    repeat: false

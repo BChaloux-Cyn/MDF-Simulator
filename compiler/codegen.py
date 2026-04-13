@@ -60,10 +60,24 @@ def format_source(src: str, filename: str = "<generated>") -> str:
 # ---------------------------------------------------------------------------
 
 def _render_enum(name: str, members: list[str]) -> str:
-    """Render an MDF enum as an enum.Enum subclass (sorted members)."""
+    """Render an MDF enum as an enum.Enum subclass (sorted members).
+
+    Also emits module-level aliases (e.g. ``Up = Direction.Up``) so that
+    action bodies can reference enum members as bare identifiers.  Python
+    keywords (``None``, ``True``, ``False``) are skipped since they are
+    reserved and cannot be used as assignment targets.
+    """
+    _PYTHON_KEYWORDS = {"None", "True", "False"}
     lines = [f"class {name}(enum.Enum):"]
     for m in sorted(members):
+        if m in _PYTHON_KEYWORDS:
+            # Python keywords cannot be used as enum member names; skip them.
+            continue
         lines.append(f"    {m} = {m!r}")
+    # Module-level aliases for bare-name access in action bodies
+    for m in sorted(members):
+        if m not in _PYTHON_KEYWORDS:
+            lines.append(f"{m} = {name}.{m}")
     return "\n".join(lines)
 
 
