@@ -206,11 +206,11 @@ Plans:
 **Goal:** Fix compiler action-assignment direction and compile missing action bodies so that five elevator scenarios (door cycle, direct travel, button-triggered travel, full end-to-end, passenger round-trip) execute correctly in the simulation engine with the expected micro-step output
 **Requirements**: MCP-08 (partial — scenario validation)
 **Depends on:** Phase 05.3
-**Plans:** 2 plans
+**Plans:** 3/3 plans complete
 
 Plans:
-- [ ] 05.3.1-01-PLAN.md — Core compiler fixes: action-assignment direction, enum scoping, None keyword, guard sibling table format, silent exception handling
-- [ ] 05.3.1-02-PLAN.md — Transformer fixes for missing action bodies + 5 scenario YAML files + integration test suite
+- [x] 05.3.1-01-PLAN.md — Core compiler fixes: action-assignment direction, enum scoping, None keyword, guard sibling table format, silent exception handling
+- [x] 05.3.1-02-PLAN.md — Transformer fixes for missing action bodies + 5 scenario YAML files + integration test suite
 
 ### Phase 5.4: GDB Command Language + CLI
 **Goal**: Define and implement a GDB-style command set for interacting with running simulations — inspect instances, show queues, step through events, control the clock.
@@ -289,7 +289,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5.1. Runtime Framework | 5/5 | Complete | 2026-04-07 |
 | 5.2. Model Compiler | 3/3 | Complete | 2026-04-09 |
 | 5.3. Simulation Runner + Verification | 4/4 | Complete | 2026-04-10 |
-| 05.3.1. Elevator Scenario Simulation Validation | 0/2 | In planning | - |
+| 05.3.1. Elevator Scenario Simulation Validation | 3/3 | Complete   | 2026-04-13 |
 | 5.4. GDB Command Language + CLI | 0/TBD | Not started | - |
 | 5.5. Breakpoint Injection | 0/TBD | Not started | - |
 | 6. CLI Test Harness | 0/TBD | Not started | - |
