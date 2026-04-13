@@ -107,6 +107,19 @@ examples/       Reference models. elevator/ is a multi-domain elevator control
 
 ---
 
+## Design Documents
+
+Detailed design notes for each subsystem:
+
+- [`docs/design/compiler-pipeline.md`](design/compiler-pipeline.md) — four-stage compile pipeline, transformer rewrites, bundle format, determinism policy
+- [`docs/design/simulation-runner.md`](design/simulation-runner.md) — load-to-execution flow: bundle loading, preflight, SimulationContext construction, scenario setup, trigger evaluation
+- [`docs/design/engine-scheduler.md`](design/engine-scheduler.md) — three-queue architecture, run-to-completion semantics, polymorphic dispatch, clock and delay queue interaction
+- [`docs/design/simulation-engine-design.md`](design/simulation-engine-design.md) — formal execution domain rules (D-01 through D-37)
+- [`docs/design/SYNTAX.md`](design/SYNTAX.md) — MDF action language syntax reference
+- [`docs/design/COMPILATION.md`](design/COMPILATION.md) — how schema elements compile into pycca-accessible names
+
+---
+
 ## Architectural Constraints
 
 - **D-37 / SC-11:** `engine/` has zero imports from `schema/`, `tools/`, or `pycca/`. It consumes only `DomainManifest` TypedDicts produced by `compiler/`.
