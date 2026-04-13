@@ -54,10 +54,10 @@ DOMAIN_MANIFEST: DomainManifest = {
             "initial_state": "Idle",
             "final_states": [],
             "transition_table": {
-                ("Idle", "TurnOn"): [{"next_state": "Green", "action_fn": _noop_action, "guard_fn": None}],
-                ("Green", "Timer"): [{"next_state": "Yellow", "action_fn": _noop_action, "guard_fn": None}],
-                ("Yellow", "Timer"): [{"next_state": "Red", "action_fn": _noop_action, "guard_fn": None}],
-                ("Red", "Timer"): [{"next_state": "Green", "action_fn": _noop_action, "guard_fn": None}],
+                ("Idle", "TurnOn"): {"next_state": "Green", "action_fn": _noop_action, "guard_fn": None},
+                ("Green", "Timer"): {"next_state": "Yellow", "action_fn": _noop_action, "guard_fn": None},
+                ("Yellow", "Timer"): {"next_state": "Red", "action_fn": _noop_action, "guard_fn": None},
+                ("Red", "Timer"): {"next_state": "Green", "action_fn": _noop_action, "guard_fn": None},
             },
             "supertype": None,
             "subtypes": [],
@@ -70,8 +70,8 @@ DOMAIN_MANIFEST: DomainManifest = {
             "initial_state": "Off",
             "final_states": ["Shutdown"],
             "transition_table": {
-                ("Off", "Start"): [{"next_state": "Running", "action_fn": _noop_action, "guard_fn": None}],
-                ("Running", "Stop"): [{"next_state": "Shutdown", "action_fn": _noop_action, "guard_fn": None}],
+                ("Off", "Start"): {"next_state": "Running", "action_fn": _noop_action, "guard_fn": None},
+                ("Running", "Stop"): {"next_state": "Shutdown", "action_fn": _noop_action, "guard_fn": None},
             },
             "supertype": None,
             "subtypes": [],
@@ -546,8 +546,8 @@ def test_run_to_completion():
         "TrafficLight": {
             **DOMAIN_MANIFEST["class_defs"]["TrafficLight"],
             "transition_table": {
-                ("Idle", "TurnOn"): [{"next_state": "Green", "action_fn": gen_action, "guard_fn": None}],
-                ("Green", "Timer"): [{"next_state": "Yellow", "action_fn": _noop_action, "guard_fn": None}],
+                ("Idle", "TurnOn"): {"next_state": "Green", "action_fn": gen_action, "guard_fn": None},
+                ("Green", "Timer"): {"next_state": "Yellow", "action_fn": _noop_action, "guard_fn": None},
             },
         }
     }
@@ -594,7 +594,7 @@ def test_polymorphic_dispatch():
             "attributes": {"aid": "int"},
             "initial_state": "Quiet", "final_states": [],
             "transition_table": {
-                ("Quiet", "Poke"): [{"next_state": "Barking", "action_fn": _noop_action, "guard_fn": None}],
+                ("Quiet", "Poke"): {"next_state": "Barking", "action_fn": _noop_action, "guard_fn": None},
             },
             "supertype": "Animal", "subtypes": [],
         },
@@ -638,7 +638,7 @@ def test_event_ignored_silent():
         "TrafficLight": {
             **DOMAIN_MANIFEST["class_defs"]["TrafficLight"],
             "transition_table": {
-                ("Idle", "Ping"): [{"next_state": None, "action_fn": None, "guard_fn": None}],
+                ("Idle", "Ping"): {"next_state": None, "action_fn": None, "guard_fn": None},
             },
         }
     }
@@ -735,7 +735,7 @@ def test_guard_false_skips_transition():
         "TrafficLight": {
             **DOMAIN_MANIFEST["class_defs"]["TrafficLight"],
             "transition_table": {
-                ("Idle", "TurnOn"): [{"next_state": "Green", "action_fn": _noop_action, "guard_fn": guard_false}],
+                ("Idle", "TurnOn"): {"next_state": "Green", "action_fn": _noop_action, "guard_fn": guard_false},
             },
         }
     }
@@ -801,8 +801,16 @@ def _all_microstep_manifest():
                 "initial_state": "Idle",
                 "final_states": [],
                 "transition_table": {
-                    ("Idle", "TurnOn"): [{"next_state": "Green", "action_fn": tl_turnon_action, "guard_fn": guard_true}],
-                    ("Green", "Timer"): [{"next_state": "Yellow", "action_fn": _noop_action, "guard_fn": None}],
+                    ("Idle", "TurnOn"): {
+                        "next_state": "Green",
+                        "action_fn": tl_turnon_action,
+                        "guard_fn": guard_true,
+                    },
+                    ("Green", "Timer"): {
+                        "next_state": "Yellow",
+                        "action_fn": _noop_action,
+                        "guard_fn": None,
+                    },
                 },
                 "supertype": None,
                 "subtypes": [],
@@ -815,7 +823,11 @@ def _all_microstep_manifest():
                 "initial_state": "Off",
                 "final_states": ["Shutdown"],
                 "transition_table": {
-                    ("Off", "Stop"): [{"next_state": "Shutdown", "action_fn": _noop_action, "guard_fn": None}],
+                    ("Off", "Stop"): {
+                        "next_state": "Shutdown",
+                        "action_fn": _noop_action,
+                        "guard_fn": None,
+                    },
                 },
                 "supertype": None,
                 "subtypes": [],
@@ -1002,8 +1014,8 @@ def test_determinism_identical_streams():
             "Controller": {
                 **DOMAIN_MANIFEST["class_defs"]["Controller"],
                 "transition_table": {
-                    ("Off", "Start"): [{"next_state": "Running", "action_fn": _noop_action, "guard_fn": None}],
-                    ("Running", "Stop"): [{"next_state": "Shutdown", "action_fn": _noop_action, "guard_fn": None}],
+                    ("Off", "Start"): {"next_state": "Running", "action_fn": _noop_action, "guard_fn": None},
+                    ("Running", "Stop"): {"next_state": "Shutdown", "action_fn": _noop_action, "guard_fn": None},
                 },
             },
         },
@@ -1027,8 +1039,8 @@ def _controller_with_start_manifest():
             "Controller": {
                 **DOMAIN_MANIFEST["class_defs"]["Controller"],
                 "transition_table": {
-                    ("Off", "Start"): [{"next_state": "Running", "action_fn": _noop_action, "guard_fn": None}],
-                    ("Running", "Stop"): [{"next_state": "Shutdown", "action_fn": _noop_action, "guard_fn": None}],
+                    ("Off", "Start"): {"next_state": "Running", "action_fn": _noop_action, "guard_fn": None},
+                    ("Running", "Stop"): {"next_state": "Shutdown", "action_fn": _noop_action, "guard_fn": None},
                 },
             },
         },
@@ -1122,8 +1134,8 @@ def test_integration_action_callback_wiring():
             "TrafficLight": {
                 **DOMAIN_MANIFEST["class_defs"]["TrafficLight"],
                 "transition_table": {
-                    ("Idle", "TurnOn"): [{"next_state": "Green", "action_fn": turn_on_action, "guard_fn": None}],
-                    ("Green", "Timer"): [{"next_state": "Yellow", "action_fn": _noop_action, "guard_fn": None}],
+                    ("Idle", "TurnOn"): {"next_state": "Green", "action_fn": turn_on_action, "guard_fn": None},
+                    ("Green", "Timer"): {"next_state": "Yellow", "action_fn": _noop_action, "guard_fn": None},
                 },
             },
         },
@@ -1227,7 +1239,7 @@ def test_integration_multi_class_interaction():
             "Controller": {
                 **DOMAIN_MANIFEST["class_defs"]["Controller"],
                 "transition_table": {
-                    ("Off", "Start"): [{"next_state": "Running", "action_fn": start_action, "guard_fn": None}],
+                    ("Off", "Start"): {"next_state": "Running", "action_fn": start_action, "guard_fn": None},
                 },
             },
         },

@@ -92,13 +92,10 @@ def load_bundle(bundle_path: Path) -> tuple[dict, Path]:
         module = _import_module_from_file(f"mdf_generated_{cls_name}", module_file)
         live_tt: dict = getattr(module, "TRANSITION_TABLE", {})
         manifest_tt = cls_def["transition_table"]
-        for key, live_entries in live_tt.items():
+        for key, live_entry in live_tt.items():
             if key in manifest_tt:
-                manifest_entries = manifest_tt[key]
-                for idx, live_entry in enumerate(live_entries):
-                    if idx < len(manifest_entries):
-                        manifest_entries[idx]["action_fn"] = live_entry.get("action_fn")
-                        manifest_entries[idx]["guard_fn"] = live_entry.get("guard_fn")
+                manifest_tt[key]["action_fn"] = live_entry.get("action_fn")
+                manifest_tt[key]["guard_fn"] = live_entry.get("guard_fn")
 
     return manifest, tmpdir
 

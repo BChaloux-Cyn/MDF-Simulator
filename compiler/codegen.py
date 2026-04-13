@@ -20,7 +20,6 @@ Exports:
 from __future__ import annotations
 
 import textwrap
-import warnings
 from typing import TYPE_CHECKING, Any
 
 import black
@@ -61,34 +60,16 @@ def format_source(src: str, filename: str = "<generated>") -> str:
 # ---------------------------------------------------------------------------
 
 def _render_enum(name: str, members: list[str]) -> str:
-    """Render an MDF enum as an enum.Enum subclass (sorted members).
-
-    Python keywords (None, True, False) are escaped with a trailing underscore
-    to prevent SyntaxError in generated code (Fix D).
-    """
+    """Render an MDF enum as an enum.Enum subclass (sorted members)."""
     lines = [f"class {name}(enum.Enum):"]
     for m in sorted(members):
-        safe_name = f"{m}_" if m in ("None", "True", "False") else m
-        lines.append(f"    {safe_name} = {m!r}")
+        lines.append(f"    {m} = {m!r}")
     return "\n".join(lines)
 
 
-_XTML_TO_PYTHON: dict[str, str] = {
-    "Boolean": "bool",
-    "Integer": "int",
-    "Real": "float",
-    "String": "str",
-    "UniqueID": "int",
-}
-
-
 def _render_typedef(name: str, base: str) -> str:
-    """Render an MDF typedef as a typing.NewType statement.
-
-    xUML primitive type names (Integer, Real, etc.) are mapped to Python builtins.
-    """
-    python_base = _XTML_TO_PYTHON.get(base, base)
-    return f'{name} = NewType("{name}", {python_base})'
+    """Render an MDF typedef as a typing.NewType statement."""
+    return f'{name} = NewType("{name}", {base})'
 
 
 # ---------------------------------------------------------------------------
@@ -143,38 +124,26 @@ def _render_guard_fn(fn_name: str, expr_src: str, source_file: str, source_line:
 def _render_transition_table(
     transition_table: dict,
     action_fn_map: dict[tuple[str, str], str],
-    guard_fn_map: dict,
+    guard_fn_map: dict[tuple[str, str], str],
 ) -> str:
-    """Render TRANSITION_TABLE as a Python dict literal (sorted keys, D-07).
-
-    Each key maps to a list of entry dicts to support guarded sibling branches (Fix F).
-    """
+    """Render TRANSITION_TABLE as a Python dict literal (sorted keys, D-07)."""
     lines = ["TRANSITION_TABLE: dict = {"]
     for key in sorted(transition_table.keys(), key=lambda k: (k[0], k[1])):
         state, event = key
-        entries = transition_table[key]
-        entry_strs = []
-        for idx, entry in enumerate(entries):
-            next_state = entry["next_state"]
-            next_state_repr = repr(next_state)
-            action_fn_name = action_fn_map.get(key)
-            # For guard siblings: use index-qualified key for second+ entries
-            if idx == 0:
-                guard_fn_name = guard_fn_map.get(key)
-            else:
-                guard_fn_name = guard_fn_map.get((state, event, idx))
-            action_ref = action_fn_name if action_fn_name else "None"
-            guard_ref = guard_fn_name if guard_fn_name else "None"
-            entry_strs.append(
-                f'{{"next_state": {next_state_repr}, "action_fn": {action_ref}, "guard_fn": {guard_ref}}}'
-            )
-        if len(entry_strs) == 1:
-            lines.append(f'    ({state!r}, {event!r}): [{entry_strs[0]}],')
-        else:
-            lines.append(f'    ({state!r}, {event!r}): [')
-            for es in entry_strs:
-                lines.append(f'        {es},')
-            lines.append('    ],')
+        entry = transition_table[key]
+        next_state = entry["next_state"]
+        next_state_repr = repr(next_state)
+
+        action_fn_name = action_fn_map.get(key)
+        guard_fn_name = guard_fn_map.get(key)
+
+        action_ref = action_fn_name if action_fn_name else "None"
+        guard_ref = guard_fn_name if guard_fn_name else "None"
+
+        lines.append(
+            f'    ({state!r}, {event!r}): {{"next_state": {next_state_repr}, '
+            f'"action_fn": {action_ref}, "guard_fn": {guard_ref}}},'
+        )
     lines.append("}")
     return "\n".join(lines)
 
@@ -208,13 +177,19 @@ def generate_class_module(
     attributes: dict = class_manifest.get("attributes", {})
 
     # ------------------------------------------------------------------
-    # Emit all domain types in every class module (Fix C: enum members may be
-    # referenced in action bodies, not just attribute declarations)
+    # Determine which enum / typedef types this class uses
     # ------------------------------------------------------------------
+    used_types: set[str] = set()
+    for attr_info in attributes.values():
+        if isinstance(attr_info, dict):
+            used_types.add(attr_info.get("type", ""))
+
     enum_blocks: list[str] = []
     typedef_lines: list[str] = []
-    for type_name in sorted(type_registry.keys()):
-        info = type_registry[type_name]
+    for type_name in sorted(used_types):
+        info = type_registry.get(type_name)
+        if not info:
+            continue
         if info.get("kind") == "enum":
             enum_blocks.append(_render_enum(type_name, info.get("members", [])))
         elif info.get("kind") == "typedef":
@@ -227,18 +202,18 @@ def generate_class_module(
     # action_fn_map: (state, event) → function name for transition table
     action_fn_map: dict[tuple[str, str], str] = {}
 
+    # Build a name→fn_name map for quick lookup when wiring the transition table
+    state_to_fn: dict[str, str] = {}
+
     for state_name in sorted(entry_actions.keys()):
         action_src = entry_actions[state_name]
         fn_name = f"action_{state_name}_entry"
+        state_to_fn[state_name] = fn_name
 
         if action_src and action_src.strip():
             try:
                 transformed = transform_action(action_src, source_file, 0)
-            except Exception as exc:
-                warnings.warn(
-                    f"Failed to compile action for state {state_name}: {exc}",
-                    stacklevel=2,
-                )
+            except Exception:
                 transformed = ""
         else:
             transformed = ""
@@ -246,37 +221,32 @@ def generate_class_module(
         block = _render_action_fn(fn_name, transformed, source_file, 0)
         action_fn_bodies.append(block)
 
-        # Map all transitions whose destination is this state to this action fn
-        # (xUML: entry action fires on entry, i.e., on incoming transitions)
-        for (s, e), entries in transition_table.items():
-            for entry in entries:
-                if entry["next_state"] == state_name:
-                    action_fn_map[(s, e)] = fn_name
+    # Map each transition to the DESTINATION state's entry action function.
+    # xUML semantics: the entry action of the next_state fires on the transition.
+    for (s, e), entry in transition_table.items():
+        next_state = entry.get("next_state")
+        if next_state and next_state in state_to_fn:
+            action_fn_map[(s, e)] = state_to_fn[next_state]
 
     # ------------------------------------------------------------------
     # Build guard functions from transitions that have guard expressions
     # ------------------------------------------------------------------
     guard_fn_bodies: list[str] = []
-    guard_fn_map: dict = {}
+    guard_fn_map: dict[tuple[str, str], str] = {}
 
     for key in sorted(transition_table.keys(), key=lambda k: (k[0], k[1])):
         state, event = key
-        entries = transition_table[key]
-        for idx, entry in enumerate(entries):
-            guard_src = entry.get("guard_fn")  # raw guard expression string at this stage
-            if guard_src and isinstance(guard_src, str):
-                if idx == 0:
-                    fn_name = f"guard_{state}_{event}"
-                    guard_fn_map[key] = fn_name
-                else:
-                    fn_name = f"guard_{state}_{event}_{idx}"
-                    guard_fn_map[(state, event, idx)] = fn_name
-                try:
-                    transformed = transform_guard(guard_src, source_file, 0)
-                except Exception:
-                    transformed = ""
-                block = _render_guard_fn(fn_name, transformed, source_file, 0)
-                guard_fn_bodies.append(block)
+        entry = transition_table[key]
+        guard_src = entry.get("guard_fn")  # raw guard expression string at this stage
+        if guard_src and isinstance(guard_src, str):
+            fn_name = f"guard_{state}_{event}"
+            try:
+                transformed = transform_guard(guard_src, source_file, 0)
+            except Exception:
+                transformed = ""
+            block = _render_guard_fn(fn_name, transformed, source_file, 0)
+            guard_fn_bodies.append(block)
+            guard_fn_map[key] = fn_name
 
     # ------------------------------------------------------------------
     # Assemble the source file

@@ -17,14 +17,13 @@ states:
       // Tell the paired ShaftDoor to open — it will report back when done
       Elevator elev = self->R7;
       Set<ShaftFloor> shaft_floors = select many related by elev->R1->R2;
-      Set<ShaftFloor> current_sf = shaft_floors.filter(
-          [elev.current_floor] |s: ShaftFloor| -> Boolean {
-              Floor f = s->R3;
-              return f.floor_num == elev.current_floor;
-          });
-      ShaftFloor sf = current_sf.peek_front();
-      ShaftDoor sd = sf->R8;
-      generate Open_cmd to sd;
+      for (ShaftFloor sf : shaft_floors) {
+          Floor f = sf->R3;
+          if (f.floor_num == elev.current_floor) {
+              ShaftDoor sd = sf->R8;
+              generate Open_cmd to sd;
+          }
+      }
   - name: Open
     entry_action: |
       generate Close_cmd to self delay duration_s(5);
@@ -33,14 +32,13 @@ states:
       // Tell the paired ShaftDoor to close — it will report back when done
       Elevator elev = self->R7;
       Set<ShaftFloor> shaft_floors = select many related by elev->R1->R2;
-      Set<ShaftFloor> current_sf = shaft_floors.filter(
-          [elev.current_floor] |s: ShaftFloor| -> Boolean {
-              Floor f = s->R3;
-              return f.floor_num == elev.current_floor;
-          });
-      ShaftFloor sf = current_sf.peek_front();
-      ShaftDoor sd = sf->R8;
-      generate Close_cmd to sd;
+      for (ShaftFloor sf : shaft_floors) {
+          Floor f = sf->R3;
+          if (f.floor_num == elev.current_floor) {
+              ShaftDoor sd = sf->R8;
+              generate Close_cmd to sd;
+          }
+      }
 transitions:
   - from: Closed
     to: Opening

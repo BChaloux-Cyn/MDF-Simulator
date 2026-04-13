@@ -38,70 +38,39 @@ states:
       }
   - name: Arriving
     entry_action: |
-      Direction prev_direction = self.direction;
       self.direction = None;
 
-      // Find lit DestFloorButtons (excluding current floor)
-      Set<DestFloorButton> lit_btns = self._get_lit_buttons();
+      // Default: no further work — stay at current floor (triggers Idle path)
+      self.next_stop_floor = self.current_floor;
 
-      if (lit_btns.is_empty()) {
-          // No destination buttons — check for lit FloorCallButtons
-          Set<ShaftFloor> shaft_floors = select many related by self->R1->R2;
-          Set<FloorCallButton> lit_calls = shaft_floors.flat_map(
-              [] |sf: ShaftFloor| -> Set<FloorCallButton> {
-                  Floor f = sf->R3;
-                  return select many related by f->R6
-                      where [] |btn: FloorCallButton| -> Boolean {
-                          return btn.curr_state == Lit;
-                      };
-              });
-
-          if (lit_calls.is_empty()) {
-              // No work at all — go Idle when door closes
-              self.next_stop_floor = self.current_floor;
-              generate Arrived to self;
-              return;
+      // Check for lit DestFloorButtons at other floors
+      for (DestFloorButton btn : self->R4) {
+          if (btn.curr_state == Lit) {
+              Floor dest_floor = btn->R5;
+              self.next_stop_floor = dest_floor.floor_num;
           }
-
-          // Pick the earliest pressed FloorCallButton
-          List<FloorCallButton> sorted_calls = lit_calls.sort(
-              [] |a: FloorCallButton, b: FloorCallButton| -> Boolean {
-                  return a.pressed_at < b.pressed_at;
-              });
-          FloorCallButton earliest = sorted_calls.peek_front();
-          Floor target_floor = earliest->R6;
-          self.next_stop_floor = target_floor.floor_num;
-          generate Arrived to self;
-          return;
       }
 
-      self.next_stop_floor = self._pick_next_stop(lit_btns, prev_direction);
       generate Arrived to self;
   - name: Exchanging
     entry_action: |
-      self.next_stop_floor = rcvd_evt.floor_num;
-      // Find the specific DestFloorButton for the current floor and notify it
+      // Notify any lit DestFloorButtons at the current floor
       Set<DestFloorButton> dest_buttons = select many related by self->R4
-          where [self.current_floor] |btn: DestFloorButton| -> Boolean {
-              Floor f = btn->R5;
-              return btn.curr_state == Lit and f.floor_num == self.current_floor;
+          where [] |btn: DestFloorButton| -> Boolean {
+              return btn.curr_state == Lit;
           };
       generate Floor_served to dest_buttons;
 
-      // Notify FloorCallButtons at current floor — transitions Lit->Idle
+      // Notify lit FloorCallButtons at the current floor
       Set<ShaftFloor> shaft_floors = select many related by self->R1->R2;
-      Set<ShaftFloor> current_sf = shaft_floors.filter(
-          [self.current_floor] |s: ShaftFloor| -> Boolean {
-              Floor f = s->R3;
-              return f.floor_num == self.current_floor;
-          });
-      ShaftFloor sf = current_sf.peek_front();
-      Floor floor = sf->R3;
-      Set<FloorCallButton> call_buttons = select many related by floor->R6
-          where [] |btn: FloorCallButton| -> Boolean {
-              return btn.curr_state == Lit;
-          };
-      generate Call_served to call_buttons;
+      for (ShaftFloor sf : shaft_floors) {
+          Floor floor = sf->R3;
+          Set<FloorCallButton> call_buttons = select many related by floor->R6
+              where [] |btn: FloorCallButton| -> Boolean {
+                  return btn.curr_state == Lit;
+              };
+          generate Call_served to call_buttons;
+      }
 
       // Open the car door — it will open the paired shaft door
       CarDoor car_door = self->R7;

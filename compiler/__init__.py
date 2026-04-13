@@ -80,23 +80,19 @@ def compile_model(model_root: Path, output_dir: Path) -> Path:
     # ------------------------------------------------------------------
     # 3. Codegen: one .py per class, sorted
     # ------------------------------------------------------------------
-    # Build type_registry from types_raw if present.
-    # TypesFile.types is a list[TypeDef] (EnumType | StructType | ScalarType).
-    # We emit enum and scalar (typedef) entries; struct types are skipped for now.
+    # Build type_registry from types_raw if present
     type_registry: dict = {}
     if loaded.types_raw is not None:
-        from schema.yaml_schema import EnumType, ScalarType
-        for type_def in loaded.types_raw.types:
-            if isinstance(type_def, EnumType):
-                type_registry[type_def.name] = {
-                    "kind": "enum",
-                    "members": list(type_def.values),
-                }
-            elif isinstance(type_def, ScalarType):
-                type_registry[type_def.name] = {
-                    "kind": "typedef",
-                    "base": type_def.base,
-                }
+        for enum_def in getattr(loaded.types_raw, "enums", []):
+            type_registry[enum_def.name] = {
+                "kind": "enum",
+                "members": list(enum_def.values),
+            }
+        for typedef in getattr(loaded.types_raw, "typedefs", []):
+            type_registry[typedef.name] = {
+                "kind": "typedef",
+                "base": typedef.base_type,
+            }
 
     generated_files: dict[str, str] = {}
     acc = ErrorAccumulator()

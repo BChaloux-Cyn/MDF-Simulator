@@ -227,8 +227,8 @@ def _minimal_class_manifest(name: str = "Light") -> dict:
         "final_states": [],
         "senescent_states": ["Off"],
         "transition_table": {
-            ("Off", "Toggle"): [{"next_state": "On", "action_fn": None, "guard_fn": None}],
-            ("On", "Toggle"): [{"next_state": "Off", "action_fn": None, "guard_fn": None}],
+            ("Off", "Toggle"): {"next_state": "On", "action_fn": None, "guard_fn": None},
+            ("On", "Toggle"): {"next_state": "Off", "action_fn": None, "guard_fn": None},
         },
         "supertype": None,
         "subtypes": [],

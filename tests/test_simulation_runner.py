@@ -155,13 +155,12 @@ def test_bundle_loader_rebinds_transition_table_callables(elevator_bundle_path, 
     try:
         found_callable = False
         for cls_name, cls_def in manifest["class_defs"].items():
-            for key, entries in cls_def.get("transition_table", {}).items():
-                for entry in entries:
-                    if entry.get("action_fn") is not None:
-                        assert callable(entry["action_fn"]), (
-                            f"{cls_name} {key}: action_fn is set but not callable"
-                        )
-                        found_callable = True
+            for key, entry in cls_def.get("transition_table", {}).items():
+                if entry.get("action_fn") is not None:
+                    assert callable(entry["action_fn"]), (
+                        f"{cls_name} {key}: action_fn is set but not callable"
+                    )
+                    found_callable = True
         assert found_callable, (
             "No callable action_fn found in any transition entry — rebinding failed"
         )
@@ -481,7 +480,11 @@ def test_run_scenario_yields_micro_steps_and_resolves_aliases():
     manifest = _make_minimal_manifest("Elevator")
     # Add a transition so the scheduler can process the event
     manifest["class_defs"]["Elevator"]["transition_table"] = {
-        ("Idle", "Floor_assigned"): [{"next_state": "Departing", "action_fn": None, "guard_fn": None}]
+        ("Idle", "Floor_assigned"): {
+            "to_state": "Departing",
+            "action_fn": None,
+            "guard_fn": None,
+        }
     }
 
     scenario = ScenarioDef(

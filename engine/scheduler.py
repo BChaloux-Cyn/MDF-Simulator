@@ -386,9 +386,9 @@ class ThreeQueueScheduler:
         )
 
         ttable = cdef.get("transition_table", {})
-        entries = ttable.get((curr_state, event.event_type))
+        entry = ttable.get((curr_state, event.event_type))
 
-        if entries is None:
+        if entry is None:
             yield ErrorMicroStep(
                 error_kind="cant_happen",
                 message=(
@@ -403,25 +403,21 @@ class ThreeQueueScheduler:
             )
             return
 
-        # event-ignored: all entries have next_state=None and no fns
-        if all(
-            e.get("next_state") is None and e.get("action_fn") is None and e.get("guard_fn") is None
-            for e in entries
-        ):
+        next_state = entry.get("next_state")
+        action_fn = entry.get("action_fn")
+        guard_fn = entry.get("guard_fn")
+
+        # event-ignored: present in table with next_state=None and no fns
+        if next_state is None and action_fn is None and guard_fn is None:
             return
 
-        # Evaluate guard chain: pick first entry whose guard passes (or unguarded fallback)
-        entry = None
-        for candidate in entries:
-            guard_fn = candidate.get("guard_fn")
-            if guard_fn is None:
-                # Unguarded entry — use as default if no guarded entry matched yet
-                if entry is None:
-                    entry = candidate
-                continue
+        # Guard evaluation
+        if guard_fn is not None:
             try:
-                instance = self._registry.lookup(concrete_class, concrete_id)
-                result = bool(guard_fn(instance, dict(event.args)))
+                result = bool(guard_fn(
+                    self._registry.lookup(concrete_class, concrete_id),
+                    dict(event.args),
+                ))
             except Exception as exc:
                 yield ErrorMicroStep(
                     error_kind="guard_error",
@@ -434,16 +430,8 @@ class ThreeQueueScheduler:
                 result=result,
                 variable_values={},
             )
-            if result:
-                entry = candidate
-                break
-
-        if entry is None:
-            # All guards failed and no unguarded fallback
-            return
-
-        next_state = entry.get("next_state")
-        action_fn = entry.get("action_fn")
+            if not result:
+                return
 
         # Run-to-completion: mark in-flight before invoking action
         self._in_flight = event
@@ -512,8 +500,7 @@ class ThreeQueueScheduler:
 
         # Optional entry action: look up (None, "__creation__") in transition table
         ttable = cdef.get("transition_table", {})
-        creation_entries = ttable.get((None, "__creation__"))
-        entry = creation_entries[0] if creation_entries else None
+        entry = ttable.get((None, "__creation__"))
         if entry is not None and entry.get("action_fn") is not None:
             self._in_flight = event
             try:

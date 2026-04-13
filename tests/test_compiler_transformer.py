@@ -584,14 +584,13 @@ class TestActionTransformerTraversal:
 
 
 class TestActionTransformerSelectExpr:
-    def test_select_expr_as_typed_var_decl_raises(self):
-        """select_expr inside typed_var_decl currently raises NotImplementedError.
+    def test_select_expr_as_typed_var_decl_now_works(self):
+        """select_expr inside typed_var_decl now compiles correctly.
 
-        The grammar places select_expr inside atom, but the ActionTransformer has
-        no 'atom' rule — __default__ raises NotImplementedError. This is a known
-        gap: select_expr as a typed-var RHS is not yet supported by the transformer.
+        The 'atom' pass-through rule (05.3.1-02) closed the known gap:
+        select_expr and lambda_expr used as atoms no longer raise NotImplementedError.
         """
-        import lark
         from compiler.transformer import transform_action
-        with pytest.raises((NotImplementedError, lark.LarkError)):
-            transform_action("Car c = select any from instances of Car;", "test.yaml", 0)
+        result = transform_action("Car c = select any from instances of Car;", "test.yaml", 0)
+        assert 'ctx.select_any("Car")' in result
+        assert "c = " in result

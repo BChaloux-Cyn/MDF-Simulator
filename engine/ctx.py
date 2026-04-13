@@ -391,14 +391,48 @@ class SimulationContext:
                 result.append(inst)
         return result
 
-    def select_any_related(self, source: dict, rel_chain: list[str]) -> dict | None:
-        """Return first instance reachable via rel_chain from source, or None."""
-        result = self.traverse(source, rel_chain)
-        return result[0] if result else None
+    def select_any_related(
+        self,
+        source: dict,
+        rel_chain: list[str],
+        where: Callable[[dict], bool] | None = None,
+    ) -> dict | None:
+        """Return first instance reachable via rel_chain from source, or None.
 
-    def select_many_related(self, source: dict, rel_chain: list[str]) -> list[dict]:
-        """Return all instances reachable via rel_chain from source."""
-        return self.traverse(source, rel_chain)
+        Optional where predicate filters results before returning the first match.
+        """
+        result = self.traverse(source, rel_chain)
+        if where is None:
+            return result[0] if result else None
+        for inst in result:
+            try:
+                if where(inst):
+                    return inst
+            except Exception:
+                pass
+        return None
+
+    def select_many_related(
+        self,
+        source: dict,
+        rel_chain: list[str],
+        where: Callable[[dict], bool] | None = None,
+    ) -> list[dict]:
+        """Return all instances reachable via rel_chain from source.
+
+        Optional where predicate filters results.
+        """
+        result = self.traverse(source, rel_chain)
+        if where is None:
+            return result
+        out = []
+        for inst in result:
+            try:
+                if where(inst):
+                    out.append(inst)
+            except Exception:
+                pass
+        return out
 
     # ------------------------------------------------------------------
     # Bridge / clock

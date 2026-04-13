@@ -254,6 +254,16 @@ class ActionTransformer(Transformer):
         obj = _tok(children[0])
         method = _tok(children[1])
         args = ", ".join(str(c) for c in children[2:])
+        # Optional<T> methods — map to Python None-check idioms
+        if method == "has_value":
+            return f"({obj} is not None)"
+        if method == "value":
+            return obj
+        # Set/List methods — map to Python list idioms
+        if method == "is_empty":
+            return f"(len({obj}) == 0 if {obj} is not None else True)"
+        if method == "peek_front":
+            return f"({obj}[0] if {obj} else None)"
         if obj == "self":
             return f'self_dict.{method}({args})'
         return f"{obj}.{method}({args})"
@@ -263,6 +273,21 @@ class ActionTransformer(Transformer):
         chain = children[0]
         method = _tok(children[1])
         args = ", ".join(str(c) for c in children[2:])
+        # Set/List methods — map to Python list idioms (T-05.3.1-05: bounded iteration)
+        if method == "is_empty":
+            return f"(len({chain}) == 0 if {chain} is not None else True)"
+        if method == "peek_front":
+            return f"({chain}[0] if {chain} else None)"
+        if method == "flat_map":
+            # flat_map(fn) → [x for sub in chain for x in (fn(sub) or [])]
+            return f"[_x for _sub in ({chain} or []) for _x in (({args})(_sub) or [])]"
+        if method == "filter":
+            # filter(predicate) → [x for x in chain if predicate(x)]
+            return f"[_x for _x in ({chain} or []) if ({args})(_x)]"
+        if method == "sort":
+            # sort(comparator) — comparator is (a, b)->bool; translate to sort key
+            # We treat the lambda as a key extractor (lhs of comparison)
+            return f"sorted({chain} or [], key=lambda _x: ({args})(_x, _x))"
         return f"{chain}.{method}({args})"
 
     def chained_attr_access(self, children: list[Any]) -> str:
@@ -287,8 +312,19 @@ class ActionTransformer(Transformer):
         return f"ctx.traverse({source}, [{rels_str}])"
 
     def direct_traversal(self, children: list[Any]) -> str:
-        # Already transformed by traversal_chain
-        return children[0]
+        # traversal_chain used as an atom expression (typed_var_decl RHS, etc.)
+        # Returns a single instance via select_any_related (returns dict | None).
+        # for_each_stmt detects this and converts back to traverse() for iteration.
+        chain = str(children[0])
+        if chain.startswith("ctx.traverse("):
+            inner = chain[len("ctx.traverse("):-1]
+            return f"ctx.select_any_related({inner})"
+        return chain
+
+    def atom(self, children: list[Any]) -> str:
+        # Pass-through for atom alternatives that have no alias (select_expr, lambda_expr).
+        # After Transformer processes children, the result is already a string.
+        return str(children[0])
 
     # ------------------------------------------------------------------
     # Generate statement
@@ -350,6 +386,28 @@ class ActionTransformer(Transformer):
 
         if delay_expr is not None:
             return f'ctx.generate("{event_name}", target={target_str}, args={params_dict}, delay_ms={delay_expr})'
+
+        # Detect set-target: if target_str ends with ["__instance_key__"] it's a plain
+        # instance dict lookup (single target). Otherwise it's an access_chain result
+        # (e.g. ctx.select_any_related) — also single. Only a plain identifier that was
+        # populated via select_many/flat_map is a list. We detect this by checking whether
+        # the raw pre-normalisation target was a simple identifier (not self/self_dict and
+        # not an access chain). In that case, emit a for-loop that handles both dict and list.
+        raw_target = rest[i - 1] if rest else "self"
+        is_plain_var = (
+            raw_target != "self"
+            and raw_target != "self_dict"
+            and raw_target.isidentifier()
+        )
+        if is_plain_var:
+            # Emit a for-loop that works for both a single instance dict and a list of dicts
+            # (T-05.3.1-05: bounded set iteration, no unbounded loops)
+            loop_target = raw_target  # before _normalize_target
+            return (
+                f'for _tgt_{event_name} in '
+                f'([{loop_target}] if isinstance({loop_target}, dict) else ({loop_target} or [])):\n'
+                f'    ctx.generate("{event_name}", target=_tgt_{event_name}["__instance_key__"], args={params_dict})'
+            )
         return f'ctx.generate("{event_name}", target={target_str}, args={params_dict})'
 
     def param_list(self, children: list[Any]) -> str:
@@ -474,26 +532,35 @@ class ActionTransformer(Transformer):
         cardinality = _tok(children[0])
         method = "select_any" if cardinality == "any" else "select_many"
 
-        # Detect form: second child is either NAME (class) or traversal str
-        second = children[1]
-        if isinstance(second, Token):
-            cls = _tok(second)
+        # After Transformer processes children, all tokens are strings.
+        # Distinguish class-name form from traversal form:
+        # - Class name: a simple identifier (no ctx. prefix, no "->", isidentifier())
+        # - Traversal:  starts with "ctx.traverse(" or "ctx.select_any_related("
+        second = str(children[1])
+        is_class_name = (
+            second.isidentifier()
+            and not second.startswith("ctx.")
+        )
+        if is_class_name:
+            cls = second
             where = str(children[2]) if len(children) > 2 else None
             if where:
                 return f'ctx.{method}("{cls}", where={where})'
             return f'ctx.{method}("{cls}")'
         else:
-            # traversal_chain already transformed
-            chain = str(second)
+            # traversal_chain already transformed (ctx.traverse or ctx.select_any_related)
+            chain = second
             where = str(children[2]) if len(children) > 2 else None
+            # Normalise to the inner args for _related call
             if chain.startswith("ctx.traverse("):
                 inner = chain[len("ctx.traverse("):-1]
-                if where:
-                    return f'ctx.{method}_related({inner}, where={where})'
-                return f'ctx.{method}_related({inner})'
+            elif chain.startswith("ctx.select_any_related("):
+                inner = chain[len("ctx.select_any_related("):-1]
+            else:
+                inner = chain
             if where:
-                return f'ctx.{method}_related({chain}, where={where})'
-            return f'ctx.{method}_related({chain})'
+                return f'ctx.{method}_related({inner}, where={where})'
+            return f'ctx.{method}_related({inner})'
 
     # ------------------------------------------------------------------
     # Relate / Unrelate
@@ -577,6 +644,13 @@ class ActionTransformer(Transformer):
         iter_expr = str(children[2])
         body_stmts = [str(c) for c in children[3:]]
         body = _join_stmts(body_stmts) or "pass"
+
+        # direct_traversal returns select_any_related (single instance) for expression
+        # contexts. In for-each, we need the full list — convert back to traverse().
+        if iter_expr.startswith("ctx.select_any_related("):
+            inner = iter_expr[len("ctx.select_any_related("):-1]
+            iter_expr = f"ctx.traverse({inner})"
+
         return f"for {var} in {iter_expr}:\n{_indent(body)}"
 
     # ------------------------------------------------------------------
@@ -606,38 +680,64 @@ class ActionTransformer(Transformer):
     # ------------------------------------------------------------------
 
     def lambda_expr(self, children: list[Any]) -> str:
-        # "[" capture_list? "]" PIPE lambda_params PIPE "->" type_expr "{" statement+ "}"
-        # children: [capture_list_str|None, lambda_params_str, type_expr_str, *body_stmts]
-        # After transformer, identify each part:
+        # "[" capture_list? "]" PIPE lambda_params PIPE "->" LAMBDA_RETURN_TYPE "{" statement+ "}"
+        # After the transformer, named terminals appear as strings in children:
+        #   - PIPE "|" tokens are passed through __default_token__ as "|"
+        #   - LAMBDA_RETURN_TYPE appears as a plain identifier string (e.g. "Boolean")
+        #   - capture_list (if present) comes as a "[...]" string from capture_list rule
+        #   - lambda_params comes as a "p1, p2" string from lambda_params rule
+        #   - body statements are the remaining strings
+        #
+        # Algorithm: skip PIPE "|" strings, capture_list first, then params, then
+        # LAMBDA_RETURN_TYPE (single word with no spaces that doesn't look like a statement),
+        # then the rest are body statements.
+
+        # Filter out PIPE tokens
+        filtered = [c for c in children if str(c) != "|"]
+
         i = 0
         captures = None
-        if children and isinstance(children[0], str) and children[0].startswith("["):
-            captures = children[0]
-            i = 1
-        elif children and isinstance(children[0], list):
-            captures = children[0]
+
+        # Optional capture_list: starts with "["
+        if filtered and isinstance(filtered[0], str) and filtered[0].startswith("["):
+            captures = filtered[0]
             i = 1
 
-        # lambda_params returns a string "p1, p2, ..."
-        if i >= len(children):
+        # lambda_params string: "p1, p2, ..."
+        if i >= len(filtered):
             return "lambda: None  # empty lambda"
-        params_str = str(children[i])
+        params_str = str(filtered[i])
         i += 1
 
-        # type_expr
-        if i < len(children):
-            _ret_type = children[i]  # noqa: F841
-            i += 1
+        # LAMBDA_RETURN_TYPE: a single token string matching /[a-zA-Z_][a-zA-Z0-9_]*(<...>)?/
+        # It has no spaces in the base name part and isn't a statement string.
+        # Skip it (type annotations are not emitted).
+        if i < len(filtered):
+            candidate = str(filtered[i])
+            # Heuristic: LAMBDA_RETURN_TYPE is a single word (possibly with <...>) with
+            # no newlines, no assignments, no 'ctx.', no 'return ' (those are body stmts).
+            is_return_type = (
+                "\n" not in candidate
+                and not candidate.startswith("return ")
+                and not candidate.startswith("ctx.")
+                and not candidate.startswith("self")
+                and "=" not in candidate
+                and " " not in candidate.split("<")[0]
+            )
+            if is_return_type:
+                i += 1  # skip return type annotation
 
         # Body statements
-        body_stmts = [str(c) for c in children[i:]]
+        body_stmts = [str(c) for c in filtered[i:]]
         body = _join_stmts(body_stmts) or "pass"
 
-        if captures:
-            cap_str = str(captures)
-            # Generate closure-capturing lambda
-            # Captured names bind to outer scope vars
-            return f"(lambda: (lambda {params_str}: {body}))"
+        # If the entire body is a single "return <expr>" statement, extract just
+        # the expression — Python lambda bodies cannot contain return statements.
+        if body.startswith("return ") and "\n" not in body:
+            body = body[len("return "):]
+
+        # Captures are outer-scope variables; Python closures capture by reference,
+        # so a plain lambda suffices regardless of whether captures were specified.
         return f"lambda {params_str}: {body}"
 
     def capture_list(self, children: list[Any]) -> str:

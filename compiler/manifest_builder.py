@@ -106,7 +106,7 @@ def _parse_attrs(entry: CanonicalClassEntry) -> dict[str, Any]:
 
 def _build_transition_table(
     sd: CanonicalStateDiagram,
-) -> "dict[tuple[str, str], list[TransitionEntry]]":
+) -> "dict[tuple[str, str], TransitionEntry]":
     """Build transition_table from a CanonicalStateDiagram.
 
     Encoding (D-13 / scheduler ground truth):
@@ -114,13 +114,10 @@ def _build_transition_table(
       event_ignored       → cell present with next_state=None, action_fn=None, guard_fn=None
       can't_happen        → cell absent (KeyError in scheduler → ErrorMicroStep)
 
-    Multiple transitions from the same (state, event) are preserved as a list
-    to support guarded sibling branches (e.g. two Door_closed guards).
-
     action_fn is left as None — Plan 04 codegen fills it.
     guard_fn stores the raw guard expression string (or None) for codegen to compile.
     """
-    table: dict[tuple[str, str], list[TransitionEntry]] = {}
+    table: dict[tuple[str, str], TransitionEntry] = {}
 
     for trans in sd.transitions:
         key = (trans.from_state, trans.event)
@@ -129,7 +126,7 @@ def _build_transition_table(
             "action_fn": None,
             "guard_fn": trans.guard,
         }
-        table.setdefault(key, []).append(entry)
+        table[key] = entry
 
     # Sort by key for determinism (D-07)
     return dict(sorted(table.items(), key=lambda kv: (kv[0][0], kv[0][1])))
