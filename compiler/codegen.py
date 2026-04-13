@@ -73,9 +73,22 @@ def _render_enum(name: str, members: list[str]) -> str:
     return "\n".join(lines)
 
 
+_XTML_TO_PYTHON: dict[str, str] = {
+    "Boolean": "bool",
+    "Integer": "int",
+    "Real": "float",
+    "String": "str",
+    "UniqueID": "int",
+}
+
+
 def _render_typedef(name: str, base: str) -> str:
-    """Render an MDF typedef as a typing.NewType statement."""
-    return f'{name} = NewType("{name}", {base})'
+    """Render an MDF typedef as a typing.NewType statement.
+
+    xUML primitive type names (Integer, Real, etc.) are mapped to Python builtins.
+    """
+    python_base = _XTML_TO_PYTHON.get(base, base)
+    return f'{name} = NewType("{name}", {python_base})'
 
 
 # ---------------------------------------------------------------------------
