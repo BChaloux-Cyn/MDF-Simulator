@@ -502,7 +502,9 @@ class TestTransitionTableEncoding:
         manifest = build_domain_manifest(loaded, STATEMENT_PARSER)
         table = manifest["class_defs"]["Light"]["transition_table"]
         assert ("Off", "Toggle") in table
-        assert table[("Off", "Toggle")]["next_state"] == "On"
+        entries = table[("Off", "Toggle")]
+        assert isinstance(entries, list)
+        assert entries[0]["next_state"] == "On"
 
     def test_absent_cell_is_cant_happen(self):
         """Absent (state, event) key → can't_happen (scheduler raises ErrorMicroStep)."""

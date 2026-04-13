@@ -71,19 +71,22 @@ def load_bundle(bundle_path: Path) -> tuple[dict, Path]:
     manifest = json.loads(manifest_json_path.read_text(encoding="utf-8"))
 
     # Reverse "state::event" string keys → (state, event) tuples
+    # Values are list[TransitionEntry] (list format introduced in plan 05.3.1-03).
     for cls_name, cls_def in manifest.get("class_defs", {}).items():
         tt_serialized = cls_def.get("transition_table", {})
         restored: dict = {}
-        for key_str, entry in tt_serialized.items():
+        for key_str, entries in tt_serialized.items():
             if "::" in key_str:
                 state_str, event = key_str.split("::", 1)
                 state: str | None = None if state_str == "None" else state_str
-                restored[(state, event)] = entry
+                restored[(state, event)] = entries
             else:
-                restored[key_str] = entry
+                restored[key_str] = entries
         cls_def["transition_table"] = restored
 
-    # Import generated/<Class>.py modules and rebind action_fn/guard_fn callables (D-03)
+    # Import generated/<Class>.py modules and rebind action_fn/guard_fn callables (D-03).
+    # TRANSITION_TABLE in generated modules is list[TransitionEntry] per key.
+    # Match manifest entries to live entries by next_state for deterministic rebinding.
     generated_dir = tmpdir / "generated"
     for cls_name, cls_def in manifest.get("class_defs", {}).items():
         module_file = generated_dir / f"{cls_name}.py"
@@ -92,10 +95,20 @@ def load_bundle(bundle_path: Path) -> tuple[dict, Path]:
         module = _import_module_from_file(f"mdf_generated_{cls_name}", module_file)
         live_tt: dict = getattr(module, "TRANSITION_TABLE", {})
         manifest_tt = cls_def["transition_table"]
-        for key, live_entry in live_tt.items():
-            if key in manifest_tt:
-                manifest_tt[key]["action_fn"] = live_entry.get("action_fn")
-                manifest_tt[key]["guard_fn"] = live_entry.get("guard_fn")
+        for key, live_entries in live_tt.items():
+            if key not in manifest_tt:
+                continue
+            manifest_entries = manifest_tt[key]
+            # live_entries is list[TransitionEntry]; manifest_entries may be list or
+            # legacy single-dict depending on bundle age. Normalise to list.
+            if isinstance(manifest_entries, dict):
+                manifest_entries = [manifest_entries]
+                manifest_tt[key] = manifest_entries
+            # Match by index (same ordering guaranteed by sorted codegen, D-07).
+            for idx, live_entry in enumerate(live_entries):
+                if idx < len(manifest_entries):
+                    manifest_entries[idx]["action_fn"] = live_entry.get("action_fn")
+                    manifest_entries[idx]["guard_fn"] = live_entry.get("guard_fn")
 
     return manifest, tmpdir
 
