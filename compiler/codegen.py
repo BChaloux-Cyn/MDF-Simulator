@@ -237,6 +237,13 @@ def generate_class_module(
             try:
                 transformed = transform_action(action_src, source_file, 0)
             except Exception as exc:
+                # Design decision (WR-03): malformed action bodies degrade to `pass`
+                # rather than failing compilation.  A UserWarning is emitted so the
+                # developer is informed, and the bundle remains loadable.  This is an
+                # intentional "soft-fail" policy distinct from the structural error
+                # accumulator in compiler/__init__.py (which handles module-level
+                # failures).  To promote a transform failure to a hard error, raise
+                # CompilationFailed here and accumulate via the caller.
                 warnings.warn(
                     f"Failed to compile action for state {state_name}: {exc}",
                     stacklevel=2,
@@ -277,6 +284,9 @@ def generate_class_module(
                 try:
                     transformed = transform_guard(guard_src, source_file, 0)
                 except Exception as exc:
+                    # Design decision (WR-03): same soft-fail policy as action bodies above.
+                    # Malformed guard degrades to `return True` (via _render_guard_fn default)
+                    # with a UserWarning.  See action block comment for upgrade path.
                     warnings.warn(
                         f"Failed to compile guard for state {state} event {event}: {exc}",
                         stacklevel=2,
