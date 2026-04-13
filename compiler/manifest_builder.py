@@ -106,7 +106,7 @@ def _parse_attrs(entry: CanonicalClassEntry) -> dict[str, Any]:
 
 def _build_transition_table(
     sd: CanonicalStateDiagram,
-) -> "dict[tuple[str, str], TransitionEntry]":
+) -> "dict[tuple[str, str], list[TransitionEntry]]":
     """Build transition_table from a CanonicalStateDiagram.
 
     Encoding (D-13 / scheduler ground truth):
@@ -116,8 +116,10 @@ def _build_transition_table(
 
     action_fn is left as None — Plan 04 codegen fills it.
     guard_fn stores the raw guard expression string (or None) for codegen to compile.
+    Multiple transitions sharing the same (from_state, event) key are stored as a list
+    to support guard siblings (D-06 conformance).
     """
-    table: dict[tuple[str, str], TransitionEntry] = {}
+    table: dict[tuple[str, str], list[TransitionEntry]] = {}
 
     for trans in sd.transitions:
         key = (trans.from_state, trans.event)
@@ -126,7 +128,7 @@ def _build_transition_table(
             "action_fn": None,
             "guard_fn": trans.guard,
         }
-        table[key] = entry
+        table.setdefault(key, []).append(entry)
 
     # Sort by key for determinism (D-07)
     return dict(sorted(table.items(), key=lambda kv: (kv[0][0], kv[0][1])))
