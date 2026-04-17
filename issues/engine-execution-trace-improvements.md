@@ -6,6 +6,30 @@
 
 ## Root Cause
 
+Two categories of issues: simulation clock behavior, and trace format gaps.
+
+### Clock / Scheduler
+
+7. **Simulator terminates early when delay queue has pending events** — the `execute()`
+   loop in `engine/scheduler.py` breaks when the priority and standard queues are both
+   empty, even if the delay queue still contains pending events. `tick_delay_queue` only
+   moves events where `expiry <= clock.now()`, and since the clock never advances during
+   the loop, delayed events are stranded. Any scenario relying on delayed events (door
+   timers, travel timers, etc.) terminates prematurely. The scenario YAML triggers in
+   Scenario 1 (`Done_opening`, `Close_cmd`, `Done_closing`) exist solely to mask this bug.
+   **Fix:** when both immediate queues are empty and `self._delay` is non-empty, advance
+   the clock to `self._delay[0][0]` (the next expiry) and `continue` rather than `break`.
+
+8. **No fast-forward mode — tests with delays take real wall-clock time** — even once
+   the clock auto-advances, `duration_s(10)` delays would require 10 seconds of real
+   time if the clock tracks wall time. The full Scenario 1 door cycle (Opening 10s +
+   Open 5s + Closing 10s) would take 25+ real seconds per test. The simulator needs a
+   fast-forward mode: the clock always jumps directly to the next delay expiry rather
+   than sleeping. This is standard discrete-event simulation behavior. Scenario 1 should
+   complete in milliseconds regardless of the modeled delay values.
+
+### Trace Format
+
 The current micro-step trace format is missing information needed to follow execution
 at the level of individual instances, events, and action statements. Several gaps were
 identified while reviewing scenario 1 traces:
@@ -58,6 +82,31 @@ _Leave blank until solved._
 | | | | |
 
 ## Investigation Notes
+
+### Item 7 — Early termination when delay queue has pending events
+
+`engine/scheduler.py` `execute()` loop (line ~329): the `else: break` fires when
+`self._priority` and `self._standard` are both empty, without checking `self._delay`.
+Fix is a two-line change:
+
+```python
+elif self._delay:
+    next_expiry, _, _ = self._delay[0]
+    self._clock.advance_to(next_expiry)
+    # loop continues → tick_delay_queue() will drain it
+else:
+    break
+```
+
+Requires `SimulationClock` to expose an `advance_to(ms)` method (or equivalent).
+
+### Item 8 — Fast-forward mode
+
+The `SimulationClock` in `engine/clock.py` should run in fast-forward mode by default
+for simulation: `now()` returns an internal counter, `advance_to(ms)` sets it directly
+with no real-time sleep. Item 7's fix naturally produces fast-forward behavior as long
+as the clock does not sleep. Verify that `SimulationClock` already does this, or add
+a `fast_forward=True` constructor flag that disables any wall-clock coupling.
 
 ### Item 1 — `ActionExecuted` class/instance context
 The scheduler yields `ActionExecuted` at two call sites in `scheduler.py` (lines ~458

@@ -24,6 +24,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   - [x] **Phase 5.3: Simulation Runner + Verification** - Bundle loader, scenario input, elevator model end-to-end verification, MCP tool wrappers (simulate_domain + simulate_class) (completed 2026-04-10)
   - [ ] **Phase 5.4: GDB Command Language + CLI** - Command set definition, state inspection, step/continue/reset, clock control, attach to running simulation
   - [ ] **Phase 5.5: Breakpoint Injection** - Action-line breakpoints, property watchpoints, event breakpoints, hook injection into generated code templates
+- [ ] **Phase 04.2: Body of Knowledge and Modeling Process** - BoK documentation enabling fresh Claude context to create valid domain models
 - [ ] **Phase 6: CLI Test Harness** - YAML test script schema, engine runner, mid-sequence and final-state assertion evaluation, mdf-sim-test entry point
 - [ ] **Phase 7: GUI Debugger** - Dear PyGui desktop app with domain/class canvas, instance registry, queue inspector, log panel (consumes GDB commands from 5.4)
 - [ ] **Phase 8: Test Suite** - Build pytest suite covering all tools, engine unit tests, and round-trip integration test
@@ -111,16 +112,6 @@ Plans:
 - [x] 04.1-04-PLAN.md — Grammar extension: 9 pycca constructs + tests/test_pycca.py
 - [x] 04.1-05-PLAN.md — Action bodies: Shaft, Door, Floor, ElevatorIndicator, FloorIndicator
 - [x] 04.1-06-PLAN.md — Action bodies: Elevator, Dispatcher, ElevatorCall, FloorCall, Request, CallButton; test_elevator.py
-
-### Phase 04.2: Body of Knowledge and Modeling Process (INSERTED)
-
-**Goal:** Produce BoK documentation that enables a fresh Claude context to create valid, well-formed domain models — modeling patterns observed in Phase 4.1, schema/language reference synthesis, domain/class/state machine authoring guide, and a draft subagent strategy for model development
-**Requirements**: TBD
-**Depends on:** Phase 04.1
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd:plan-phase 04.2 to break down)
 
 ### Phase 5: Simulation Engine (Umbrella)
 **Goal**: Compile MDF YAML models into executable opaque bundles, run domain-scoped simulations with full Shlaer-Mellor execution semantics, and provide a GDB-style CLI debugger with breakpoints. Elevator model must compile, run, and be debuggable by the end of all sub-phases.
@@ -212,6 +203,20 @@ Plans:
 - [x] 05.3.1-01-PLAN.md — Core compiler fixes: action-assignment direction, enum scoping, None keyword, guard sibling table format, silent exception handling
 - [x] 05.3.1-02-PLAN.md — Transformer fixes for missing action bodies + 5 scenario YAML files + integration test suite
 
+### Phase 05.3.2: engine-execution-trace-improvements (ENG-001) (INSERTED)
+
+**Goal:** Address ENG-001: add class/instance context to ActionExecuted micro-steps, step IDs, event IDs, timestamps, and fix queue classification for cross-instance subtype events. See `issues/engine-execution-trace-improvements.md` for full issue spec.
+**Requirements**: ENG-001
+**Depends on:** Phase 05.3.1
+**Plans:** 5 plans
+
+Plans:
+- [ ] 05.3.2-00-PLAN.md — Wave 0 test scaffold: conftest.py fast_clock fixture + 10 stub tests in test_engine.py
+- [ ] 05.3.2-01-PLAN.md — Wave 1 clock + scheduler: SimulationClock.advance_to() + fast_forward mode; execute() early-termination fix (D-13..D-19)
+- [ ] 05.3.2-02-PLAN.md — Wave 2 trace metadata: MicroStep step_id/timestamp_ms; Event.event_id + propagation; ActionExecuted class_name/instance_id (D-01, D-07..D-11)
+- [ ] 05.3.2-03-PLAN.md — Wave 3 subtype queue test + elevator bundle regeneration + scenario trace-metadata assertions (D-12, D-20)
+- [ ] 05.3.2-04-PLAN.md — Wave 4 per-statement codegen Option A: list-of-tuples emitter, scheduler iteration with snapshot/diff, DOMAIN_MANIFEST migration (D-02..D-06)
+
 ### Phase 5.4: GDB Command Language + CLI
 **Goal**: Define and implement a GDB-style command set for interacting with running simulations — inspect instances, show queues, step through events, control the clock.
 **Depends on**: Phase 5.3
@@ -234,6 +239,16 @@ Plans:
   4. Breakpoint manager in runtime supports register, remove, enable/disable, and hit notification
   5. All breakpoint types verified working on elevator model via the GDB CLI
 **Plans**: TBD
+
+### Phase 04.2: Body of Knowledge and Modeling Process (INSERTED)
+
+**Goal:** Produce BoK documentation that enables a fresh Claude context to create valid, well-formed domain models — modeling patterns observed in Phase 4.1, schema/language reference synthesis, domain/class/state machine authoring guide, and a draft subagent strategy for model development
+**Requirements**: TBD
+**Depends on:** Phase 5.5
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 04.2 to break down)
 
 ### Phase 6: CLI Test Harness
 **Goal**: Engineers can run automated behavioral verification against a domain model using a repeatable YAML test script
@@ -284,18 +299,19 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Validation Tool | 4/4 | Complete | 2026-03-09 |
 | 4. Draw.io Tools | 3/3 | Complete | 2026-03-11 |
 | 04.1. Model Development and Compiler Testing | 6/6 | Complete | 2026-04-05 |
-| 04.2. Body of Knowledge and Modeling Process | 0/TBD | In planning | - |
 | 5. Simulation Engine (umbrella) | — | In progress (5.1–5.3 done) | - |
 | 5.1. Runtime Framework | 5/5 | Complete | 2026-04-07 |
 | 5.2. Model Compiler | 3/3 | Complete | 2026-04-09 |
 | 5.3. Simulation Runner + Verification | 4/4 | Complete | 2026-04-10 |
 | 05.3.1. Elevator Scenario Simulation Validation | 3/3 | Complete   | 2026-04-13 |
+| 05.3.2. Engine Execution Trace Improvements (ENG-001) | 0/5 | In planning | - |
 | 5.4. GDB Command Language + CLI | 0/TBD | Not started | - |
 | 5.5. Breakpoint Injection | 0/TBD | Not started | - |
+| 04.2. Body of Knowledge and Modeling Process | 0/TBD | In planning | - |
 | 6. CLI Test Harness | 0/TBD | Not started | - |
 | 7. GUI Debugger | 0/TBD | Not started | - |
 | 8. Test Suite | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-03-05 for milestone v1.0 Foundation*
-*Last updated: 2026-04-10 — Phase 05.3.1 planned (2 plans, 2 waves)*
+*Last updated: 2026-04-17 — Phase 05.3.2 planned (5 plans, 5 waves)*

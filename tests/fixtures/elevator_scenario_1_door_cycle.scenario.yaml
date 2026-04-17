@@ -71,42 +71,9 @@ relationships:
 
 events:
   # Trigger the door cycle: send Open_cmd to CarDoor
+  # The rest is handled entirely by the state machines via delayed self-events.
   - event: Open_cmd
     target: cardoor1
     sender: elev1
     args: {}
     at_ms: 0
-
-triggers:
-  # ShaftDoor Opening entry generates Done_opening with delay — inject it immediately
-  - when:
-      instance: shaftdoor1
-      state: Opening
-    then:
-      event: Done_opening
-      target: shaftdoor1
-      sender: shaftdoor1
-      args: {}
-    repeat: false
-
-  # CarDoor Open entry generates Close_cmd with delay — inject it immediately
-  - when:
-      instance: cardoor1
-      state: Open
-    then:
-      event: Close_cmd
-      target: cardoor1
-      sender: cardoor1
-      args: {}
-    repeat: false
-
-  # ShaftDoor Closing entry generates Done_closing with delay — inject it immediately
-  - when:
-      instance: shaftdoor1
-      state: Closing
-    then:
-      event: Done_closing
-      target: shaftdoor1
-      sender: shaftdoor1
-      args: {}
-    repeat: false
