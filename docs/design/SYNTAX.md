@@ -1023,6 +1023,46 @@ duration_s, duration_ms, in_s, in_ms
 
 ---
 
+## 11.5. State Machine Pseudostates
+
+State diagrams use two reserved pseudostate keywords. Neither is a real
+state — they require no entry in the `states:` list.
+
+### `__initial__`
+
+The implicit source of the first transition. The `initial_state:` field in
+the state-diagram YAML names the first real state; the Draw.io renderer
+automatically emits the filled-circle initial pseudostate and routes a
+transition from it to that state.
+
+- Cannot be the **target** of any transition.
+- Never appears in the `states:` list.
+
+### `__terminal__`
+
+A reserved transition destination that ends the object instance lifecycle.
+
+```yaml
+transitions:
+  - from: Closing
+    to: __terminal__
+    event: Done
+```
+
+- **Effect:** The runtime immediately deletes the object instance. No
+  action body executes on entry.
+- **Entry action:** Not supported and not rendered. Any cleanup (attribute
+  zeroing, relationship unlinking, cross-domain notifications) must be
+  performed in a preceding normal state with an entry action.
+- **Outgoing transitions:** None. `__terminal__` is a sink. A transition
+  `from: __terminal__` is a validation error.
+- **Incoming transitions:** Any number of transitions from any state may
+  target `__terminal__`. All route to a single UML terminate pseudostate
+  cell (circle with X) in the Draw.io diagram.
+- Never appears in the `states:` list.
+
+---
+
 ## 12. Differences from Standard OAL
 
 | OAL (BridgePoint) | MDF Pycca | Notes |
