@@ -16,16 +16,18 @@ from typing import TYPE_CHECKING
 
 from schema.drawio_canonical import (
     CanonicalAssociation,
+    CanonicalBridgeImpl,      # NEW
     CanonicalClassDiagram,
     CanonicalClassEntry,
     CanonicalGeneralization,
+    CanonicalMethod,          # NEW
     CanonicalState,
     CanonicalStateDiagram,
     CanonicalTransition,
 )
 
 if TYPE_CHECKING:
-    from schema.yaml_schema import ClassDiagramFile, StateDiagramFile
+    from schema.yaml_schema import ClassDef, ClassDiagramFile, StateDiagramFile
 
 # ---------------------------------------------------------------------------
 # Internal helpers (mirrors of tools/drawio.py private helpers)
@@ -107,7 +109,11 @@ def _wrap_squarest(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def yaml_to_canonical_state(domain: str, sd: "StateDiagramFile") -> CanonicalStateDiagram:
+def yaml_to_canonical_state(
+    domain: str,
+    sd: "StateDiagramFile",
+    class_def: "ClassDef | None" = None,
+) -> CanonicalStateDiagram:
     """Convert a StateDiagramFile to a CanonicalStateDiagram object."""
     event_map = {e.name: e for e in sd.events} if sd.events else {}
 
@@ -134,6 +140,20 @@ def yaml_to_canonical_state(domain: str, sd: "StateDiagramFile") -> CanonicalSta
         )
     canonical_transitions.sort(key=lambda t: (t.from_state, t.event, t.to))
 
+    methods: list[CanonicalMethod] = []
+    if class_def is not None:
+        for m in class_def.methods:
+            if m.action is None:
+                continue
+            params_sig = ", ".join(f"{p.name}: {p.type}" for p in m.params)
+            methods.append(CanonicalMethod(
+                name=m.name,
+                params_sig=params_sig,
+                return_type=m.return_type,
+                action=m.action,
+            ))
+        methods.sort(key=lambda m: m.name)
+
     return CanonicalStateDiagram(
         type="state_diagram",
         domain=domain,
@@ -141,11 +161,18 @@ def yaml_to_canonical_state(domain: str, sd: "StateDiagramFile") -> CanonicalSta
         initial_state=sd.initial_state,
         states=canonical_states,
         transitions=canonical_transitions,
+        methods=methods,
     )
 
 
-def yaml_to_canonical_class(domain: str, cd: "ClassDiagramFile") -> CanonicalClassDiagram:
+def yaml_to_canonical_class(
+    domain: str,
+    cd: "ClassDiagramFile",
+    op_lookup: "dict[str, dict[str, object]] | None" = None,
+) -> CanonicalClassDiagram:
     """Convert a ClassDiagramFile to a CanonicalClassDiagram object."""
+    from schema.yaml_schema import ProvidedBridge
+
     # Build gen_map from partition declarations on supertype classes
     gen_map: dict[str, dict] = {}
     for cls in cd.classes:
@@ -198,26 +225,56 @@ def yaml_to_canonical_class(domain: str, cd: "ClassDiagramFile") -> CanonicalCla
         for rname, info in sorted(gen_map.items())
     ]
 
+    bridge_impls: list[CanonicalBridgeImpl] = []
+    if op_lookup is not None:
+        for bridge in cd.bridges:
+            if not isinstance(bridge, ProvidedBridge):
+                continue
+            for impl in bridge.implementations:
+                op = op_lookup.get(bridge.to_domain, {}).get(impl.name)
+                if op is None:
+                    continue
+                params_sig = ", ".join(
+                    f"{p.name}: {p.type}" for p in op.params
+                )
+                bridge_impls.append(CanonicalBridgeImpl(
+                    name=impl.name,
+                    to_domain=bridge.to_domain,
+                    params_sig=params_sig,
+                    return_type=op.return_type,
+                    action=impl.action,
+                ))
+    bridge_impls.sort(key=lambda b: (b.to_domain, b.name))
+
     return CanonicalClassDiagram(
         type="class_diagram",
         domain=domain.lower(),
         classes=canonical_classes,
         associations=canonical_assocs,
         generalizations=canonical_gens,
+        bridge_impls=bridge_impls,
     )
 
 
-def yaml_to_canonical_state_json(domain: str, sd: "StateDiagramFile") -> str:
-    """Return canonical JSON string (drop-in for drawio.py's _yaml_to_canonical_state)."""
+def yaml_to_canonical_class_json(
+    domain: str,
+    cd: "ClassDiagramFile",
+    op_lookup: "dict[str, dict[str, object]] | None" = None,
+) -> str:
+    """Return canonical JSON string (drop-in for drawio.py's _yaml_to_canonical_class)."""
     return json.dumps(
-        yaml_to_canonical_state(domain, sd).model_dump(by_alias=True),
+        yaml_to_canonical_class(domain, cd, op_lookup).model_dump(by_alias=True),
         sort_keys=True,
     )
 
 
-def yaml_to_canonical_class_json(domain: str, cd: "ClassDiagramFile") -> str:
-    """Return canonical JSON string (drop-in for drawio.py's _yaml_to_canonical_class)."""
+def yaml_to_canonical_state_json(
+    domain: str,
+    sd: "StateDiagramFile",
+    class_def: "ClassDef | None" = None,
+) -> str:
+    """Return canonical JSON string (drop-in for drawio.py's _yaml_to_canonical_state)."""
     return json.dumps(
-        yaml_to_canonical_class(domain, cd).model_dump(by_alias=True),
+        yaml_to_canonical_state(domain, sd, class_def).model_dump(by_alias=True),
         sort_keys=True,
     )
