@@ -20,6 +20,7 @@ __all__ = [
     "STYLE_INITIAL_PSEUDO",
     "STYLE_TRANSITION",
     "STYLE_BRIDGE",
+    "STYLE_IMPL_BOX",
     "BIJECTION_TABLE",
     "class_id",
     "attribute_id",
@@ -28,6 +29,8 @@ __all__ = [
     "association_label_id",
     "state_id",
     "transition_id",
+    "bridge_impl_id",
+    "method_box_id",
     "render_sample_xml",
 ]
 
@@ -84,6 +87,13 @@ STYLE_TRANSITION = "edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=no
 
 STYLE_BRIDGE = "dashed=1;endArrow=open;endFill=0;html=1;"
 
+STYLE_IMPL_BOX = (
+    "rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;"
+    "fontFamily=Courier New;fontSize=11;fillColor=#f5f5f5;"
+    "strokeColor=#666666;fontColor=#333333;"
+    "spacingLeft=6;spacingRight=6;spacingTop=4;spacingBottom=4;"
+)
+
 # ---------------------------------------------------------------------------
 # Bijection table — maps element type name to its style constant
 # ---------------------------------------------------------------------------
@@ -99,6 +109,8 @@ BIJECTION_TABLE: dict[str, str] = {
     "initial_pseudo": STYLE_INITIAL_PSEUDO,
     "transition":     STYLE_TRANSITION,
     "bridge":         STYLE_BRIDGE,
+    "bridge_impl":    STYLE_IMPL_BOX,
+    "method_box":     STYLE_IMPL_BOX,
     "separator":      STYLE_SEPARATOR,
 }
 
@@ -148,6 +160,16 @@ def transition_id(
     idx disambiguates multiple transitions on the same (from_state, event) pair.
     """
     return f"{domain.lower()}:trans:{class_name}:{from_state}:{event}:{idx}"
+
+
+def bridge_impl_id(domain: str, to_domain: str, impl_name: str) -> str:
+    """Return deterministic mxCell ID for a bridge implementation box."""
+    return f"{domain.lower()}:bridge_impl:{to_domain}:{impl_name}"
+
+
+def method_box_id(domain: str, class_name: str, method_name: str) -> str:
+    """Return deterministic mxCell ID for a method implementation box."""
+    return f"{domain.lower()}:method:{class_name}:{method_name}"
 
 
 # ---------------------------------------------------------------------------

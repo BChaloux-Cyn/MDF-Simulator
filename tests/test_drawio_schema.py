@@ -3,12 +3,14 @@ from schema.drawio_schema import (
     BIJECTION_TABLE,
     STYLE_CLASS, STYLE_ATTRIBUTE, STYLE_SEPARATOR, STYLE_ASSOCIATION, STYLE_ASSOC_LABEL,
     STYLE_STATE, STYLE_INITIAL_PSEUDO, STYLE_TRANSITION, STYLE_BRIDGE,
+    STYLE_IMPL_BOX,
     class_id, attribute_id, separator_id, association_id, state_id, transition_id,
+    bridge_impl_id, method_box_id,
 )
 
 REQUIRED_ELEMENT_TYPES = {
     "class", "class_active", "attribute", "separator", "association", "assoc_label",
-    "generalization", "state", "initial_pseudo", "transition", "bridge",
+    "generalization", "state", "initial_pseudo", "transition", "bridge", "bridge_impl", "method_box",
 }
 
 
@@ -48,3 +50,24 @@ def test_transition_id_is_deterministic():
     result2 = transition_id("Hydraulics", "Valve", "Idle", "Open", 1)
     assert result2 == "hydraulics:trans:Valve:Idle:Open:1"
     assert result != result2
+
+
+
+# Task 1: Implementation box and method box styles and IDs
+
+def test_style_impl_box_nonempty():
+    assert STYLE_IMPL_BOX
+    assert "Courier New" in STYLE_IMPL_BOX
+    assert "f5f5f5" in STYLE_IMPL_BOX
+
+def test_bridge_impl_id():
+    assert bridge_impl_id("Elevator", "Transport", "ElevatorDetected") == \
+        "elevator:bridge_impl:Transport:ElevatorDetected"
+
+def test_method_box_id():
+    assert method_box_id("Elevator", "Elevator", "_get_lit_buttons") == \
+        "elevator:method:Elevator:_get_lit_buttons"
+
+def test_bijection_table_has_impl_keys():
+    assert "bridge_impl" in BIJECTION_TABLE
+    assert "method_box" in BIJECTION_TABLE
