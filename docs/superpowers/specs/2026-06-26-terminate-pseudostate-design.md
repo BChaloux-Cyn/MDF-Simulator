@@ -77,16 +77,35 @@ STYLE_TERMINATE_PSEUDO = (
 
 **Referential integrity** (`_check_referential_integrity`):
 
-Allow `t.to == "__terminal__"` as a valid transition target. Specifically, in the block:
-```python
-if t.to not in state_names:
-    issues.append(...)
-```
-add `and t.to != "__terminal__"` to the condition so it becomes:
-```python
-if t.to not in state_names and t.to != "__terminal__":
-    issues.append(...)
-```
+Inside the `for i, t in enumerate(sd.transitions):` loop, add three checks:
+
+1. **Allow `__terminal__` as a valid target** — the existing unknown-target check becomes:
+   ```python
+   if t.to not in state_names and t.to != "__terminal__":
+       issues.append(...)  # unknown target state
+   ```
+
+2. **`from: __terminal__` is forbidden** — the terminate pseudostate is a sink; no transition may originate from it:
+   ```python
+   if t.from_state == "__terminal__":
+       issues.append(_make_issue(
+           issue=f"Transition uses '__terminal__' as a source state",
+           location=f"{loc_sd}::transitions[{i}].from",
+           value="__terminal__",
+           fix="'__terminal__' is a sink pseudostate — it cannot have outgoing transitions",
+       ))
+   ```
+
+3. **`to: __initial__` is forbidden** — the initial pseudostate is a source only; no transition may target it:
+   ```python
+   if t.to == "__initial__":
+       issues.append(_make_issue(
+           issue=f"Transition from '{t.from_state}' targets '__initial__'",
+           location=f"{loc_sd}::transitions[{i}].to",
+           value="__initial__",
+           fix="'__initial__' is a source pseudostate — it cannot be the target of a transition",
+       ))
+   ```
 
 **Reachability and terminal logic** (`_check_reachability`):
 
@@ -218,6 +237,8 @@ A minimal state machine (domain `Terminal`, class `Widget`) with:
 | `test_regular_state_still_uses_state_style` | `Active` and `Closing` cells use `STYLE_STATE` |
 | `test_transition_to_terminal_targets_pseudostate_cell` | Edge targeting `Closing --Done--> __terminal__` has `target == "terminal:state:Widget:__terminal__"` |
 | `test_no_terminal_transitions_no_terminal_cell` | A diagram with no `__terminal__` targets produces no `__terminal__` cell |
+| `test_from_terminal_is_validation_error` | `from: __terminal__` in a transition produces a validation error |
+| `test_to_initial_is_validation_error` | `to: __initial__` in a transition produces a validation error |
 
 **`tests/test_elevator_state_diagram.py`:**
 - No changes needed (elevator fixture has no `__terminal__` transitions).
@@ -235,7 +256,7 @@ A minimal state machine (domain `Terminal`, class `Widget`) with:
 | `docs/design/SYNTAX.md` | Add "State Machine Pseudostates" section |
 | `tests/test_drawio_schema.py` | Add `terminate_pseudo` to `REQUIRED_ELEMENT_TYPES`; add style test |
 | `tests/fixtures/terminal-state-diagram.yaml` | New minimal fixture with `__terminal__` target |
-| `tests/test_terminate_pseudostate.py` | New test file (7 tests) |
+| `tests/test_terminate_pseudostate.py` | New test file (9 tests) |
 
 ---
 
