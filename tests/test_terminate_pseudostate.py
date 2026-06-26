@@ -168,3 +168,27 @@ def test_no_terminal_transitions_no_terminal_cell():
     xml = _build_state_diagram_xml("Terminal", sd)
     cells = _cells_by_id(xml)
     assert TERM_CELL_ID not in cells, "No __terminal__ cell expected when no transitions target it"
+
+
+def test_canonical_parse_skips_terminal_cell(tmp_path):
+    """Round-trip: rendered terminal diagram → canonical parse excludes __terminal__."""
+    import json
+    from tools.drawio import _build_state_diagram_xml, _drawio_to_canonical_state
+
+    sd = _load_sd_fixture()
+    xml_bytes = _build_state_diagram_xml(DOMAIN, sd)
+
+    # Write to temp file and parse back
+    out_file = tmp_path / "terminal.drawio"
+    out_file.write_bytes(xml_bytes)
+
+    result = _drawio_to_canonical_state(out_file)
+    assert result is not None, "_drawio_to_canonical_state returned None unexpectedly"
+    data = json.loads(result)
+    state_names = [s["name"] for s in data["states"]]
+    assert "__terminal__" not in state_names, (
+        f"__terminal__ should be excluded from canonical states, got: {state_names}"
+    )
+    # Real states are still present
+    assert "Active" in state_names
+    assert "Closing" in state_names

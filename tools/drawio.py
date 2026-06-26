@@ -1150,7 +1150,7 @@ def _drawio_to_canonical_state(drawio_path: Path) -> str | None:
         cid = cell.get("id", "")
         # Pattern: lowerdomain:state:ClassName:StateName
         parts = cid.split(":")
-        if len(parts) == 4 and parts[1] == "state" and parts[3] != "__initial__":
+        if len(parts) == 4 and parts[1] == "state" and parts[3] not in ("__initial__", "__terminal__"):
             domain = parts[0].title()
             class_name = parts[2]
             break
