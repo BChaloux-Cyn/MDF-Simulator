@@ -18,6 +18,7 @@ __all__ = [
     "STYLE_GENERALIZATION",
     "STYLE_STATE",
     "STYLE_INITIAL_PSEUDO",
+    "STYLE_TERMINATE_PSEUDO",
     "STYLE_TRANSITION",
     "STYLE_BRIDGE",
     "STYLE_IMPL_BOX",
@@ -83,6 +84,12 @@ STYLE_INITIAL_PSEUDO = (
     "fillColor=#000000;strokeColor=#000000;"
 )
 
+STYLE_TERMINATE_PSEUDO = (
+    "ellipse;whiteSpace=wrap;html=1;aspect=fixed;"
+    "fillColor=#ffffff;strokeColor=#000000;"
+    "shape=mxgraph.uml.terminate;"
+)
+
 STYLE_TRANSITION = "edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;"
 
 STYLE_BRIDGE = "dashed=1;endArrow=open;endFill=0;html=1;"
@@ -107,6 +114,7 @@ BIJECTION_TABLE: dict[str, str] = {
     "generalization": STYLE_GENERALIZATION,
     "state":          STYLE_STATE,
     "initial_pseudo": STYLE_INITIAL_PSEUDO,
+    "terminate_pseudo": STYLE_TERMINATE_PSEUDO,
     "transition":     STYLE_TRANSITION,
     "bridge":         STYLE_BRIDGE,
     "bridge_impl":    STYLE_IMPL_BOX,

@@ -10,7 +10,8 @@ from schema.drawio_schema import (
 
 REQUIRED_ELEMENT_TYPES = {
     "class", "class_active", "attribute", "separator", "association", "assoc_label",
-    "generalization", "state", "initial_pseudo", "transition", "bridge", "bridge_impl", "method_box",
+    "generalization", "state", "initial_pseudo", "transition", "bridge",
+    "terminate_pseudo", "bridge_impl", "method_box",
 }
 
 
@@ -71,3 +72,10 @@ def test_method_box_id():
 def test_bijection_table_has_impl_keys():
     assert "bridge_impl" in BIJECTION_TABLE
     assert "method_box" in BIJECTION_TABLE
+
+
+def test_style_terminate_pseudo_nonempty():
+    from schema.drawio_schema import STYLE_TERMINATE_PSEUDO
+    assert STYLE_TERMINATE_PSEUDO
+    assert "mxgraph.uml.terminate" in STYLE_TERMINATE_PSEUDO
+    assert "ellipse" in STYLE_TERMINATE_PSEUDO
