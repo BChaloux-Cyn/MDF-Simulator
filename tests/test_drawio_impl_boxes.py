@@ -135,3 +135,135 @@ def test_class_diagram_no_impl_box_when_no_provided_bridges(tmp_path):
     tree = etree.fromstring(xml)
     ids = [el.get("id", "") for el in tree.iter("mxCell")]
     assert not any("bridge_impl" in i for i in ids)
+
+
+# ── state diagram method tests ────────────────────────────────────────────────
+
+def _write_state_diagram(tmp_path: Path, class_name: str, methods: list[dict]) -> None:
+    sd_dir = tmp_path / "Test" / "state-diagrams"
+    sd_dir.mkdir(parents=True, exist_ok=True)
+    content = {
+        "schema_version": "1.0.0",
+        "domain": "Test",
+        "class": class_name,
+        "initial_state": "Idle",
+        "states": [{"name": "Idle"}],
+        "transitions": [],
+    }
+    (sd_dir / f"{class_name}.yaml").write_text(yaml.dump(content), encoding="utf-8")
+    # Write class-diagram.yaml so methods can be loaded
+    (tmp_path / "Test").mkdir(exist_ok=True)
+    cd_content = {
+        "schema_version": "1.0.0", "domain": "Test",
+        "classes": [{"name": class_name, "stereotype": "active",
+                      "attributes": [], "methods": methods}],
+        "associations": [], "bridges": [],
+    }
+    (tmp_path / "Test" / "class-diagram.yaml").write_text(yaml.dump(cd_content), encoding="utf-8")
+    (tmp_path / "diagrams").mkdir(exist_ok=True)
+
+
+def _render_state(tmp_path: Path, class_name: str = "Widget") -> list[dict]:
+    import tools.drawio as dw
+    orig = dw.MODEL_ROOT
+    dw.MODEL_ROOT = tmp_path
+    try:
+        return dw.render_to_drawio_state("Test", class_name, force=True)
+    finally:
+        dw.MODEL_ROOT = orig
+
+
+def test_method_box_appears_in_state_diagram(tmp_path):
+    _write_state_diagram(tmp_path, "Widget", [{
+        "name": "doWork", "visibility": "public", "scope": "instance",
+        "params": [{"name": "n", "type": "Integer"}], "return": "Boolean",
+        "action": "return n > 0;",
+    }])
+    results = _render_state(tmp_path, "Widget")
+    assert results[0]["status"] == "written"
+    xml = (tmp_path / "diagrams" / "Test-Widget.drawio").read_bytes()
+    tree = etree.fromstring(xml)
+    ids = [el.get("id", "") for el in tree.iter("mxCell")]
+    assert "test:method:Widget:doWork" in ids
+
+def test_method_box_header_and_body(tmp_path):
+    _write_state_diagram(tmp_path, "Widget", [{
+        "name": "doWork", "visibility": "public", "scope": "instance",
+        "params": [{"name": "n", "type": "Integer"}], "return": "Boolean",
+        "action": "return n > 0;",
+    }])
+    _render_state(tmp_path, "Widget")
+    xml = (tmp_path / "diagrams" / "Test-Widget.drawio").read_bytes()
+    tree = etree.fromstring(xml)
+    for el in tree.iter("mxCell"):
+        if el.get("id") == "test:method:Widget:doWork":
+            value = el.get("value", "")
+            assert "+ doWork" in value
+            assert "n: Integer" in value
+            assert "Boolean" in value
+            assert "return n &gt; 0;" in value
+            break
+    else:
+        pytest.fail("method cell not found")
+
+def test_method_with_null_action_omitted(tmp_path):
+    _write_state_diagram(tmp_path, "Widget", [{
+        "name": "doWork", "visibility": "public", "scope": "instance",
+        "params": [], "action": "x = 1;",
+    }, {
+        "name": "noAction", "visibility": "private", "scope": "instance",
+    }])
+    _render_state(tmp_path, "Widget")
+    xml = (tmp_path / "diagrams" / "Test-Widget.drawio").read_bytes()
+    tree = etree.fromstring(xml)
+    ids = [el.get("id", "") for el in tree.iter("mxCell")]
+    assert "test:method:Widget:doWork" in ids
+    assert "test:method:Widget:noAction" not in ids
+
+def test_method_boxes_absent_when_no_class_diagram(tmp_path):
+    # State diagram exists but no class-diagram.yaml
+    sd_dir = tmp_path / "Test" / "state-diagrams"
+    sd_dir.mkdir(parents=True, exist_ok=True)
+    content = {
+        "schema_version": "1.0.0", "domain": "Test", "class": "Widget",
+        "initial_state": "Idle", "states": [{"name": "Idle"}], "transitions": [],
+    }
+    (sd_dir / "Widget.yaml").write_text(yaml.dump(content), encoding="utf-8")
+    (tmp_path / "diagrams").mkdir(exist_ok=True)
+    results = _render_state(tmp_path, "Widget")
+    # Should succeed — no error
+    assert results[0]["status"] == "written"
+    xml = (tmp_path / "diagrams" / "Test-Widget.drawio").read_bytes()
+    tree = etree.fromstring(xml)
+    ids = [el.get("id", "") for el in tree.iter("mxCell")]
+    assert not any("method" in i for i in ids)
+
+def test_state_diagram_skip_when_unchanged(tmp_path):
+    _write_state_diagram(tmp_path, "Widget", [{
+        "name": "doWork", "visibility": "public", "scope": "instance",
+        "params": [], "action": "x = 1;",
+    }])
+    _render_state(tmp_path, "Widget")
+    import tools.drawio as dw
+    orig = dw.MODEL_ROOT
+    dw.MODEL_ROOT = tmp_path
+    try:
+        r2 = dw.render_to_drawio_state("Test", "Widget")
+    finally:
+        dw.MODEL_ROOT = orig
+    assert r2[0]["status"] == "skipped"
+
+def test_state_diagram_rerenders_when_method_action_changes(tmp_path):
+    _write_state_diagram(tmp_path, "Widget", [{
+        "name": "doWork", "visibility": "public", "scope": "instance",
+        "params": [], "action": "x = 1;",
+    }])
+    _render_state(tmp_path, "Widget")
+    xml_v1 = (tmp_path / "diagrams" / "Test-Widget.drawio").read_bytes()
+    _write_state_diagram(tmp_path, "Widget", [{
+        "name": "doWork", "visibility": "public", "scope": "instance",
+        "params": [], "action": "x = 2;",
+    }])
+    _render_state(tmp_path, "Widget")
+    xml_v2 = (tmp_path / "diagrams" / "Test-Widget.drawio").read_bytes()
+    assert xml_v1 != xml_v2

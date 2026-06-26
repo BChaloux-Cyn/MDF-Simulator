@@ -1102,24 +1102,28 @@ def _content_matches_class(
 
 
 def _content_matches_state(
-    domain_path: Path, domain: str, class_name: str, sd: StateDiagramFile
+    domain_path: Path, domain: str, class_name: str, sd: StateDiagramFile,
+    class_def: object = None,
 ) -> bool:
     """Return True if existing drawio content matches YAML canonical JSON."""
     drawio_path = domain_path.parent / "diagrams" / f"{domain}-{class_name}.drawio"
-    yaml_canonical = _yaml_to_canonical_state(domain, sd)
+    yaml_canonical = _yaml_to_canonical_state(domain, sd, class_def)
     drawio_canonical = _drawio_to_canonical_state(drawio_path)
     if drawio_canonical is None:
         return False
     return yaml_canonical == drawio_canonical
 
 
-def _yaml_to_canonical_state(domain: str, sd: StateDiagramFile) -> str:
+def _yaml_to_canonical_state(
+    domain: str, sd: StateDiagramFile,
+    class_def: object = None,
+) -> str:
     """Build canonical JSON string from a StateDiagramFile.
 
     Delegates to schema.canonical_builder so compiler/ and tools/ share one path.
     """
     from schema.canonical_builder import yaml_to_canonical_state_json
-    return yaml_to_canonical_state_json(domain, sd)
+    return yaml_to_canonical_state_json(domain, sd, class_def)
 
 
 def _drawio_to_canonical_state(drawio_path: Path) -> str | None:
@@ -1253,6 +1257,27 @@ def _drawio_to_canonical_state(drawio_path: Path) -> str | None:
         )
     transitions.sort(key=lambda t: (t.from_state, t.event, t.to))
 
+    from schema.drawio_canonical import CanonicalMethod
+
+    # --- Method boxes ---
+    methods: list[CanonicalMethod] = []
+    for cell in cells:
+        cid = cell.get("id", "")
+        parts = cid.split(":")
+        # Pattern: domain:method:class_name:method_name (4 parts)
+        if len(parts) != 4 or parts[1] != "method":
+            continue
+        method_name = parts[3]
+        value = cell.get("value", "")
+        params_sig, return_type, action = _parse_impl_box_value(value)
+        methods.append(CanonicalMethod(
+            name=method_name,
+            params_sig=params_sig,
+            return_type=return_type,
+            action=action,
+        ))
+    methods.sort(key=lambda m: m.name)
+
     model = CanonicalStateDiagram(
         type="state_diagram",
         domain=domain,
@@ -1260,6 +1285,7 @@ def _drawio_to_canonical_state(drawio_path: Path) -> str | None:
         initial_state=initial_state,
         states=states,
         transitions=transitions,
+        methods=methods,
     )
     return json.dumps(model.model_dump(by_alias=True), sort_keys=True)
 
@@ -1849,9 +1875,21 @@ def _build_class_diagram_xml(
     return etree.tostring(mxfile, encoding="unicode", xml_declaration=False).encode("utf-8")
 
 
-def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
+def _build_state_diagram_xml(
+    domain: str,
+    sd: StateDiagramFile,
+    class_def: object = None,
+) -> bytes:
     """Build the full mxfile XML for a state diagram. Returns UTF-8 bytes."""
     class_name = sd.class_name
+
+    method_box_specs: list[object] = []
+    if class_def is not None:
+        method_box_specs = sorted(
+            [m for m in class_def.methods if m.action is not None],
+            key=lambda m: m.name,
+        )
+
     state_names = [s.name for s in sd.states]
 
     # Vertices: index 0 = initial pseudostate, indices 1..N = states
@@ -1905,10 +1943,19 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
     port_suffixes, edge_waypoints = _optimize_edge_routing(edges, positions, node_widths, node_heights, gap=S_GAP)
 
     # Canvas from actual extents
-    max_x = max(positions[i][0] + node_widths[i]  for i in range(n_vertices))
-    max_y = max(positions[i][1] + node_heights[i] for i in range(n_vertices))
-    canvas_w = int(max_x) + MARGIN
-    canvas_h = int(max_y) + MARGIN
+    main_max_x = max(positions[i][0] + node_widths[i]  for i in range(n_vertices))
+    main_max_y = max(positions[i][1] + node_heights[i] for i in range(n_vertices))
+
+    if method_box_specs:
+        box_col_x = int(main_max_x) + IMPL_COL_OFFSET
+        impl_heights = [_impl_box_height(m.action) for m in method_box_specs]
+        total_h = sum(impl_heights) + IMPL_BOX_GAP * (len(impl_heights) - 1)
+        canvas_w = box_col_x + IMPL_BOX_W + MARGIN
+        canvas_h = max(int(main_max_y) + MARGIN, MARGIN + total_h + MARGIN)
+    else:
+        box_col_x = int(main_max_x) + IMPL_COL_OFFSET
+        canvas_w = int(main_max_x) + MARGIN
+        canvas_h = int(main_max_y) + MARGIN
 
     # Build XML
     mxfile = etree.Element("mxfile", compressed="false", version="24.0.0")
@@ -2042,6 +2089,28 @@ def _build_state_diagram_xml(domain: str, sd: StateDiagramFile) -> bytes:
             for wx, wy in all_wps:
                 etree.SubElement(arr, "mxPoint", x=str(int(wx)), y=str(int(wy)))
 
+    # Method implementation boxes
+    if method_box_specs:
+        box_y = MARGIN
+        for m in method_box_specs:
+            mid = method_box_id(domain, class_name, m.name)
+            header = _impl_box_header_method(m)
+            body = _impl_box_body(m.action)
+            value = f"{header}<br>{_IMPL_DIVIDER}<br>{body}"
+            h = _impl_box_height(m.action)
+            mbox_cell = etree.SubElement(
+                root_el, "mxCell",
+                id=mid, value=value,
+                style=STYLE_IMPL_BOX, vertex="1", parent="1",
+            )
+            etree.SubElement(
+                mbox_cell, "mxGeometry",
+                x=str(box_col_x), y=str(box_y),
+                width=str(IMPL_BOX_W), height=str(h),
+                attrib={"as": "geometry"},
+            )
+            box_y += h + IMPL_BOX_GAP
+
     etree.indent(mxfile, space="  ")
     return etree.tostring(mxfile, encoding="unicode", xml_declaration=False).encode("utf-8")
 
@@ -2172,14 +2241,29 @@ def render_to_drawio_state(domain: str, class_name: str, *, force: bool = False)
             severity="error",
         )]
 
+    # Attempt to load class-diagram.yaml to extract methods for rendering.
+    # Silently skip if missing or the class is not found.
+    class_def = None
+    cd_path = domain_path / "class-diagram.yaml"
+    if cd_path.exists():
+        try:
+            raw_cd = yaml.safe_load(cd_path.read_text(encoding="utf-8"))
+            cd = ClassDiagramFile.model_validate(raw_cd)
+            for cls in cd.classes:
+                if cls.name == class_name:
+                    class_def = cls
+                    break
+        except Exception:
+            pass  # silently omit method boxes if class-diagram is malformed
+
     drawio_dir = domain_path.parent / "diagrams"
     drawio_dir.mkdir(parents=True, exist_ok=True)
     drawio_path = drawio_dir / f"{domain}-{class_name}.drawio"
 
-    if not force and _content_matches_state(domain_path, domain, class_name, sd):
+    if not force and _content_matches_state(domain_path, domain, class_name, sd, class_def):
         return [{"file": str(drawio_path), "status": "skipped"}]
 
-    xml_bytes = _build_state_diagram_xml(domain, sd)
+    xml_bytes = _build_state_diagram_xml(domain, sd, class_def=class_def)
     drawio_path.write_bytes(xml_bytes)
     return [{"file": str(drawio_path), "status": "written"}]
 
