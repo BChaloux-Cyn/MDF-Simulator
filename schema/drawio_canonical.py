@@ -13,6 +13,25 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------------------------------------------------------------------------
+# Implementation box canonical models
+# ---------------------------------------------------------------------------
+
+class CanonicalBridgeImpl(BaseModel):
+    name: str
+    to_domain: str
+    params_sig: str
+    return_type: str | None
+    action: str
+
+
+class CanonicalMethod(BaseModel):
+    name: str
+    params_sig: str
+    return_type: str | None
+    action: str
+
+
+# ---------------------------------------------------------------------------
 # State diagram canonical models
 # ---------------------------------------------------------------------------
 
@@ -40,6 +59,7 @@ class CanonicalStateDiagram(BaseModel):
     initial_state: str
     states: list[CanonicalState]
     transitions: list[CanonicalTransition]
+    methods: list[CanonicalMethod] = []
 
 
 # ---------------------------------------------------------------------------
@@ -78,3 +98,4 @@ class CanonicalClassDiagram(BaseModel):
     classes: list[CanonicalClassEntry]
     associations: list[CanonicalAssociation]
     generalizations: list[CanonicalGeneralization]
+    bridge_impls: list[CanonicalBridgeImpl] = []

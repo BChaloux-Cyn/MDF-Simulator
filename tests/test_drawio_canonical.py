@@ -14,6 +14,8 @@ from schema.drawio_canonical import (
     CanonicalAssociation,
     CanonicalGeneralization,
     CanonicalClassDiagram,
+    CanonicalBridgeImpl,
+    CanonicalMethod,
 )
 
 
@@ -610,3 +612,60 @@ def test_fixture_class_structure_changed_does_not_match(class_yaml):
     drawio_json = _drawio_to_canonical_class(FIXTURES / "elevator-class-structure-changed.drawio")
     assert drawio_json is not None
     assert yaml_json != drawio_json
+
+
+# ---------------------------------------------------------------------------
+# CanonicalBridgeImpl and CanonicalMethod
+# ---------------------------------------------------------------------------
+
+def test_canonical_bridge_impl_round_trips():
+    impl = CanonicalBridgeImpl(
+        name="ElevatorDetected",
+        to_domain="Transport",
+        params_sig="sensor_id: Integer",
+        return_type=None,
+        action="generate Foo to self;",
+    )
+    data = impl.model_dump()
+    assert data["name"] == "ElevatorDetected"
+    assert data["params_sig"] == "sensor_id: Integer"
+    assert data["return_type"] is None
+
+def test_canonical_method_round_trips():
+    m = CanonicalMethod(
+        name="_get_lit_buttons",
+        params_sig="",
+        return_type="Set<DestFloorButton>",
+        action="return select many related by self->R4;",
+    )
+    assert m.return_type == "Set<DestFloorButton>"
+
+def test_class_diagram_bridge_impls_default_empty():
+    cd = CanonicalClassDiagram(
+        type="class_diagram", domain="elevator",
+        classes=[], associations=[], generalizations=[],
+    )
+    assert cd.bridge_impls == []
+
+def test_state_diagram_methods_default_empty():
+    sd = CanonicalStateDiagram(
+        type="state_diagram", domain="Elevator",
+        **{"class": "Elevator"},
+        initial_state="Idle",
+        states=[], transitions=[],
+    )
+    assert sd.methods == []
+
+def test_class_diagram_serializes_bridge_impls():
+    impl = CanonicalBridgeImpl(
+        name="Foo", to_domain="Bar", params_sig="x: Integer",
+        return_type="Boolean", action="return true;",
+    )
+    cd = CanonicalClassDiagram(
+        type="class_diagram", domain="elevator",
+        classes=[], associations=[], generalizations=[],
+        bridge_impls=[impl],
+    )
+    s = json.dumps(cd.model_dump(by_alias=True), sort_keys=True)
+    assert "bridge_impls" in s
+    assert "Foo" in s
