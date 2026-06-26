@@ -35,13 +35,16 @@ from schema.drawio_schema import (
     STYLE_CLASS,
     STYLE_CLASS_ACTIVE,
     STYLE_GENERALIZATION,
+    STYLE_IMPL_BOX,       # NEW
     STYLE_INITIAL_PSEUDO,
     STYLE_SEPARATOR,
     STYLE_STATE,
     STYLE_TRANSITION,
     association_id,
     association_label_id,
+    bridge_impl_id,        # NEW
     class_id,
+    method_box_id,         # NEW
     separator_id,
     state_id,
     transition_id,
@@ -64,6 +67,11 @@ LABEL_OFFSET_X = "-0.3"   # edge-label x: toward source (-1 to +1)
 LABEL_OFFSET_Y = "-15"    # edge-label y: pixels above the line
 LABEL_PERP_OFFSET = 5     # px perpendicular from edge to label vertex (mult/phrase on opposite sides)
 PHRASE_TARGET_RATIO = 2.0 # target width:height ratio for action phrase wrapping
+
+IMPL_BOX_W = 400          # width of bridge impl / method boxes
+IMPL_BOX_HEADER_H = 30    # header height for impl boxes
+IMPL_BOX_GAP = 20         # vertical gap between stacked impl boxes
+IMPL_COL_OFFSET = 60      # horizontal gap from right edge of main content
 
 # Self-loop corner pairs: (exitX, exitY, entryX, entryY)
 # Each pair uses two adjacent sides of the box to form a tight corner loop.
@@ -105,6 +113,62 @@ def _make_issue(
 def _class_height(n_attrs: int, n_methods: int) -> int:
     """Return total height of a UML class swimlane cell."""
     return HEADER_H + max(n_attrs, 1) * ROW_H + SEP_H + max(n_methods, 1) * ROW_H
+
+
+def _impl_box_height(action: str) -> int:
+    """Height of an impl box based on action body line count."""
+    n_lines = action.count("\n") + 1
+    return IMPL_BOX_HEADER_H + max(n_lines, 3) * ROW_H
+
+
+def _impl_box_body(action: str) -> str:
+    """Format pycca action body for an impl box value string."""
+    return html.escape(action).replace("\n", "<br>")
+
+
+def _impl_box_header_bridge(name: str, op: object) -> str:
+    """Format bridge impl box header: <b>name(params): return</b>."""
+    if op is None:
+        return f"<b>{name}</b>"
+    params_sig = ", ".join(
+        f"{p.name}: {_html_escape_type(p.type)}" for p in op.params
+    )
+    ret = f": {_html_escape_type(op.return_type)}" if op.return_type else ""
+    return f"<b>{name}({params_sig}){ret}</b>"
+
+
+def _impl_box_header_method(m: object) -> str:
+    """Format method box header: <b>vis name(params): return</b>."""
+    sym = _VIS.get(m.visibility, "-")
+    params_sig = ", ".join(
+        f"{p.name}: {_html_escape_type(p.type)}" for p in m.params
+    )
+    ret = f": {_html_escape_type(m.return_type)}" if m.return_type else ""
+    return f"<b>{sym} {m.name}({params_sig}){ret}</b>"
+
+
+_IMPL_DIVIDER = "──────────────────"
+
+
+def _parse_impl_box_value(value: str) -> tuple[str, "str | None", str]:
+    """Parse an impl box cell value back into (params_sig, return_type, action).
+
+    Expects format: <b>header</b><br>─...─<br>body
+    """
+    import re as _re
+    parts = _re.split(r"<br>─+<br>", value, maxsplit=1)
+    if len(parts) != 2:
+        return "", None, ""
+    raw_header, raw_body = parts
+    # Strip bold tags and visibility symbol
+    header = _re.sub(r"</?b>", "", raw_header).strip()
+    header = _re.sub(r"^[+\-#] ", "", header)
+    header = html.unescape(header)
+    m = _re.match(r"^[^(]+\(([^)]*)\)(?:: (.+))?$", header)
+    params_sig = m.group(1).strip() if m else ""
+    return_type = (m.group(2).strip() if m and m.group(2) else None)
+    action = html.unescape(raw_body.replace("<br>", "\n"))
+    return params_sig, return_type, action
 
 
 def _state_height(entry_action: str | None) -> int:
@@ -1025,11 +1089,12 @@ def _method_label(
 
 
 def _content_matches_class(
-    domain_path: Path, domain: str, cd: ClassDiagramFile
+    domain_path: Path, domain: str, cd: ClassDiagramFile,
+    op_lookup: "dict[str, dict[str, object]] | None" = None,
 ) -> bool:
     """Return True if existing drawio content matches YAML canonical JSON."""
     drawio_path = domain_path.parent / "diagrams" / f"{domain}-class-diagram.drawio"
-    yaml_canonical = _yaml_to_canonical_class(domain, cd)
+    yaml_canonical = _yaml_to_canonical_class(domain, cd, op_lookup)
     drawio_canonical = _drawio_to_canonical_class(drawio_path)
     if drawio_canonical is None:
         return False
@@ -1199,13 +1264,16 @@ def _drawio_to_canonical_state(drawio_path: Path) -> str | None:
     return json.dumps(model.model_dump(by_alias=True), sort_keys=True)
 
 
-def _yaml_to_canonical_class(domain: str, cd: ClassDiagramFile) -> str:
+def _yaml_to_canonical_class(
+    domain: str, cd: ClassDiagramFile,
+    op_lookup: "dict[str, dict[str, object]] | None" = None,
+) -> str:
     """Build canonical JSON string from a ClassDiagramFile.
 
     Delegates to schema.canonical_builder so compiler/ and tools/ share one path.
     """
     from schema.canonical_builder import yaml_to_canonical_class_json
-    return yaml_to_canonical_class_json(domain, cd)
+    return yaml_to_canonical_class_json(domain, cd, op_lookup)
 
 
 def _drawio_to_canonical_class(drawio_path: Path) -> str | None:
@@ -1386,12 +1454,35 @@ def _drawio_to_canonical_class(drawio_path: Path) -> str | None:
         for rname, info in sorted(gen_groups.items())
     ]
 
+    from schema.drawio_canonical import CanonicalBridgeImpl
+
+    # --- Bridge impl boxes ---
+    bridge_impls: list[CanonicalBridgeImpl] = []
+    for cid, el in cells.items():
+        parts = cid.split(":")
+        # Pattern: domain:bridge_impl:to_domain:impl_name (4 parts)
+        if len(parts) != 4 or parts[1] != "bridge_impl":
+            continue
+        to_domain = parts[2]
+        impl_name = parts[3]
+        value = el.get("value", "")
+        params_sig, return_type, action = _parse_impl_box_value(value)
+        bridge_impls.append(CanonicalBridgeImpl(
+            name=impl_name,
+            to_domain=to_domain,
+            params_sig=params_sig,
+            return_type=return_type,
+            action=action,
+        ))
+    bridge_impls.sort(key=lambda b: (b.to_domain, b.name))
+
     model = CanonicalClassDiagram(
         type="class_diagram",
         domain=domain,
         classes=canonical_classes,
         associations=canonical_assocs,
         generalizations=canonical_gens,
+        bridge_impls=bridge_impls,
     )
     return json.dumps(model.model_dump(by_alias=True), sort_keys=True)
 
@@ -1403,6 +1494,7 @@ def _build_class_diagram_xml(
     layout: str = "kamada_kawai",
     include_edges: bool = True,
     route_edges: bool = True,
+    op_lookup: "dict[str, dict[str, object]] | None" = None,
 ) -> bytes:
     """Build the full mxfile XML for a class diagram. Returns UTF-8 bytes."""
     classes = cd.classes
@@ -1468,10 +1560,30 @@ def _build_class_diagram_xml(
         positions = _grid_layout(n)
     positions = _remove_overlaps(positions, node_widths, node_heights, gap=H_GAP)
 
-    max_x = max((positions[i][0] + node_widths[i]  for i in range(n)), default=0)
-    max_y = max((positions[i][1] + node_heights[i] for i in range(n)), default=0)
-    canvas_w = int(max_x) + MARGIN
-    canvas_h = int(max_y) + MARGIN
+    from schema.yaml_schema import ProvidedBridge
+
+    impl_box_specs: list[tuple[str, str, str, object]] = []
+    if op_lookup:
+        for bridge in cd.bridges:
+            if not isinstance(bridge, ProvidedBridge):
+                continue
+            for impl in bridge.implementations:
+                op = op_lookup.get(bridge.to_domain, {}).get(impl.name)
+                impl_box_specs.append((bridge.to_domain, impl.name, impl.action, op))
+        impl_box_specs.sort(key=lambda s: (s[0], s[1]))
+
+    main_max_x = max((positions[i][0] + node_widths[i]  for i in range(n)), default=0)
+    main_max_y = max((positions[i][1] + node_heights[i] for i in range(n)), default=0)
+
+    if impl_box_specs:
+        box_col_x = int(main_max_x) + IMPL_COL_OFFSET
+        impl_heights = [_impl_box_height(spec[2]) for spec in impl_box_specs]
+        total_impl_h = sum(impl_heights) + IMPL_BOX_GAP * (len(impl_heights) - 1)
+        canvas_w = box_col_x + IMPL_BOX_W + MARGIN
+        canvas_h = max(int(main_max_y) + MARGIN, MARGIN + total_impl_h + MARGIN)
+    else:
+        canvas_w = int(main_max_x) + MARGIN
+        canvas_h = int(main_max_y) + MARGIN
 
     if route_edges:
         port_suffixes, edge_waypoints = _optimize_edge_routing(all_edges, positions, node_widths, node_heights, gap=H_GAP)
@@ -1711,6 +1823,28 @@ def _build_class_diagram_xml(
             )
             etree.SubElement(gen_cell, "mxGeometry", attrib={"relative": "1", "as": "geometry"})
 
+    # Bridge implementation boxes
+    if impl_box_specs:
+        box_y = MARGIN
+        for to_domain, impl_name, action, op in impl_box_specs:
+            bid = bridge_impl_id(domain, to_domain, impl_name)
+            header = _impl_box_header_bridge(impl_name, op)
+            body = _impl_box_body(action)
+            value = f"{header}<br>{_IMPL_DIVIDER}<br>{body}"
+            h = _impl_box_height(action)
+            impl_cell = etree.SubElement(
+                root_el, "mxCell",
+                id=bid, value=value,
+                style=STYLE_IMPL_BOX, vertex="1", parent="1",
+            )
+            etree.SubElement(
+                impl_cell, "mxGeometry",
+                x=str(box_col_x), y=str(box_y),
+                width=str(IMPL_BOX_W), height=str(h),
+                attrib={"as": "geometry"},
+            )
+            box_y += h + IMPL_BOX_GAP
+
     etree.indent(mxfile, space="  ")
     return etree.tostring(mxfile, encoding="unicode", xml_declaration=False).encode("utf-8")
 
@@ -1949,14 +2083,59 @@ def render_to_drawio_class(domain: str, *, force: bool = False) -> list[dict]:
             severity="error",
         )]
 
+    from schema.yaml_schema import DomainsFile, ProvidedBridge
+
+    # Build op_lookup only if there are provided bridges
+    provided_bridges = [b for b in cd.bridges if isinstance(b, ProvidedBridge)]
+    op_lookup: dict[str, dict[str, object]] | None = None
+
+    if provided_bridges:
+        domains_yaml_path = domain_path.parent / "DOMAINS.yaml"
+        if not domains_yaml_path.exists():
+            return [_make_issue(
+                "DOMAINS.yaml not found — required to render bridge implementation signatures",
+                location=f"domain={domain}",
+                severity="error",
+            )]
+        try:
+            raw_d = yaml.safe_load(domains_yaml_path.read_text(encoding="utf-8"))
+            domains_file = DomainsFile.model_validate(raw_d)
+        except Exception as exc:
+            return [_make_issue(
+                f"Failed to load DOMAINS.yaml: {exc}",
+                location=str(domains_yaml_path),
+                severity="error",
+            )]
+
+        # Build lookup: to_domain (from_domain in DOMAINS.yaml) -> op_name -> BridgeOperation
+        # A provided bridge in class-diagram (to_domain=X) corresponds to a DOMAINS.yaml
+        # entry where from_domain=X and to=current_domain.
+        op_lookup = {}
+        for bridge_entry in domains_file.bridges:
+            if bridge_entry.to.lower() == domain.lower():
+                op_lookup.setdefault(bridge_entry.from_domain, {})
+                for op in bridge_entry.operations:
+                    op_lookup[bridge_entry.from_domain][op.name] = op
+
+        # Validate every implementation has a matching operation
+        for pb in provided_bridges:
+            for impl in pb.implementations:
+                if impl.name not in op_lookup.get(pb.to_domain, {}):
+                    return [_make_issue(
+                        f"Bridge implementation '{impl.name}' (to_domain={pb.to_domain}) "
+                        f"has no matching BridgeOperation in DOMAINS.yaml",
+                        location=f"domain={domain}, bridge.to_domain={pb.to_domain}",
+                        severity="error",
+                    )]
+
     diagrams_dir = domain_path.parent / "diagrams"
     diagrams_dir.mkdir(parents=True, exist_ok=True)
     drawio_path = diagrams_dir / f"{domain}-class-diagram.drawio"
 
-    if not force and _content_matches_class(domain_path, domain, cd):
+    if not force and _content_matches_class(domain_path, domain, cd, op_lookup):
         return [{"file": str(drawio_path), "status": "skipped"}]
 
-    xml_bytes = _build_class_diagram_xml(domain, cd)
+    xml_bytes = _build_class_diagram_xml(domain, cd, op_lookup=op_lookup)
     drawio_path.write_bytes(xml_bytes)
     return [{"file": str(drawio_path), "status": "written"}]
 
