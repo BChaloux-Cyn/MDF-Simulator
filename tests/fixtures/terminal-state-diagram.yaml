@@ -1,0 +1,18 @@
+schema_version: "1.0.0"
+domain: Terminal
+class: Widget
+initial_state: Active
+events:
+  - name: Shutdown
+  - name: Done
+states:
+  - name: Active
+  - name: Closing
+    entry_action: "self.cleanup();"
+transitions:
+  - from: Active
+    to: Closing
+    event: Shutdown
+  - from: Closing
+    to: __terminal__
+    event: Done
