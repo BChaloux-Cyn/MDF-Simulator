@@ -267,3 +267,19 @@ def test_state_diagram_rerenders_when_method_action_changes(tmp_path):
     _render_state(tmp_path, "Widget")
     xml_v2 = (tmp_path / "diagrams" / "Test-Widget.drawio").read_bytes()
     assert xml_v1 != xml_v2
+
+def test_state_diagram_rerenders_when_visibility_changes(tmp_path):
+    _write_state_diagram(tmp_path, "Widget", [{
+        "name": "doWork", "visibility": "public", "scope": "instance",
+        "params": [], "action": "x = 1;",
+    }])
+    _render_state(tmp_path, "Widget")
+    xml_v1 = (tmp_path / "diagrams" / "Test-Widget.drawio").read_bytes()
+    # Change visibility from public to private
+    _write_state_diagram(tmp_path, "Widget", [{
+        "name": "doWork", "visibility": "private", "scope": "instance",
+        "params": [], "action": "x = 1;",
+    }])
+    _render_state(tmp_path, "Widget")
+    xml_v2 = (tmp_path / "diagrams" / "Test-Widget.drawio").read_bytes()
+    assert xml_v1 != xml_v2

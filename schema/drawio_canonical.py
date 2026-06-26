@@ -26,6 +26,7 @@ class CanonicalBridgeImpl(BaseModel):
 
 class CanonicalMethod(BaseModel):
     name: str
+    visibility: str
     params_sig: str
     return_type: str | None
     action: str

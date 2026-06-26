@@ -148,6 +148,7 @@ def yaml_to_canonical_state(
             params_sig = ", ".join(f"{p.name}: {p.type}" for p in m.params)
             methods.append(CanonicalMethod(
                 name=m.name,
+                visibility=m.visibility,
                 params_sig=params_sig,
                 return_type=m.return_type,
                 action=m.action,

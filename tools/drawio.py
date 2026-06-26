@@ -1270,8 +1270,13 @@ def _drawio_to_canonical_state(drawio_path: Path) -> str | None:
         method_name = parts[3]
         value = cell.get("value", "")
         params_sig, return_type, action = _parse_impl_box_value(value)
+        import re as _re_vis
+        _VIS_REV = {"+": "public", "-": "private", "#": "protected"}
+        _vis_m = _re_vis.match(r"<b>([+\-#]) ", value)
+        visibility = _VIS_REV.get(_vis_m.group(1), "public") if _vis_m else "public"
         methods.append(CanonicalMethod(
             name=method_name,
+            visibility=visibility,
             params_sig=params_sig,
             return_type=return_type,
             action=action,

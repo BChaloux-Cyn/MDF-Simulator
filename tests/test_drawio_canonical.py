@@ -634,11 +634,13 @@ def test_canonical_bridge_impl_round_trips():
 def test_canonical_method_round_trips():
     m = CanonicalMethod(
         name="_get_lit_buttons",
+        visibility="public",
         params_sig="",
         return_type="Set<DestFloorButton>",
         action="return select many related by self->R4;",
     )
     assert m.return_type == "Set<DestFloorButton>"
+    assert m.visibility == "public"
 
 def test_class_diagram_bridge_impls_default_empty():
     cd = CanonicalClassDiagram(
