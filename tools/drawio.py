@@ -39,6 +39,7 @@ from schema.drawio_schema import (
     STYLE_INITIAL_PSEUDO,
     STYLE_SEPARATOR,
     STYLE_STATE,
+    STYLE_TERMINATE_PSEUDO,
     STYLE_TRANSITION,
     association_id,
     association_label_id,
@@ -1171,7 +1172,7 @@ def _drawio_to_canonical_state(drawio_path: Path) -> str | None:
         if len(parts) != 4 or parts[1] != "state":
             continue
         state_name = parts[3]
-        if state_name == "__initial__":
+        if state_name in ("__initial__", "__terminal__"):
             continue
         value = cell.get("value", "")
         entry_action: str | None = None
@@ -1907,8 +1908,23 @@ def _build_state_diagram_xml(
 
     n_vertices = 1 + len(state_names)  # 0=initial_pseudo, 1..N=states
 
-    # Build edges
+    # Detect terminal pseudostate
+    has_terminal = any(t.to == "__terminal__" for t in sd.transitions)
+
+    # Per-node dimensions: vertex 0 = initial pseudostate, vertices 1..N = states
+    node_widths:  list[int] = [INIT_SIZE] + [_state_width(st.name, st.entry_action) for st in sd.states]
+    node_heights: list[int] = [INIT_SIZE] + [_state_height(st.entry_action)          for st in sd.states]
+
     state_name_to_idx = {name: 1 + i for i, name in enumerate(state_names)}
+
+    if has_terminal:
+        terminal_vertex_idx = n_vertices
+        n_vertices += 1
+        state_name_to_idx["__terminal__"] = terminal_vertex_idx
+        node_widths.append(INIT_SIZE)
+        node_heights.append(INIT_SIZE)
+
+    # Build edges
     edges: list[tuple[int, int]] = []
     # Initial -> initial_state edge
     edges.append((0, initial_state_vertex_idx))
@@ -1922,10 +1938,6 @@ def _build_state_diagram_xml(
             edges.append((src, tgt))
         else:
             trans_edge_idx.append(None)
-
-    # Per-node dimensions: vertex 0 = initial pseudostate, vertices 1..N = states
-    node_widths:  list[int] = [INIT_SIZE] + [_state_width(st.name, st.entry_action) for st in sd.states]
-    node_heights: list[int] = [INIT_SIZE] + [_state_height(st.entry_action)          for st in sd.states]
 
     # Compact initial scaling using average box diagonal (not max)
     S_GAP = 100
@@ -2016,6 +2028,22 @@ def _build_state_diagram_xml(
         etree.SubElement(
             state_cell, "mxGeometry",
             x=str(x), y=str(y), width=str(state_widths[vertex_idx]), height=str(state_heights[vertex_idx]),
+            attrib={"as": "geometry"},
+        )
+
+    # Terminate pseudostate (if any transition targets __terminal__)
+    if has_terminal:
+        term_cid = f"{domain.lower()}:state:{class_name}:__terminal__"
+        xt = int(positions[terminal_vertex_idx][0])
+        yt = int(positions[terminal_vertex_idx][1])
+        term_cell = etree.SubElement(
+            root_el, "mxCell",
+            id=term_cid, value="",
+            style=STYLE_TERMINATE_PSEUDO, vertex="1", parent="1",
+        )
+        etree.SubElement(
+            term_cell, "mxGeometry",
+            x=str(xt), y=str(yt), width=str(INIT_SIZE), height=str(INIT_SIZE),
             attrib={"as": "geometry"},
         )
 
