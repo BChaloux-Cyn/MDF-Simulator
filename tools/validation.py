@@ -433,12 +433,26 @@ def _check_referential_integrity_state_diagram(
 
     # Transitions: to and event must exist
     for i, t in enumerate(sd.transitions):
-        if t.to not in state_names:
+        if t.to not in state_names and t.to != "__terminal__":
             issues.append(_make_issue(
                 issue=f"Transition from '{t.from_state}' has unknown target state '{t.to}'",
                 location=f"{loc_sd}::transitions[{i}].to",
                 value=t.to,
                 fix=f"Add state '{t.to}' to states or fix the transition target",
+            ))
+        if t.from_state == "__terminal__":
+            issues.append(_make_issue(
+                issue=f"Transition uses '__terminal__' as a source state",
+                location=f"{loc_sd}::transitions[{i}].from",
+                value="__terminal__",
+                fix="'__terminal__' is a sink pseudostate — it cannot have outgoing transitions",
+            ))
+        if t.to == "__initial__":
+            issues.append(_make_issue(
+                issue=f"Transition from '{t.from_state}' targets '__initial__'",
+                location=f"{loc_sd}::transitions[{i}].to",
+                value="__initial__",
+                fix="'__initial__' is a source pseudostate — it cannot be the target of a transition",
             ))
         if t.event not in event_names:
             issues.append(_make_issue(
@@ -464,9 +478,12 @@ def _check_reachability(sd: StateDiagramFile, domain: str) -> list[dict]:
 
     G = nx.DiGraph()
     G.add_nodes_from(state_names)
+    G.add_node("__terminal__")
     for t in sd.transitions:
         # Only add edges for valid endpoints (referential integrity checked separately)
-        if t.from_state in state_names and t.to in state_names:
+        src_valid = t.from_state in state_names
+        tgt_valid = t.to in state_names or t.to == "__terminal__"
+        if src_valid and tgt_valid:
             G.add_edge(t.from_state, t.to)
 
     # Guard: initial_state must be in graph to run descendants()
@@ -482,27 +499,14 @@ def _check_reachability(sd: StateDiagramFile, domain: str) -> list[dict]:
             fix=f"Add a transition into '{state}' from a reachable state or remove it",
         ))
 
-    # Build terminal state set for reference
-    terminal_states = {s.name for s in sd.states if s.terminal}
-
-    # Terminal states must not have outgoing transitions
-    for state in terminal_states:
-        if G.out_degree(state) > 0:
-            issues.append(_make_issue(
-                issue=f"Terminal state '{state}' has outgoing transitions",
-                location=loc_sd,
-                value=state,
-                fix="Remove outgoing transitions from terminal states, or remove the terminal flag",
-            ))
-
-    # Trap states: no outgoing edges and not marked terminal (warning only)
+    # Trap states: no outgoing edges (warning only)
     for state in state_names:
-        if G.out_degree(state) == 0 and state not in terminal_states:
+        if G.out_degree(state) == 0:
             issues.append(_make_issue(
                 issue=f"State '{state}' has no outgoing transitions",
                 location=loc_sd,
                 value=state,
-                fix="Add outgoing transitions or mark the state as terminal: true if it ends the object lifecycle",
+                fix="Add outgoing transitions or add a transition 'to: __terminal__' if the state ends the object lifecycle",
                 severity="warning",
             ))
 
