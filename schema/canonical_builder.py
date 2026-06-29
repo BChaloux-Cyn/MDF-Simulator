@@ -21,6 +21,7 @@ from schema.drawio_canonical import (
     CanonicalClassEntry,
     CanonicalGeneralization,
     CanonicalMethod,          # NEW
+    CanonicalMethodDiagram,
     CanonicalState,
     CanonicalStateDiagram,
     CanonicalTransition,
@@ -284,5 +285,40 @@ def yaml_to_canonical_state_json(
     """Return canonical JSON string (drop-in for drawio.py's _yaml_to_canonical_state)."""
     return json.dumps(
         yaml_to_canonical_state(domain, sd, class_def).model_dump(by_alias=True),
+        sort_keys=True,
+    )
+
+
+def yaml_to_canonical_methods(
+    domain: str,
+    class_def: "ClassDef",
+) -> CanonicalMethodDiagram:
+    """Convert a ClassDef's action-bearing methods to a CanonicalMethodDiagram."""
+    methods: list[CanonicalMethod] = sorted(
+        [
+            CanonicalMethod(
+                name=m.name,
+                visibility=m.visibility,
+                params_sig=", ".join(f"{p.name}: {p.type}" for p in m.params),
+                return_type=m.return_type,
+                action=m.action,
+            )
+            for m in class_def.methods
+            if m.action is not None
+        ],
+        key=lambda m: m.name,
+    )
+    return CanonicalMethodDiagram(
+        type="method_diagram",
+        domain=domain.lower(),
+        class_name=class_def.name,
+        methods=methods,
+    )
+
+
+def yaml_to_canonical_methods_json(domain: str, class_def: "ClassDef") -> str:
+    """Return canonical JSON string for a method diagram."""
+    return json.dumps(
+        yaml_to_canonical_methods(domain, class_def).model_dump(by_alias=True),
         sort_keys=True,
     )

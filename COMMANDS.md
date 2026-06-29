@@ -63,17 +63,31 @@ issues = write_model("Elevator", yaml_str)
 ### Draw.io Diagram Generation
 
 ```python
-from tools.drawio import render_to_drawio, render_to_drawio_class, render_to_drawio_state
+from tools.drawio import (
+    render_to_drawio,
+    render_to_drawio_class,
+    render_to_drawio_state,
+    render_to_drawio_methods,
+)
 
-# Generate all diagrams for a domain (class + state diagrams)
+# Generate all diagrams for a domain (class + state + method diagrams)
 results = render_to_drawio("Elevator", force=True)
 
 # Generate class diagram only
 results = render_to_drawio_class("Elevator", force=True)
 
-# Generate one state diagram
+# Generate one state diagram (active class with a state machine)
 results = render_to_drawio_state("Elevator", "Elevator", force=True)
+
+# Generate method diagram for a class with no state machine but action-bearing methods
+results = render_to_drawio_methods("Elevator", "ButtonHandler", force=True)
 ```
+
+`render_to_drawio` renders all three diagram types automatically:
+- **Class diagram** — always, from `class-diagram.yaml`
+- **State diagram** — for each `active` class that has a `state-diagrams/{ClassName}.yaml`
+- **Method diagram** — for any class (entity or active) that has no state diagram but
+  has at least one method with an `action` body
 
 Without `force=True`, diagrams are skipped if the YAML structure hasn't
 changed (preserving manual layout adjustments in Draw.io).

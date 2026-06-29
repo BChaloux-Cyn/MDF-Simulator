@@ -100,3 +100,16 @@ class CanonicalClassDiagram(BaseModel):
     associations: list[CanonicalAssociation]
     generalizations: list[CanonicalGeneralization]
     bridge_impls: list[CanonicalBridgeImpl] = []
+
+
+# ---------------------------------------------------------------------------
+# Method diagram canonical models
+# ---------------------------------------------------------------------------
+
+class CanonicalMethodDiagram(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    type: Literal["method_diagram"]
+    domain: str
+    class_name: str = Field(alias="class")
+    methods: list[CanonicalMethod]

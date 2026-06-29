@@ -5,11 +5,12 @@ Implemented in plan 04-02 (Phase 4).
 validate_drawio and sync_from_drawio added in plan 04-03.
 
 Public API:
-    render_to_drawio(domain)           -> list[dict]
-    render_to_drawio_class(domain)     -> list[dict]
-    render_to_drawio_state(domain, class_name) -> list[dict]
-    validate_drawio(domain, xml)       -> list[dict]
-    sync_from_drawio(domain, class_name, xml) -> list[dict]
+    render_to_drawio(domain)                       -> list[dict]
+    render_to_drawio_class(domain)                 -> list[dict]
+    render_to_drawio_state(domain, class_name)     -> list[dict]
+    render_to_drawio_methods(domain, class_name)   -> list[dict]
+    validate_drawio(domain, xml)                   -> list[dict]
+    sync_from_drawio(domain, class_name, xml)      -> list[dict]
 """
 from __future__ import annotations
 
@@ -1136,6 +1137,84 @@ def _yaml_to_canonical_state(
     return yaml_to_canonical_state_json(domain, sd, class_def)
 
 
+def _yaml_to_canonical_methods(domain: str, class_def: object) -> str:
+    """Build canonical JSON string for a method-only diagram from a ClassDef."""
+    from schema.canonical_builder import yaml_to_canonical_methods_json
+    return yaml_to_canonical_methods_json(domain, class_def)
+
+
+def _drawio_to_canonical_methods(drawio_path: Path) -> str | None:
+    """Parse an existing method diagram drawio XML into canonical JSON.
+
+    Returns None if the file is missing or malformed.
+    """
+    from schema.drawio_canonical import CanonicalMethod, CanonicalMethodDiagram
+
+    if not drawio_path.exists():
+        return None
+    try:
+        tree = etree.parse(str(drawio_path))
+    except etree.XMLSyntaxError:
+        return None
+
+    cells = list(tree.iter("mxCell"))
+
+    domain: str | None = None
+    class_name: str | None = None
+    for cell in cells:
+        cid = cell.get("id", "")
+        parts = cid.split(":")
+        # Pattern: lowerdomain:method:ClassName:method_name (4 parts)
+        if len(parts) == 4 and parts[1] == "method":
+            domain = parts[0].title()
+            class_name = parts[2]
+            break
+
+    if domain is None or class_name is None:
+        return None
+
+    _VIS_REV = {"+": "public", "-": "private", "#": "protected"}
+    methods: list[CanonicalMethod] = []
+    for cell in cells:
+        cid = cell.get("id", "")
+        parts = cid.split(":")
+        if len(parts) != 4 or parts[1] != "method":
+            continue
+        method_name = parts[3]
+        value = cell.get("value", "")
+        params_sig, return_type, action = _parse_impl_box_value(value)
+        vis_m = re.match(r"<b>([+\-#]) ", value)
+        visibility = _VIS_REV.get(vis_m.group(1), "public") if vis_m else "public"
+        methods.append(CanonicalMethod(
+            name=method_name,
+            visibility=visibility,
+            params_sig=params_sig,
+            return_type=return_type,
+            action=action,
+        ))
+    methods.sort(key=lambda m: m.name)
+
+    model = CanonicalMethodDiagram(
+        type="method_diagram",
+        domain=domain.lower(),
+        class_name=class_name,
+        methods=methods,
+    )
+    return json.dumps(model.model_dump(by_alias=True), sort_keys=True)
+
+
+def _content_matches_methods(
+    domain_path: Path, domain: str, class_name: str, class_def: object,
+) -> bool:
+    """Return True if existing method diagram drawio matches the canonical JSON."""
+    drawio_path = domain_path.parent / "diagrams" / f"{domain}-{class_name}-methods.drawio"
+    yaml_canonical = _yaml_to_canonical_methods(domain, class_def)
+    drawio_canonical = _drawio_to_canonical_methods(drawio_path)
+    if drawio_canonical is None:
+        return False
+    return yaml_canonical == drawio_canonical
+
+
 def _drawio_to_canonical_state(drawio_path: Path) -> str | None:
     """Parse an existing state diagram drawio XML into canonical JSON.
 
@@ -1541,6 +1620,61 @@ def _drawio_to_canonical_class(drawio_path: Path) -> str | None:
         bridge_impls=bridge_impls,
     )
     return json.dumps(model.model_dump(by_alias=True), sort_keys=True)
+
+
+def _build_method_diagram_xml(domain: str, class_def: object) -> bytes:
+    """Build mxfile XML for a method-only diagram (no states or transitions).
+
+    Used when a class has no state machine but has methods with action bodies.
+    Renders method implementation boxes stacked vertically.
+    """
+    method_box_specs = sorted(
+        [m for m in class_def.methods if m.action is not None],
+        key=lambda m: m.name,
+    )
+
+    impl_heights = [_impl_box_height(m.action) for m in method_box_specs]
+    total_h = sum(impl_heights) + IMPL_BOX_GAP * max(len(impl_heights) - 1, 0)
+    canvas_w = MARGIN + IMPL_BOX_W + MARGIN
+    canvas_h = MARGIN + total_h + MARGIN
+
+    mxfile = etree.Element("mxfile", compressed="false", version="24.0.0")
+    diagram = etree.SubElement(mxfile, "diagram", name="Page-1", id="page1")
+    etree.SubElement(
+        diagram, "mxGraphModel",
+        dx="1034", dy="546", grid="1", gridSize="10",
+        guides="1", tooltips="1", connect="1", arrows="1",
+        fold="1", page="1", pageScale="1",
+        pageWidth=str(canvas_w), pageHeight=str(canvas_h),
+        math="0", shadow="0", background="#FFFFFF",
+    )
+    model_el = diagram[0]
+    root_el = etree.SubElement(model_el, "root")
+    etree.SubElement(root_el, "mxCell", id="0")
+    etree.SubElement(root_el, "mxCell", id="1", parent="0")
+
+    box_y = MARGIN
+    for m in method_box_specs:
+        mid = method_box_id(domain, class_def.name, m.name)
+        header = _impl_box_header_method(m)
+        body = _impl_box_body(m.action)
+        value = f"{header}<br>{_IMPL_DIVIDER}<br>{body}"
+        h = _impl_box_height(m.action)
+        mbox_cell = etree.SubElement(
+            root_el, "mxCell",
+            id=mid, value=value,
+            style=STYLE_IMPL_BOX, vertex="1", parent="1",
+        )
+        etree.SubElement(
+            mbox_cell, "mxGeometry",
+            x=str(MARGIN), y=str(box_y),
+            width=str(IMPL_BOX_W), height=str(h),
+            attrib={"as": "geometry"},
+        )
+        box_y += h + IMPL_BOX_GAP
+
+    etree.indent(mxfile, space="  ")
+    return etree.tostring(mxfile, encoding="unicode", xml_declaration=False).encode("utf-8")
 
 
 def _build_class_diagram_xml(
@@ -2326,11 +2460,73 @@ def render_to_drawio_state(domain: str, class_name: str, *, force: bool = False)
     return [{"file": str(drawio_path), "status": "written"}]
 
 
+def render_to_drawio_methods(domain: str, class_name: str, *, force: bool = False) -> list[dict]:
+    """Render a method-only diagram for a class with no state machine.
+
+    Generates diagrams/{domain}-{class_name}-methods.drawio containing
+    implementation boxes for all methods that have action bodies.
+    Returns a list of per-file result dicts with 'file' and 'status' keys.
+    Errors are returned as issue dicts with 'severity': 'error'.
+    """
+    domain_path = MODEL_ROOT / domain
+    if not domain_path.exists():
+        return [_make_issue(
+            f"Domain path not found: {domain_path}",
+            location=f"domain={domain}",
+            severity="error",
+        )]
+
+    cd_path = domain_path / "class-diagram.yaml"
+    if not cd_path.exists():
+        return [_make_issue(
+            f"class-diagram.yaml not found: {cd_path}",
+            location=f"domain={domain}",
+            severity="error",
+        )]
+
+    try:
+        raw_cd = yaml.safe_load(cd_path.read_text(encoding="utf-8"))
+        cd = ClassDiagramFile.model_validate(raw_cd)
+    except Exception as exc:
+        return [_make_issue(
+            f"Failed to load class-diagram.yaml: {exc}",
+            location=str(cd_path),
+            severity="error",
+        )]
+
+    class_def = next((cls for cls in cd.classes if cls.name == class_name), None)
+    if class_def is None:
+        return [_make_issue(
+            f"Class '{class_name}' not found in class-diagram.yaml",
+            location=f"domain={domain}, class={class_name}",
+            severity="error",
+        )]
+
+    action_methods = [m for m in class_def.methods if m.action is not None]
+    if not action_methods:
+        return [_make_issue(
+            f"Class '{class_name}' has no methods with action bodies",
+            location=f"domain={domain}, class={class_name}",
+            severity="error",
+        )]
+
+    diagrams_dir = domain_path.parent / "diagrams"
+    diagrams_dir.mkdir(parents=True, exist_ok=True)
+    drawio_path = diagrams_dir / f"{domain}-{class_name}-methods.drawio"
+
+    if not force and _content_matches_methods(domain_path, domain, class_name, class_def):
+        return [{"file": str(drawio_path), "status": "skipped"}]
+
+    xml_bytes = _build_method_diagram_xml(domain, class_def)
+    drawio_path.write_bytes(xml_bytes)
+    return [{"file": str(drawio_path), "status": "written"}]
+
+
 def render_to_drawio(domain: str, *, force: bool = False) -> list[dict]:
-    """Render all diagrams for a domain: class diagram + all active-class state diagrams.
+    """Render all diagrams for a domain: class diagram + state diagrams + method diagrams.
 
     Returns combined list of per-file result dicts (class diagram first,
-    then state diagrams in class list order).
+    then state diagrams, then method-only diagrams for classes without a state machine).
     Errors are returned as issue dicts with 'severity': 'error'.
     """
     results: list[dict] = []
@@ -2359,6 +2555,7 @@ def render_to_drawio(domain: str, *, force: bool = False) -> list[dict]:
         return results
 
     # Render state diagram for each active class
+    classes_with_state_diagram: set[str] = set()
     for cls in cd.classes:
         if cls.stereotype == "active":
             # If this class specializes a supertype and has no own state diagram,
@@ -2381,6 +2578,21 @@ def render_to_drawio(domain: str, *, force: bool = False) -> list[dict]:
                             continue
             state_results = render_to_drawio_state(domain, cls.name, force=force)
             results.extend(state_results)
+            has_state_error = any(r.get("severity") == "error" for r in state_results)
+            if not has_state_error:
+                classes_with_state_diagram.add(cls.name)
+
+    # Render method-only diagrams for classes that have no state diagram but
+    # do have methods with action bodies (entity classes and edge-case active classes).
+    for cls in cd.classes:
+        if cls.name in classes_with_state_diagram:
+            continue
+        state_yaml = domain_path / "state-diagrams" / f"{cls.name}.yaml"
+        if state_yaml.exists():
+            continue
+        if any(m.action is not None for m in cls.methods):
+            method_results = render_to_drawio_methods(domain, cls.name, force=force)
+            results.extend(method_results)
 
     return results
 

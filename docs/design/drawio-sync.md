@@ -10,13 +10,13 @@ The system supports two operations on each diagram type.
 
 ### YAML → Draw.io (render)
 
-**Functions:** `render_to_drawio`, `render_to_drawio_class`, `render_to_drawio_state`
+**Functions:** `render_to_drawio`, `render_to_drawio_class`, `render_to_drawio_state`, `render_to_drawio_methods`
 
 Render reads YAML source files, computes a full layout, and writes a `.drawio` XML file. It is the authoritative path for creating diagrams from scratch or after structural changes to the model.
 
 **When it is used:**
 - First-time diagram generation
-- After structural changes to the YAML that alter the canonical content (new states, new classes, renamed transitions, etc.)
+- After structural changes to the YAML that alter the canonical content (new states, new classes, renamed transitions, changed action bodies, etc.)
 - Explicitly forced via `force=True`
 
 **What it does:**
@@ -28,11 +28,20 @@ Render reads YAML source files, computes a full layout, and writes a `.drawio` X
 
 The diagram file path follows the convention:
 ```
-.design/diagrams/{domain}-class-diagram.drawio
-.design/diagrams/{domain}-{ClassName}.drawio
+.design/diagrams/{domain}-class-diagram.drawio      # class diagram
+.design/diagrams/{domain}-{ClassName}.drawio         # state diagram (active class)
+.design/diagrams/{domain}-{ClassName}-methods.drawio # method diagram (no state machine)
 ```
 
-`render_to_drawio` is a convenience wrapper that renders the class diagram first, then discovers active classes and renders a state diagram for each.
+`render_to_drawio` is a convenience wrapper that renders all three diagram types:
+
+1. **Class diagram** — always rendered from `class-diagram.yaml`.
+2. **State diagram** — rendered for each `active` class that has a `state-diagrams/{ClassName}.yaml` file. Method implementation boxes (for methods with `action` bodies) are embedded in the right column of the state diagram.
+3. **Method diagram** — rendered for any class (entity *or* active) that meets both conditions:
+   - No `state-diagrams/{ClassName}.yaml` file exists
+   - At least one method in the class definition has an `action` body
+
+   The method diagram contains only implementation boxes, stacked vertically. It is the canonical location for viewing action bodies on stateless classes.
 
 ### Draw.io → YAML (sync)
 
@@ -95,8 +104,9 @@ The canonical form (defined in `schema/drawio_canonical.py`) captures only the s
 CanonicalStateDiagram {
   type, domain, class,
   initial_state,
-  states: [{ name, entry_action }],          # sorted by name
-  transitions: [{ from, to, event, params, guard }]  # sorted by (from, event, to)
+  states: [{ name, entry_action }],                  # sorted by name
+  transitions: [{ from, to, event, params, guard }],  # sorted by (from, event, to)
+  methods: [{ name, visibility, params_sig, return_type, action }]  # sorted by name
 }
 ```
 
@@ -106,7 +116,16 @@ CanonicalClassDiagram {
   type, domain,
   classes: [{ name, stereotype, specializes, attributes[], methods[] }],  # sorted by name
   associations: [{ name, point_1, point_2, 1_mult_2, 2_mult_1, 1_phrase_2, 2_phrase_1 }],
-  generalizations: [{ name, supertype, subtypes[] }]
+  generalizations: [{ name, supertype, subtypes[] }],
+  bridge_impls: [{ name, to_domain, params_sig, return_type, action }]
+}
+```
+
+**Method diagram:**
+```
+CanonicalMethodDiagram {
+  type, domain, class,
+  methods: [{ name, visibility, params_sig, return_type, action }]  # sorted by name
 }
 ```
 
@@ -256,6 +275,10 @@ Cell IDs are deterministic, constructed by functions in `drawio_schema.py`:
 | Assoc label | `{domain}:assoc_mult:{Rname}:{src\|tgt}` |
 | State | `{domain}:state:{ClassName}:{StateName}` |
 | Transition | `{domain}:trans:{ClassName}:{from}:{event}:{idx}` |
+| Method box | `{domain}:method:{ClassName}:{method_name}` |
+| Bridge impl box | `{domain}:bridge_impl:{to_domain}:{impl_name}` |
+
+Method box IDs appear in both state diagrams (right column) and standalone method diagrams. `_drawio_to_canonical_*` uses the same ID pattern to read them back from either file type.
 
 The domain portion is always lowercased. IDs are used as the primary key by `_drawio_to_canonical_*` and `sync_from_drawio` to identify elements without relying on label text.
 
