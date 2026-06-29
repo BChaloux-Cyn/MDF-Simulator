@@ -407,6 +407,37 @@ Method bodies follow the same pycca syntax as entry actions and
 transition actions. They can be defined inline in `class-diagram.yaml`
 or in a separate `class-methods.yaml` file.
 
+**Virtual and abstract methods** — set `virtual: true` on a method to
+mark it as part of an inheritance contract:
+
+- **Virtual** (`virtual: true` + `action` present) — provides a default
+  implementation that subclasses may override. Rendered italic with a
+  `{virtual}` prefix in diagrams.
+- **Abstract** (`virtual: true`, no `action`) — declares an interface
+  obligation with no implementation. Subclasses must provide the body.
+  Rendered italic with an `{abstract}` prefix. Any class containing an
+  abstract method is automatically annotated `<<entity, abstract>>` or
+  `<<active, abstract>>` in the class diagram.
+
+```yaml
+methods:
+  - name: Execute        # abstract — no action, must be overridden
+    virtual: true
+    return: Integer
+
+  - name: Validate       # virtual — default body, may be overridden
+    virtual: true
+    return: Boolean
+    action: "return 1;"
+
+  - name: Init           # concrete — normal method
+    action: "self.count = 0;"
+```
+
+Calling virtual and abstract methods uses the same syntax as any other
+method call — `virtual: true` is a documentation/diagram annotation only
+and does not affect the pycca call syntax.
+
 ---
 
 ### 2.9 Control Flow

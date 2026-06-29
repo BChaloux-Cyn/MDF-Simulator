@@ -1015,6 +1015,62 @@ The compiler validates:
 - `rcvd_evt` is not referenced inside method bodies
 - Method parameters and return types match at call sites
 
+### 11.6 Virtual and Abstract Methods
+
+The `virtual: bool` field (default `false`) annotates a method as part
+of an inheritance contract. It is a documentation and diagram annotation
+— it does not affect pycca compilation or runtime dispatch.
+
+**Virtual method** — `virtual: true` with an `action` body. Provides a
+default implementation that a subclass may override.
+
+```yaml
+methods:
+  - name: Validate
+    virtual: true
+    return: Boolean
+    action: "return 1;"
+```
+
+**Abstract method** — `virtual: true` with no `action`. Declares an
+interface obligation; the implementation must be provided by a subclass.
+
+```yaml
+methods:
+  - name: Execute
+    virtual: true
+    return: Integer
+    # no action — abstract
+```
+
+**Abstract class stereotype** — derived automatically at build time. A
+class that contains at least one abstract method (virtual with no action)
+gets a compound stereotype in the canonical form and in Draw.io output:
+
+| YAML `stereotype` | Has abstract method? | Compiled stereotype |
+|-------------------|----------------------|---------------------|
+| `entity`          | no                   | `entity`            |
+| `entity`          | yes                  | `entity, abstract`  |
+| `active`          | no                   | `active`            |
+| `active`          | yes                  | `active, abstract`  |
+
+The compound stereotype is never stored in the YAML — it is always
+derived from the method list. A class with only virtual (non-abstract)
+methods retains its original stereotype unchanged.
+
+**Draw.io rendering:**
+
+| Method kind       | Label format                               |
+|-------------------|--------------------------------------------|
+| Concrete          | `+ MethodName()`                           |
+| Virtual with body | `+ <i>{virtual} MethodName()</i>`          |
+| Abstract (no body)| `+ <i>{abstract} MethodName()</i>`         |
+| Abstract, class-scope | `+ <u><i>{abstract} MethodName()</i></u>` |
+
+Class swimlane headers reflect the derived stereotype:
+`<<entity, abstract>>\nClassName` or `<<active, abstract>>\nClassName`.
+Active abstract classes retain the green (`STYLE_CLASS_ACTIVE`) fill.
+
 ---
 
 ## 12. Enum and Type Resolution
