@@ -414,3 +414,40 @@ def test_identifier_rejects_invalid(input_val):
     from schema.yaml_schema import Attribute
     with pytest.raises(ValidationError):
         Attribute(name="x", type="UniqueID", identifier=input_val)
+
+
+# ---------------------------------------------------------------------------
+# Test 13: Method.virtual field defaults and explicit values
+# ---------------------------------------------------------------------------
+
+def test_method_virtual_defaults_false():
+    """Method.virtual defaults to False when not specified."""
+    from schema.yaml_schema import Method
+    m = Method.model_validate({"name": "Foo"})
+    assert m.virtual is False
+
+
+def test_method_virtual_true():
+    """Method.virtual accepts True value when specified."""
+    from schema.yaml_schema import Method
+    m = Method.model_validate({"name": "Foo", "virtual": True})
+    assert m.virtual is True
+
+
+def test_method_virtual_parsed_in_class_diagram():
+    """ClassDiagramFile parses virtual field on methods."""
+    cd = ClassDiagramFile.model_validate({
+        "schema_version": "1.0.0",
+        "domain": "Test",
+        "classes": [{
+            "name": "Base",
+            "stereotype": "entity",
+            "methods": [
+                {"name": "Execute", "virtual": True},
+                {"name": "Init"},
+            ],
+        }],
+    })
+    methods = cd.classes[0].methods
+    assert methods[0].virtual is True
+    assert methods[1].virtual is False

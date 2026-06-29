@@ -172,6 +172,7 @@ class Method(BaseModel):
     name: str
     visibility: Literal["public", "private"] = "private"
     scope: Literal["instance", "class"] = "instance"
+    virtual: bool = False
     params: list[MethodParam] = []
     return_type: str | None = Field(default=None, alias="return")
     action: str | None = None
