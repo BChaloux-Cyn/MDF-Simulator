@@ -260,8 +260,23 @@ class Transition(BaseModel):
 
     from_state: str = Field(alias="from")
     to: str
-    event: str
+    event: str | None = None
     guard: str | None = None
+
+    @model_validator(mode="after")
+    def check_event_for_target(self) -> "Transition":
+        if self.to == "__terminal__":
+            if self.event is not None:
+                raise ValueError(
+                    "Transitions to '__terminal__' must not have an event — "
+                    "the state proceeds automatically on completion"
+                )
+        else:
+            if self.event is None:
+                raise ValueError(
+                    f"Transitions to '{self.to}' require an event"
+                )
+        return self
 
 
 class StateDiagramFile(SchemaVersionMixin):
@@ -276,7 +291,7 @@ class StateDiagramFile(SchemaVersionMixin):
 
     @model_validator(mode="after")
     def check_guard_consistency(self) -> "StateDiagramFile":
-        key = lambda t: (t.from_state, t.event)  # noqa: E731
+        key = lambda t: (t.from_state, t.event or "")  # noqa: E731
         for (from_state, event), group in groupby(
             sorted(self.transitions, key=key), key=key
         ):

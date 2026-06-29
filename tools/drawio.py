@@ -1218,13 +1218,35 @@ def _drawio_to_canonical_state(drawio_path: Path) -> str | None:
     for cell in cells:
         cid = cell.get("id", "")
         parts = cid.split(":")
-        # Transition IDs: lowerdomain:trans:ClassName:FromState:Event:idx
+        # Transition IDs: lowerdomain:trans:ClassName:FromState:Event|__completion__:idx
         if len(parts) != 6 or parts[1] != "trans":
             continue
         if parts[3] == "__initial__":
             continue
 
         from_state_name = parts[3]
+        event_part = parts[4]
+
+        # Get to_state from target cell ID
+        target_id = cell.get("target", "")
+        target_parts = target_id.split(":")
+        if len(target_parts) != 4 or target_parts[1] != "state":
+            continue
+        to_state_name = target_parts[3]
+
+        if event_part == "__completion__":
+            # Completion transition to __terminal__ — no event, no label to parse
+            transitions.append(
+                CanonicalTransition(
+                    from_state=from_state_name,
+                    to=to_state_name,
+                    event=None,
+                    params=None,
+                    guard=None,
+                )
+            )
+            continue
+
         value = cell.get("value", "")
 
         # Label format: {trans_id}<br>{event_line}[<br>[{guard}]]
@@ -1249,13 +1271,6 @@ def _drawio_to_canonical_state(drawio_path: Path) -> str | None:
         if gm:
             guard = gm.group(1)
 
-        # Get to_state from target cell ID
-        target_id = cell.get("target", "")
-        target_parts = target_id.split(":")
-        if len(target_parts) != 4 or target_parts[1] != "state":
-            continue
-        to_state_name = target_parts[3]
-
         transitions.append(
             CanonicalTransition(
                 from_state=from_state_name,
@@ -1265,7 +1280,7 @@ def _drawio_to_canonical_state(drawio_path: Path) -> str | None:
                 guard=guard,
             )
         )
-    transitions.sort(key=lambda t: (t.from_state, t.event, t.to))
+    transitions.sort(key=lambda t: (t.from_state, t.event or "", t.to))
 
     from schema.drawio_canonical import CanonicalMethod
 
@@ -2081,16 +2096,20 @@ def _build_state_diagram_xml(
         src_sid = state_id(domain, class_name, trans.from_state)
         tgt_sid = state_id(domain, class_name, trans.to)
 
-        # Build label: {trans_id}<br>{event}({params})[<br>[{guard}]]
-        event_def = event_map.get(trans.event)
-        if event_def and event_def.params:
-            param_sig = ", ".join(f"{p.name}: {p.type}" for p in event_def.params)
-            event_line = f"{trans.event}({param_sig})"
+        # Build label: completion transitions (to __terminal__) carry no label;
+        # event-triggered transitions: {trans_id}<br>{event}({params})[<br>[{guard}]]
+        if trans.event is None:
+            label = ""
         else:
-            event_line = f"{trans.event}()"
-        label = f"{tid}<br>{event_line}"
-        if trans.guard is not None:
-            label += f"<br>[{trans.guard}]"
+            event_def = event_map.get(trans.event)
+            if event_def and event_def.params:
+                param_sig = ", ".join(f"{p.name}: {p.type}" for p in event_def.params)
+                event_line = f"{trans.event}({param_sig})"
+            else:
+                event_line = f"{trans.event}()"
+            label = f"{tid}<br>{event_line}"
+            if trans.guard is not None:
+                label += f"<br>[{trans.guard}]"
 
         edge_idx = trans_edge_idx[idx]
         src_v = state_name_to_idx.get(trans.from_state)
@@ -2513,19 +2532,22 @@ def _strip_html(text: str) -> str:
     )
 
 
-def _parse_trans_label(label: str) -> tuple[str, str | None]:
-    """Return (event_name, guard_or_None) from a multi-line transition label.
+def _parse_trans_label(label: str) -> tuple[str | None, str | None]:
+    """Return (event_name_or_None, guard_or_None) from a multi-line transition label.
 
     Label format (from render_to_drawio_state):
         {trans_id}<br>{event}({params})<br>[{guard}]
+    Completion transitions (to __terminal__) have an empty label — returns (None, None).
     Lines are split on '<br>' and HTML-stripped.
     Line 0: canonical ID (skip)
-    Line 1: event signature
+    Line 1: event signature (absent for completion transitions)
     Line 2+ (optional, starts with '['): guard
     """
     lines = [_strip_html(part).strip() for part in label.split("<br>")]
     lines = [l for l in lines if l]  # remove blanks
-    event_line = lines[1] if len(lines) > 1 else (lines[0] if lines else "")
+    if len(lines) < 2:
+        return None, None  # completion transition — no event line
+    event_line = lines[1]
     event_name = event_line.split("(")[0].strip()
     guard = None
     for line in lines[2:]:
@@ -2656,11 +2678,11 @@ def sync_from_drawio(domain: str, class_name: str, xml: bytes | str) -> list[dic
     existing_transitions: list[dict] = list(sd_data.get("transitions") or [])
 
     # Build a mapping from canonical trans ID -> existing transition dict
-    # (trans IDs: domain:trans:ClassName:from_state:event:idx)
+    # (trans IDs: domain:trans:ClassName:from_state:event|__completion__:idx)
     existing_trans_by_id: dict[str, dict] = {}
     for idx, t in enumerate(existing_transitions):
         from_state = t.get("from", "")
-        event = t.get("event", "")
+        event = t.get("event") or None  # None for completion transitions (to __terminal__)
         tid = transition_id(domain, class_name, from_state, event, idx)
         existing_trans_by_id[tid] = t
 
@@ -2718,8 +2740,8 @@ def sync_from_drawio(domain: str, class_name: str, xml: bytes | str) -> list[dic
             state_name = parts[3]
             if state_class != class_name:
                 continue
-            if state_name == "__initial__":
-                continue  # pseudostate — not synced
+            if state_name in ("__initial__", "__terminal__"):
+                continue  # pseudostates — not synced
             drawio_state_names.add(state_name)
             if state_name not in existing_states:
                 new_states.append(state_name)
@@ -2738,23 +2760,29 @@ def sync_from_drawio(domain: str, class_name: str, xml: bytes | str) -> list[dic
             drawio_trans_ids.add(cell_id)
 
             if cell_id not in existing_trans_by_id:
-                # New transition — parse label
-                label = cell.get("value", "")
-                event_name, guard = _parse_trans_label(label) if label else ("", None)
-
-                # Resolve source and target state names from cell attributes
+                # New transition — determine type from cell ID
                 source_cell_id = cell.get("source", "")
                 target_cell_id = cell.get("target", "")
                 from_state_name = state_id_to_name.get(source_cell_id, from_state_name_raw)
-                to_state_name = state_id_to_name.get(target_cell_id, parts[4] if len(parts) > 4 else "")
 
-                new_transitions.append({
-                    "from": from_state_name,
-                    "to": to_state_name,
-                    "event": event_name or parts[4],
-                    "guard": guard,
-                    "action": None,
-                })
+                if parts[4] == "__completion__":
+                    # Completion transition to __terminal__ — no event
+                    new_transitions.append({
+                        "from": from_state_name,
+                        "to": "__terminal__",
+                    })
+                else:
+                    # Event-triggered transition — parse label
+                    label = cell.get("value", "")
+                    event_name, guard = _parse_trans_label(label) if label else (None, None)
+                    to_state_name = state_id_to_name.get(target_cell_id, parts[4] if len(parts) > 4 else "")
+                    new_transitions.append({
+                        "from": from_state_name,
+                        "to": to_state_name,
+                        "event": event_name or parts[4],
+                        "guard": guard,
+                        "action": None,
+                    })
 
         # Skip: attr, sep, attrs, methods, assoc, class, initial_pseudo, bridge
         # (class-diagram sync is out of scope for this per-class function)
@@ -2788,8 +2816,9 @@ def sync_from_drawio(domain: str, class_name: str, xml: bytes | str) -> list[dic
         sd_data["transitions"] = []
     for t in new_transitions:
         sd_data["transitions"].append(t)
+        event_label = f"'{t['event']}'" if t.get("event") else "completion"
         issues.append(_make_issue(
-            f"New transition '{t['event']}' from '{t['from']}' to '{t['to']}' added",
+            f"New {event_label} transition from '{t['from']}' to '{t['to']}' added",
             location=f"state-diagrams/{class_name}.yaml",
             severity="info",
         ))

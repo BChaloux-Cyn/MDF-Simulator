@@ -2,6 +2,7 @@
 import yaml
 import pytest
 from pathlib import Path
+from pydantic import ValidationError
 from schema.yaml_schema import StateDiagramFile
 from tools import validation
 
@@ -19,7 +20,6 @@ def _make_sd(transitions_extra: list[dict]) -> StateDiagramFile:
         "initial_state": "Active",
         "events": [
             {"name": "Shutdown"},
-            {"name": "Done"},
             {"name": "Bad"},
         ],
         "states": [
@@ -35,9 +35,6 @@ def _make_sd(transitions_extra: list[dict]) -> StateDiagramFile:
 
 def _issues(sd: StateDiagramFile) -> list[dict]:
     """Run full validation and return all issues."""
-    import importlib, sys
-    # Patch the model root so validate_domain can find our in-memory object
-    # instead, call the internal checkers directly
     from tools.validation import (
         _check_referential_integrity_state_diagram,
         _check_reachability,
@@ -66,11 +63,41 @@ def test_to_initial_is_validation_error():
         f"Expected '__initial__ as target' error, got: {issues}"
 
 
-def test_to_terminal_is_not_a_validation_error():
-    sd = _make_sd([{"from": "Closing", "to": "__terminal__", "event": "Done"}])
+def test_to_terminal_no_event_is_valid():
+    sd = _make_sd([{"from": "Closing", "to": "__terminal__"}])
     issues = _issues(sd)
     ref_issues = [i for i in issues if "__terminal__" in i.get("issue", "") and "unknown" in i.get("issue", "")]
     assert not ref_issues, f"__terminal__ should be a valid transition target, got: {ref_issues}"
+
+
+def test_terminal_transition_with_event_is_schema_error():
+    """Transitions to __terminal__ must not carry an event."""
+    data = {
+        "schema_version": "1.0.0",
+        "domain": "Terminal",
+        "class": "Widget",
+        "initial_state": "Active",
+        "events": [{"name": "Done"}],
+        "states": [{"name": "Active"}],
+        "transitions": [{"from": "Active", "to": "__terminal__", "event": "Done"}],
+    }
+    with pytest.raises(ValidationError, match="must not have an event"):
+        StateDiagramFile(**data)
+
+
+def test_non_terminal_transition_without_event_is_schema_error():
+    """Transitions to normal states must have an event."""
+    data = {
+        "schema_version": "1.0.0",
+        "domain": "Terminal",
+        "class": "Widget",
+        "initial_state": "Active",
+        "events": [],
+        "states": [{"name": "Active"}, {"name": "Idle"}],
+        "transitions": [{"from": "Active", "to": "Idle"}],
+    }
+    with pytest.raises(ValidationError, match="require an event"):
+        StateDiagramFile(**data)
 
 
 # ---------------------------------------------------------------------------
@@ -139,16 +166,29 @@ def test_regular_states_still_use_state_style(terminal_diagram_xml):
         )
 
 
-def test_transition_to_terminal_targets_pseudostate_cell(terminal_diagram_xml):
+def test_completion_transition_to_terminal_has_no_label(terminal_diagram_xml):
     root = lxml_etree.fromstring(terminal_diagram_xml)
-    # Find the Closing --Done--> __terminal__ transition edge
-    done_edges = [
+    completion_edges = [
         el for el in root.iter("mxCell")
         if el.get("edge") == "1"
-        and ":trans:Widget:Closing:Done:" in (el.get("id") or "")
+        and ":trans:Widget:Closing:__completion__:" in (el.get("id") or "")
     ]
-    assert done_edges, "No edge found for Closing --Done--> __terminal__"
-    for edge in done_edges:
+    assert completion_edges, "No edge found for Closing --completion--> __terminal__"
+    for edge in completion_edges:
+        assert edge.get("value") == "", (
+            f"Completion transition edge should have empty label, got {edge.get('value')!r}"
+        )
+
+
+def test_transition_to_terminal_targets_pseudostate_cell(terminal_diagram_xml):
+    root = lxml_etree.fromstring(terminal_diagram_xml)
+    completion_edges = [
+        el for el in root.iter("mxCell")
+        if el.get("edge") == "1"
+        and ":trans:Widget:Closing:__completion__:" in (el.get("id") or "")
+    ]
+    assert completion_edges, "No edge found for Closing --completion--> __terminal__"
+    for edge in completion_edges:
         assert edge.get("target") == TERM_CELL_ID, (
             f"Edge target should be '{TERM_CELL_ID}', got {edge.get('target')!r}"
         )
@@ -171,14 +211,13 @@ def test_no_terminal_transitions_no_terminal_cell():
 
 
 def test_canonical_parse_skips_terminal_cell(tmp_path):
-    """Round-trip: rendered terminal diagram → canonical parse excludes __terminal__."""
+    """Round-trip: rendered terminal diagram → canonical parse excludes __terminal__ from states."""
     import json
     from tools.drawio import _build_state_diagram_xml, _drawio_to_canonical_state
 
     sd = _load_sd_fixture()
     xml_bytes = _build_state_diagram_xml(DOMAIN, sd)
 
-    # Write to temp file and parse back
     out_file = tmp_path / "terminal.drawio"
     out_file.write_bytes(xml_bytes)
 
@@ -189,6 +228,5 @@ def test_canonical_parse_skips_terminal_cell(tmp_path):
     assert "__terminal__" not in state_names, (
         f"__terminal__ should be excluded from canonical states, got: {state_names}"
     )
-    # Real states are still present
     assert "Active" in state_names
     assert "Closing" in state_names

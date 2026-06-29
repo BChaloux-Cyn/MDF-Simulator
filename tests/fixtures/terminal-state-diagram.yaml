@@ -4,7 +4,6 @@ class: Widget
 initial_state: Active
 events:
   - name: Shutdown
-  - name: Done
 states:
   - name: Active
   - name: Closing
@@ -15,4 +14,3 @@ transitions:
     event: Shutdown
   - from: Closing
     to: __terminal__
-    event: Done

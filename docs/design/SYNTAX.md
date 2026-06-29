@@ -1072,19 +1072,24 @@ transition from it to that state.
 ### `__terminal__`
 
 A reserved transition destination that ends the object instance lifecycle.
+The transition is a *completion transition* — it carries no event and fires
+automatically when the source state's entry action finishes executing.
 
 ```yaml
 transitions:
   - from: Closing
     to: __terminal__
-    event: Done
 ```
 
-- **Effect:** The runtime immediately deletes the object instance. No
-  action body executes on entry.
-- **Entry action:** Not supported and not rendered. Any cleanup (attribute
-  zeroing, relationship unlinking, cross-domain notifications) must be
-  performed in a preceding normal state with an entry action.
+- **No event:** The `event:` field must be omitted. Specifying an event on a
+  transition to `__terminal__` is a schema error.
+- **Effect:** After the source state's entry action completes, the runtime
+  immediately deletes the object instance.
+- **Rendering:** The Draw.io arrow carries no label (like the initial
+  transition from `__initial__`).
+- **Entry action:** Not supported and not rendered on `__terminal__` itself.
+  Any cleanup (attribute zeroing, relationship unlinking, cross-domain
+  notifications) must be performed in the preceding state's entry action.
 - **Outgoing transitions:** None. `__terminal__` is a sink. A transition
   `from: __terminal__` is a validation error.
 - **Incoming transitions:** Any number of transitions from any state may

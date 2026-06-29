@@ -454,7 +454,7 @@ def _check_referential_integrity_state_diagram(
                 value="__initial__",
                 fix="'__initial__' is a source pseudostate — it cannot be the target of a transition",
             ))
-        if t.event not in event_names:
+        if t.event is not None and t.event not in event_names:
             issues.append(_make_issue(
                 issue=f"Transition from '{t.from_state}' references unknown event '{t.event}'",
                 location=f"{loc_sd}::transitions[{i}].event",

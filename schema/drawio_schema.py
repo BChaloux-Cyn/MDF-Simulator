@@ -161,13 +161,15 @@ def state_id(domain: str, class_name: str, state_name: str) -> str:
 
 
 def transition_id(
-    domain: str, class_name: str, from_state: str, event: str, idx: int
+    domain: str, class_name: str, from_state: str, event: str | None, idx: int
 ) -> str:
     """Return deterministic mxCell ID for a transition element.
 
     idx disambiguates multiple transitions on the same (from_state, event) pair.
+    Completion transitions (to __terminal__, no event) use __completion__ as the event part.
     """
-    return f"{domain.lower()}:trans:{class_name}:{from_state}:{event}:{idx}"
+    event_part = event if event is not None else "__completion__"
+    return f"{domain.lower()}:trans:{class_name}:{from_state}:{event_part}:{idx}"
 
 
 def bridge_impl_id(domain: str, to_domain: str, impl_name: str) -> str:

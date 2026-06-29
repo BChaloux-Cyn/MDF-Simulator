@@ -129,7 +129,7 @@ def yaml_to_canonical_state(
 
     canonical_transitions: list[CanonicalTransition] = []
     for trans in sd.transitions:
-        event_def = event_map.get(trans.event)
+        event_def = event_map.get(trans.event) if trans.event else None
         if event_def and event_def.params:
             params = ", ".join(f"{p.name}: {p.type}" for p in event_def.params)
         else:
@@ -143,7 +143,7 @@ def yaml_to_canonical_state(
                 guard=trans.guard,
             )
         )
-    canonical_transitions.sort(key=lambda t: (t.from_state, t.event, t.to))
+    canonical_transitions.sort(key=lambda t: (t.from_state, t.event or "", t.to))
 
     methods: list[CanonicalMethod] = []
     if class_def is not None:

@@ -46,7 +46,7 @@ class CanonicalTransition(BaseModel):
 
     from_state: str = Field(alias="from")
     to: str
-    event: str
+    event: str | None
     params: str | None
     guard: str | None
 
