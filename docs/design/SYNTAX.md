@@ -1059,12 +1059,19 @@ duration_s, duration_ms, in_s, in_ms
 State diagrams use two reserved pseudostate keywords. Neither is a real
 state — they require no entry in the `states:` list.
 
+The arrows into and out of these pseudostates are the **only unlabeled
+arrows** in a state diagram. All other transitions must carry an event name.
+
 ### `__initial__`
 
 The implicit source of the first transition. The `initial_state:` field in
 the state-diagram YAML names the first real state; the Draw.io renderer
-automatically emits the filled-circle initial pseudostate and routes a
-transition from it to that state.
+automatically emits the filled-circle initial pseudostate and routes an
+unlabeled arrow from it to that state.
+
+The initial state acts as the object's **constructor**: its entry action
+is responsible for initializing attributes, establishing relationships, and
+performing any setup required before the object participates in the model.
 
 - Cannot be the **target** of any transition.
 - Never appears in the `states:` list.
@@ -1073,7 +1080,8 @@ transition from it to that state.
 
 A reserved transition destination that ends the object instance lifecycle.
 The transition is a *completion transition* — it carries no event and fires
-automatically when the source state's entry action finishes executing.
+automatically when the source state's entry action finishes executing. The
+Draw.io arrow is unlabeled.
 
 ```yaml
 transitions:
@@ -1081,21 +1089,41 @@ transitions:
     to: __terminal__
 ```
 
+The state immediately preceding `__terminal__` acts as the object's
+**destructor**: its entry action is responsible for zeroing referential
+attributes, unlinking relationships, and issuing any cross-domain
+notifications before the instance is deleted.
+
 - **No event:** The `event:` field must be omitted. Specifying an event on a
   transition to `__terminal__` is a schema error.
-- **Effect:** After the source state's entry action completes, the runtime
+- **Effect:** After the destructor state's entry action completes, the runtime
   immediately deletes the object instance.
-- **Rendering:** The Draw.io arrow carries no label (like the initial
-  transition from `__initial__`).
 - **Entry action:** Not supported and not rendered on `__terminal__` itself.
-  Any cleanup (attribute zeroing, relationship unlinking, cross-domain
-  notifications) must be performed in the preceding state's entry action.
+  All cleanup must be performed in the preceding (destructor) state's entry action.
 - **Outgoing transitions:** None. `__terminal__` is a sink. A transition
   `from: __terminal__` is a validation error.
 - **Incoming transitions:** Any number of transitions from any state may
   target `__terminal__`. All route to a single UML terminate pseudostate
   cell (circle with X) in the Draw.io diagram.
 - Never appears in the `states:` list.
+
+#### Prefer destructor states over raw `delete`
+
+Not every class requires a destructor state — simple objects with no
+relationships or cross-domain dependencies may be deleted directly. However,
+when a class **does** have a destructor state, always prefer driving the
+object through its lifecycle over calling `delete` directly:
+
+```
+// Preferred — drives the object through its destructor state
+generate Shutdown() to target;
+
+// Only acceptable when the class has no destructor state
+delete target;
+```
+
+Generating the event lets the destructor state run its cleanup entry action
+before the instance is removed. A raw `delete` bypasses that cleanup entirely.
 
 ---
 
