@@ -2361,6 +2361,24 @@ def render_to_drawio(domain: str, *, force: bool = False) -> list[dict]:
     # Render state diagram for each active class
     for cls in cd.classes:
         if cls.stereotype == "active":
+            # If this class specializes a supertype and has no own state diagram,
+            # check whether the supertype owns a state diagram. If so, the subtype
+            # inherits that state machine — skip without emitting a warning.
+            if cls.specializes is not None:
+                state_yaml = domain_path / "state-diagrams" / f"{cls.name}.yaml"
+                if not state_yaml.exists():
+                    supertype = next(
+                        (
+                            c for c in cd.classes
+                            if c.partitions
+                            and any(p.name == cls.specializes for p in c.partitions)
+                        ),
+                        None,
+                    )
+                    if supertype is not None:
+                        supertype_yaml = domain_path / "state-diagrams" / f"{supertype.name}.yaml"
+                        if supertype_yaml.exists():
+                            continue
             state_results = render_to_drawio_state(domain, cls.name, force=force)
             results.extend(state_results)
 
