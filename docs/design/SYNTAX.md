@@ -1109,21 +1109,33 @@ notifications before the instance is deleted.
 
 #### Prefer destructor states over raw `delete`
 
-Not every class requires a destructor state — simple objects with no
-relationships or cross-domain dependencies may be deleted directly. However,
-when a class **does** have a destructor state, always prefer driving the
-object through its lifecycle over calling `delete` directly:
+Not every class requires a destructor state. A class may also have states
+that are intentionally final — states with no outgoing transitions and no
+path to `__terminal__` — where `delete` called from external action code is
+the correct removal mechanism. A single class can have both: a destructor
+path for the normal lifecycle and one or more dead-end states where direct
+deletion is appropriate.
+
+The rule is determined by what is reachable from the object's **current state**:
+
+- If the object has a reachable path to `__terminal__` from its current
+  state, generate the event that starts that path. Let the destructor state
+  run its cleanup before the instance is removed.
+- If the object is in a state with no path to `__terminal__`, `delete` is
+  appropriate — there is no destructor to invoke.
 
 ```
-// Preferred — drives the object through its destructor state
+// Object has a path to __terminal__ from its current state —
+// drive it through the destructor
 generate Shutdown() to target;
 
-// Only acceptable when the class has no destructor state
+// Object is in a dead-end state with no path to __terminal__ —
+// direct deletion is correct
 delete target;
 ```
 
-Generating the event lets the destructor state run its cleanup entry action
-before the instance is removed. A raw `delete` bypasses that cleanup entirely.
+A raw `delete` on an object that still has a reachable destructor path
+bypasses that cleanup entirely and should be avoided.
 
 ---
 
