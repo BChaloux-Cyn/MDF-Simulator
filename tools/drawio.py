@@ -69,7 +69,7 @@ LABEL_OFFSET_Y = "-15"    # edge-label y: pixels above the line
 LABEL_PERP_OFFSET = 5     # px perpendicular from edge to label vertex (mult/phrase on opposite sides)
 PHRASE_TARGET_RATIO = 2.0 # target width:height ratio for action phrase wrapping
 
-IMPL_BOX_W = 400          # width of bridge impl / method boxes
+IMPL_BOX_W = 480          # width of bridge impl / method boxes
 IMPL_BOX_HEADER_H = 30    # header height for impl boxes
 IMPL_BOX_GAP = 20         # vertical gap between stacked impl boxes
 IMPL_COL_OFFSET = 60      # horizontal gap from right edge of main content
@@ -192,7 +192,7 @@ def _state_width(state_name: str, entry_action: str | None) -> int:
     if entry_action:
         lines += entry_action.split('\n')
     max_chars = max(len(line) for line in lines)
-    return max(STATE_W, int(max_chars * _STATE_CHARS_PER_PX))
+    return max(STATE_W, int(max_chars * _STATE_CHARS_PER_PX) + 2 * _STATE_PAD_X)
 
 
 def _assign_edge_ports(

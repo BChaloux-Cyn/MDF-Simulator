@@ -1097,3 +1097,25 @@ def test_non_abstract_class_stereotype_unchanged():
     root = _parse_xml(xml)
     cls_cell = _get_cell(root, "test:class:Concrete")
     assert cls_cell.get("value") == "<<entity>>\nConcrete"
+
+
+# --- width fixes ---
+
+def test_state_width_includes_padding():
+    from tools.drawio import _state_width, _STATE_PAD_X, STATE_W
+    # A name short enough that char-based estimate + padding still exceeds STATE_W
+    name = "X" * 30  # 30 chars * 7.2 = 216px + 20 padding = 236
+    width = _state_width(name, None)
+    expected = int(30 * 7.2) + 2 * _STATE_PAD_X
+    assert width == max(STATE_W, expected)
+
+def test_state_width_uses_longest_action_line():
+    from tools.drawio import _state_width, _STATE_PAD_X, STATE_W
+    action = "short\n" + "X" * 40  # longest line is 40 chars
+    width = _state_width("S", action)
+    expected = int(40 * 7.2) + 2 * _STATE_PAD_X
+    assert width == max(STATE_W, expected)
+
+def test_impl_box_width_constant():
+    from tools.drawio import IMPL_BOX_W
+    assert IMPL_BOX_W == 480
