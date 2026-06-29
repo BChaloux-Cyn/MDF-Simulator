@@ -1,5 +1,5 @@
 import json
-from schema.canonical_builder import yaml_to_canonical_class, yaml_to_canonical_state
+from schema.canonical_builder import _method_label, yaml_to_canonical_class, yaml_to_canonical_state
 from schema.yaml_schema import (
     ClassDiagramFile, StateDiagramFile, ClassDef, Method, MethodParam,
     ProvidedBridge, BridgeImplementation,
@@ -97,3 +97,82 @@ def test_canonical_state_json_includes_methods():
     s = yaml_to_canonical_state_json("Test", sd, class_def=cls)
     data = json.loads(s)
     assert len(data["methods"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# _method_label tests
+# ---------------------------------------------------------------------------
+
+def _params(*pairs):
+    return [MethodParam(name=n, type=t) for n, t in pairs]
+
+
+def test_method_label_concrete():
+    label = _method_label("public", "instance", "Init", [], None, virtual=False, action=None)
+    assert label == "+ Init()"
+
+
+def test_method_label_virtual_with_body():
+    label = _method_label("public", "instance", "Validate", [], "Boolean", virtual=True, action="return true;")
+    assert label == "+ <i>{virtual} Validate(): Boolean</i>"
+
+
+def test_method_label_abstract_no_body():
+    label = _method_label("public", "instance", "Execute", [], "Integer", virtual=True, action=None)
+    assert label == "+ <i>{abstract} Execute(): Integer</i>"
+
+
+def test_method_label_abstract_class_scope():
+    label = _method_label("private", "class", "Reset", [], None, virtual=True, action=None)
+    assert label == "- <u><i>{abstract} Reset()</i></u>"
+
+
+def test_method_label_abstract_with_params():
+    label = _method_label("public", "instance", "Compute", _params(("n", "Integer")), "Real", virtual=True, action=None)
+    assert label == "+ <i>{abstract} Compute(n: Integer): Real</i>"
+
+
+# ---------------------------------------------------------------------------
+# class stereotype derivation tests
+# ---------------------------------------------------------------------------
+
+def _cd_with_methods(stereotype, methods_raw):
+    return ClassDiagramFile.model_validate({
+        "schema_version": "1.0.0",
+        "domain": "Test",
+        "classes": [{"name": "MyClass", "stereotype": stereotype, "methods": methods_raw}],
+    })
+
+
+def test_concrete_class_stereotype_unchanged():
+    cd = _cd_with_methods("entity", [{"name": "Init", "action": "x = 0;"}])
+    result = yaml_to_canonical_class("Test", cd)
+    assert result.classes[0].stereotype == "entity"
+
+
+def test_virtual_only_class_stereotype_unchanged():
+    cd = _cd_with_methods("entity", [{"name": "Validate", "virtual": True, "action": "return true;"}])
+    result = yaml_to_canonical_class("Test", cd)
+    assert result.classes[0].stereotype == "entity"
+
+
+def test_abstract_method_marks_class_abstract():
+    cd = _cd_with_methods("entity", [{"name": "Execute", "virtual": True}])
+    result = yaml_to_canonical_class("Test", cd)
+    assert result.classes[0].stereotype == "entity, abstract"
+
+
+def test_active_abstract_class_stereotype():
+    cd = _cd_with_methods("active", [{"name": "Execute", "virtual": True}])
+    result = yaml_to_canonical_class("Test", cd)
+    assert result.classes[0].stereotype == "active, abstract"
+
+
+def test_mixed_methods_marks_class_abstract():
+    cd = _cd_with_methods("entity", [
+        {"name": "Execute", "virtual": True},                               # abstract (no action)
+        {"name": "Validate", "virtual": True, "action": "return true;"},   # virtual
+        {"name": "Init", "action": "x = 0;"},                              # concrete
+    ])
+    result = yaml_to_canonical_class("Test", cd)
+    assert result.classes[0].stereotype == "entity, abstract"

@@ -71,12 +71,17 @@ def _method_label(
     name: str,
     params: list,
     return_type: str | None,
+    virtual: bool = False,
+    action: str | None = None,
 ) -> str:
-    """Format a UML method label. Class-scope names are HTML-underlined."""
+    """Format a UML method label. Class-scope names are underlined; virtual/abstract are italic."""
     sym = _VIS.get(vis, "-")
     param_sig = ", ".join(f"{p.name}: {_html_escape_type(p.type)}" for p in params)
     ret = f": {_html_escape_type(return_type)}" if return_type else ""
     sig = f"{name}({param_sig}){ret}"
+    if virtual:
+        tag = "{abstract}" if action is None else "{virtual}"
+        sig = f"<i>{tag} {sig}</i>"
     if scope == "class":
         sig = f"<u>{sig}</u>"
     return f"{sym} {sig}"
@@ -183,18 +188,20 @@ def yaml_to_canonical_class(
 
     canonical_classes: list[CanonicalClassEntry] = []
     for cls in sorted(cd.classes, key=lambda c: c.name):
+        is_abstract = any(m.virtual and m.action is None for m in cls.methods)
+        stereotype = f"{cls.stereotype}, abstract" if is_abstract else cls.stereotype
         attrs = [
             _attr_label(a.visibility, a.scope, a.name, a.type, a.identifier, a.referential)
             for a in cls.attributes
         ]
         methods = [
-            _method_label(m.visibility, m.scope, m.name, m.params, m.return_type)
+            _method_label(m.visibility, m.scope, m.name, m.params, m.return_type, m.virtual, m.action)
             for m in cls.methods
         ]
         canonical_classes.append(
             CanonicalClassEntry(
                 name=cls.name,
-                stereotype=cls.stereotype,
+                stereotype=stereotype,
                 specializes=cls.specializes,
                 attributes=attrs,
                 methods=methods,
