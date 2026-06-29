@@ -982,3 +982,117 @@ def test_attr_label_identifier_with_class_scope():
     """_attr_label renders identifier suffix inside underline for class scope."""
     assert _attr_label("public", "class", "count", "Int", [2]) == \
         "+ <u>count: Int {I2}</u>"
+
+
+# ---------------------------------------------------------------------------
+# Virtual / abstract method and class rendering in Draw.io XML
+# ---------------------------------------------------------------------------
+
+import re
+from lxml import etree
+from tools.drawio import _build_class_diagram_xml
+from schema.yaml_schema import ClassDiagramFile
+
+
+def _cd(classes_raw):
+    return ClassDiagramFile.model_validate({
+        "schema_version": "1.0.0",
+        "domain": "Test",
+        "classes": classes_raw,
+        "associations": [],
+    })
+
+
+def _parse_xml(xml_bytes):
+    return etree.fromstring(xml_bytes)
+
+
+def _get_cell(root, cell_id):
+    for cell in root.iter("mxCell"):
+        if cell.get("id") == cell_id:
+            return cell
+    return None
+
+
+def test_abstract_method_renders_italic():
+    cd = _cd([{
+        "name": "Base",
+        "stereotype": "entity",
+        "methods": [{"name": "Execute", "virtual": True}],
+    }])
+    xml = _build_class_diagram_xml("Test", cd)
+    root = _parse_xml(xml)
+    methods_cell = _get_cell(root, "test:class:Base:methods")
+    assert methods_cell is not None
+    value = methods_cell.get("value", "")
+    assert "<i>{abstract}" in value
+    assert "Execute()" in value
+
+
+def test_virtual_method_renders_italic():
+    cd = _cd([{
+        "name": "Base",
+        "stereotype": "entity",
+        "methods": [{"name": "Validate", "virtual": True, "action": "return true;"}],
+    }])
+    xml = _build_class_diagram_xml("Test", cd)
+    root = _parse_xml(xml)
+    methods_cell = _get_cell(root, "test:class:Base:methods")
+    value = methods_cell.get("value", "")
+    assert "<i>{virtual}" in value
+    assert "Validate()" in value
+
+
+def test_concrete_method_renders_plain():
+    cd = _cd([{
+        "name": "Base",
+        "stereotype": "entity",
+        "methods": [{"name": "Init", "action": "x = 0;"}],
+    }])
+    xml = _build_class_diagram_xml("Test", cd)
+    root = _parse_xml(xml)
+    methods_cell = _get_cell(root, "test:class:Base:methods")
+    value = methods_cell.get("value", "")
+    assert "<i>" not in value
+    assert "{abstract}" not in value
+    assert "Init()" in value
+
+
+def test_abstract_class_stereotype_label():
+    cd = _cd([{
+        "name": "Base",
+        "stereotype": "entity",
+        "methods": [{"name": "Execute", "virtual": True}],
+    }])
+    xml = _build_class_diagram_xml("Test", cd)
+    root = _parse_xml(xml)
+    cls_cell = _get_cell(root, "test:class:Base")
+    assert cls_cell is not None
+    assert cls_cell.get("value") == "<<entity, abstract>>\nBase"
+
+
+def test_abstract_active_class_gets_green_style():
+    from schema.drawio_schema import STYLE_CLASS_ACTIVE
+    cd = _cd([{
+        "name": "Worker",
+        "stereotype": "active",
+        "methods": [{"name": "Run", "virtual": True}],
+    }])
+    xml = _build_class_diagram_xml("Test", cd)
+    root = _parse_xml(xml)
+    cls_cell = _get_cell(root, "test:class:Worker")
+    assert cls_cell is not None
+    assert cls_cell.get("value") == "<<active, abstract>>\nWorker"
+    assert cls_cell.get("style") == STYLE_CLASS_ACTIVE
+
+
+def test_non_abstract_class_stereotype_unchanged():
+    cd = _cd([{
+        "name": "Concrete",
+        "stereotype": "entity",
+        "methods": [{"name": "Init", "action": "x = 0;"}],
+    }])
+    xml = _build_class_diagram_xml("Test", cd)
+    root = _parse_xml(xml)
+    cls_cell = _get_cell(root, "test:class:Concrete")
+    assert cls_cell.get("value") == "<<entity>>\nConcrete"

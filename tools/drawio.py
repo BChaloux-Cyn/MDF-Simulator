@@ -1049,7 +1049,11 @@ def _estimate_class_width(cls) -> int:
     for m in cls.methods:
         param_sig = ", ".join(f"{p.name}: {p.type}" for p in m.params)
         ret = f": {m.return_type}" if m.return_type else ""
-        lines.append(f"- {m.name}({param_sig}){ret}")
+        if m.virtual:
+            tag = "{abstract} " if m.action is None else "{virtual} "
+        else:
+            tag = ""
+        lines.append(f"- {tag}{m.name}({param_sig}){ret}")
     max_chars = max((len(l) for l in lines), default=10)
     return max(CLASS_W, int(max_chars * _LABEL_CHAR_PX + _LABEL_PAD_PX))
 
@@ -1078,12 +1082,17 @@ def _method_label(
     name: str,
     params: list,
     return_type: str | None,
+    virtual: bool = False,
+    action: str | None = None,
 ) -> str:
-    """Format a UML method label. Class-scope names are HTML-underlined."""
+    """Format a UML method label. Class-scope names are underlined; virtual/abstract are italic."""
     sym = _VIS.get(vis, "-")
     param_sig = ", ".join(f"{p.name}: {_html_escape_type(p.type)}" for p in params)
     ret = f": {_html_escape_type(return_type)}" if return_type else ""
     sig = f"{name}({param_sig}){ret}"
+    if virtual:
+        tag = "{abstract}" if action is None else "{virtual}"
+        sig = f"<i>{tag} {sig}</i>"
     if scope == "class":
         sig = f"<u>{sig}</u>"
     return f"{sym} {sig}"
@@ -1649,11 +1658,15 @@ def _build_class_diagram_xml(
         height = _class_height(len(cls.attributes), len(cls.methods))
         cid = class_id(domain, cls.name)
 
+        # Derive abstract flag from method list
+        is_abstract = any(m.virtual and m.action is None for m in cls.methods)
+        stereotype_label = f"{cls.stereotype}, abstract" if is_abstract else cls.stereotype
+
         # Swimlane cell — active classes get a distinct green fill
-        cls_style = STYLE_CLASS_ACTIVE if cls.stereotype == "active" else STYLE_CLASS
+        cls_style = STYLE_CLASS_ACTIVE if cls.stereotype.startswith("active") else STYLE_CLASS
         cls_cell = etree.SubElement(
             root_el, "mxCell",
-            id=cid, value=f"<<{cls.stereotype}>>\n{cls.name}",
+            id=cid, value=f"<<{stereotype_label}>>\n{cls.name}",
             style=cls_style, vertex="1", parent="1",
         )
         etree.SubElement(
@@ -1695,7 +1708,7 @@ def _build_class_diagram_xml(
         # Methods cell
         methods_h = max(len(cls.methods), 1) * ROW_H
         method_text = "<br>".join(
-            _method_label(m.visibility, m.scope, m.name, m.params, m.return_type)
+            _method_label(m.visibility, m.scope, m.name, m.params, m.return_type, m.virtual, m.action)
             for m in cls.methods
         ) if cls.methods else ""
         methods_cell = etree.SubElement(
