@@ -1096,6 +1096,7 @@ def test_non_abstract_class_stereotype_unchanged():
     xml = _build_class_diagram_xml("Test", cd)
     root = _parse_xml(xml)
     cls_cell = _get_cell(root, "test:class:Concrete")
+    assert cls_cell is not None
     assert cls_cell.get("value") == "<<entity>>\nConcrete"
 
 
