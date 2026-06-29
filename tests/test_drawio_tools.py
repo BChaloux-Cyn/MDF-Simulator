@@ -988,10 +988,10 @@ def test_attr_label_identifier_with_class_scope():
 # Virtual / abstract method and class rendering in Draw.io XML
 # ---------------------------------------------------------------------------
 
-import re
 from lxml import etree
 from tools.drawio import _build_class_diagram_xml
 from schema.yaml_schema import ClassDiagramFile
+from schema.drawio_schema import STYLE_CLASS_ACTIVE
 
 
 def _cd(classes_raw):
@@ -1038,6 +1038,7 @@ def test_virtual_method_renders_italic():
     xml = _build_class_diagram_xml("Test", cd)
     root = _parse_xml(xml)
     methods_cell = _get_cell(root, "test:class:Base:methods")
+    assert methods_cell is not None
     value = methods_cell.get("value", "")
     assert "<i>{virtual}" in value
     assert "Validate()" in value
@@ -1055,6 +1056,7 @@ def test_concrete_method_renders_plain():
     value = methods_cell.get("value", "")
     assert "<i>" not in value
     assert "{abstract}" not in value
+    assert "{virtual}" not in value
     assert "Init()" in value
 
 
@@ -1072,7 +1074,6 @@ def test_abstract_class_stereotype_label():
 
 
 def test_abstract_active_class_gets_green_style():
-    from schema.drawio_schema import STYLE_CLASS_ACTIVE
     cd = _cd([{
         "name": "Worker",
         "stereotype": "active",
