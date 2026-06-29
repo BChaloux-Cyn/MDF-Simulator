@@ -77,5 +77,5 @@ def test_bijection_table_has_impl_keys():
 def test_style_terminate_pseudo_nonempty():
     from schema.drawio_schema import STYLE_TERMINATE_PSEUDO
     assert STYLE_TERMINATE_PSEUDO
-    assert "mxgraph.uml.terminate" in STYLE_TERMINATE_PSEUDO
-    assert "ellipse" in STYLE_TERMINATE_PSEUDO
+    assert "sumEllipse" in STYLE_TERMINATE_PSEUDO
+    assert "ellipsePerimeter" in STYLE_TERMINATE_PSEUDO

@@ -85,9 +85,9 @@ STYLE_INITIAL_PSEUDO = (
 )
 
 STYLE_TERMINATE_PSEUDO = (
-    "ellipse;whiteSpace=wrap;html=1;aspect=fixed;"
-    "fillColor=#ffffff;strokeColor=#000000;"
-    "shape=mxgraph.uml.terminate;"
+    "shape=sumEllipse;perimeter=ellipsePerimeter;html=1;"
+    "aspect=fixed;fillColor=#ffffff;strokeColor=#000000;"
+    "backgroundOutline=1;"
 )
 
 STYLE_TRANSITION = "edgeStyle=orthogonalEdgeStyle;html=1;labelBackgroundColor=none;"
