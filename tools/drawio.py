@@ -2056,11 +2056,7 @@ def _build_state_diagram_xml(
         style=STYLE_TRANSITION + port_suffixes[0], edge="1",
         source=init_cid, target=init_target_sid, parent="1",
     )
-    geo = etree.SubElement(init_trans, "mxGeometry", attrib={"relative": "1", "as": "geometry"})
-    if edge_waypoints[0]:
-        arr = etree.SubElement(geo, "Array", attrib={"as": "points"})
-        for wx, wy in edge_waypoints[0]:
-            etree.SubElement(arr, "mxPoint", x=str(int(wx)), y=str(int(wy)))
+    etree.SubElement(init_trans, "mxGeometry", attrib={"relative": "1", "as": "geometry"})
 
     # Transition edges
     # Build event lookup map for param sigs
@@ -2087,8 +2083,6 @@ def _build_state_diagram_xml(
         src_v = state_name_to_idx.get(trans.from_state)
         tgt_v = state_name_to_idx.get(trans.to)
 
-        trans_waypoints: list[tuple[float, float]] = []
-        route_wps: list[tuple[float, float]] = []
         if src_v is not None and src_v == tgt_v:
             # Self-loop: density-aware corner + 3-point exterior path
             loop_idx = trans_self_loop_count.get(src_v, 0)
@@ -2100,10 +2094,10 @@ def _build_state_diagram_xml(
                 f"entryX={nx};entryY={ny};entryDx=0;entryDy=0;"
             )
             bx, by = positions[src_v]
-            trans_waypoints = _self_loop_waypoints(corner, bx, by, state_widths[src_v], state_heights[src_v])
+            self_loop_wps = _self_loop_waypoints(corner, bx, by, state_widths[src_v], state_heights[src_v])
         else:
             port_suffix = port_suffixes[edge_idx] if edge_idx is not None else ""
-            route_wps = edge_waypoints[edge_idx] if edge_idx is not None else []
+            self_loop_wps = []
 
         trans_cell = etree.SubElement(
             root_el, "mxCell",
@@ -2116,10 +2110,9 @@ def _build_state_diagram_xml(
             x=LABEL_OFFSET_X, y=LABEL_OFFSET_Y,
             attrib={"relative": "1", "as": "geometry"},
         )
-        all_wps = trans_waypoints if trans_waypoints else route_wps
-        if all_wps:
+        if self_loop_wps:
             arr = etree.SubElement(geo, "Array", attrib={"as": "points"})
-            for wx, wy in all_wps:
+            for wx, wy in self_loop_wps:
                 etree.SubElement(arr, "mxPoint", x=str(int(wx)), y=str(int(wy)))
 
     # Method implementation boxes
