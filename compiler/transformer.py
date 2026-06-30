@@ -240,6 +240,18 @@ class ActionTransformer(Transformer):
             return f"int({children[1]})"
         return f"{fn}({args_str})"
 
+    def generic_constructor(self, children: list[Any]) -> str:
+        # GENERIC_TYPE "(" ")" — e.g. Map<K,V>(), List<T>(), Set<T>()
+        type_token = _tok(children[0])
+        base = type_token[: type_token.index("<")]
+        if base == "List":
+            return "[]"
+        if base == "Set":
+            return "set()"
+        if base == "Map":
+            return "{}"
+        return "{}"
+
     def cardinality_expr(self, children: list[Any]) -> str:
         # Deprecated; translate to .size()
         var = _tok(children[0])
