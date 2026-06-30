@@ -710,3 +710,17 @@ class TestActionTransformerMapStmtMethods:
         result = transform_action("my_map.remove(key);", "test.yaml", 0)
         body = "\n".join(line for line in result.splitlines() if not line.startswith("#"))
         compile(body, "<test>", "exec")
+
+    def test_remove_does_not_clobber_set_semantics(self):
+        """Set.remove(x) must NOT emit pop(x, None) — that is Map-only semantics.
+
+        KNOWN FAILING: method_call_stmt dispatches 'remove' purely by name,
+        so any receiver.remove(x) now emits pop(x, None) regardless of type.
+        See issues/remove-method-collision.md
+        """
+        from compiler.transformer import transform_action
+        result = transform_action("my_set.remove(x);", "test.yaml", 0)
+        # Set.remove is valid Python — it should fall through, not become pop().
+        assert "my_set.remove(x)" in result, (
+            f"Set.remove(x) should emit my_set.remove(x), got: {result!r}"
+        )
