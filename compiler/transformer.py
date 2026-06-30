@@ -112,19 +112,21 @@ class ActionTransformer(Transformer):
     def typed_var_decl(self, children: list[Any]) -> str:
         # type_expr NAME "=" expr ";"
         # children: [type_str, NAME token, expr_str]
-        _type_str = children[0]  # noqa: F841 — type hints not emitted in body
+        from compiler.type_utils import mdf_type_to_python
+        py_type = mdf_type_to_python(_tok(children[0]))
         var = _tok(children[1])
         expr = children[2]
-        return f"{var} = {expr}"
+        return f"{var}: {py_type} = {expr}"
 
     # ------------------------------------------------------------------
     # Type expression rules (used in typed_var_decl and lambda return type)
     # ------------------------------------------------------------------
 
     def generic_type(self, children: list[Any]) -> str:
-        base = _tok(children[0])
-        args = ", ".join(_tok(c) for c in children[1:])
-        return f"{base}[{args}]"
+        # GENERIC_TYPE is a single terminal token containing the full MDF type string
+        # (e.g. "Map<String,Integer>"). Return it raw so typed_var_decl can pass it
+        # to mdf_type_to_python for conversion to the correct Python annotation.
+        return _tok(children[0])
 
     def fn_type(self, children: list[Any]) -> str:
         parts = [_tok(c) for c in children]
@@ -708,8 +710,7 @@ class ActionTransformer(Transformer):
             val = str(children[3])
             return f"{obj}[{key}] = {val}"
         if method == "remove":
-            # remove(key) → obj.pop(key, None) — silent if key absent
-            return f"{obj}.pop({args}, None)"
+            return f"_mdf_remove({obj}, {args})"
         if obj == "self":
             return f'self_dict.{method}({args})'
         return f"{obj}.{method}({args})"

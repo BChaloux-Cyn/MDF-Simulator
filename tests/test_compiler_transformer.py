@@ -395,10 +395,10 @@ class TestActionTransformerVarAssignment:
         assert "self_dict" not in result
 
     def test_typed_var_decl_int(self):
-        """int x = 5; → x = 5 (type annotation discarded in body)."""
+        """int x = 5; → x: int = 5 (annotation emitted)."""
         from compiler.transformer import transform_action
         result = transform_action("int x = 5;", "test.yaml", 0)
-        assert "x = 5" in result
+        assert "x: int = 5" in result
 
     def test_typed_var_decl_result_is_valid_python(self):
         """typed_var_decl emits syntactically valid Python."""
@@ -406,6 +406,18 @@ class TestActionTransformerVarAssignment:
         result = transform_action("int x = 5;", "test.yaml", 0)
         body = "\n".join(line for line in result.splitlines() if not line.startswith("#"))
         compile(body, "<test>", "exec")
+
+    def test_typed_var_decl_emits_annotation(self):
+        """typed_var_decl emits 'var: PythonType = expr'."""
+        from compiler.transformer import transform_action
+        result = transform_action("Integer count = 0;", "test.yaml", 0)
+        assert "count: int = 0" in result
+
+    def test_typed_var_decl_map_emits_dict_annotation(self):
+        """typed_var_decl Map<String,Integer> emits 'var: dict[str, int] = expr'."""
+        from compiler.transformer import transform_action
+        result = transform_action("Map<String,Integer> my_map = Map<String,Integer>();", "test.yaml", 0)
+        assert "my_map: dict[str, int] = {}" in result
 
 
 class TestActionTransformerExpressions:
@@ -593,7 +605,7 @@ class TestActionTransformerSelectExpr:
         from compiler.transformer import transform_action
         result = transform_action("Car c = select any from instances of Car;", "test.yaml", 0)
         assert 'ctx.select_any("Car")' in result
-        assert "c = " in result
+        assert "c: Car = " in result
 
 
 class TestActionTransformerMapExprMethods:
@@ -692,10 +704,10 @@ class TestActionTransformerMapStmtMethods:
         assert "my_map[key] = value" in result
 
     def test_remove_emits_pop(self):
-        """my_map.remove(key); → my_map.pop(key, None)."""
+        """remove statement now emits _mdf_remove dispatch helper."""
         from compiler.transformer import transform_action
         result = transform_action("my_map.remove(key);", "test.yaml", 0)
-        assert "my_map.pop(key, None)" in result
+        assert "_mdf_remove(my_map, key)" in result
 
     def test_put_emits_valid_python(self):
         """put statement emits syntactically valid Python."""
@@ -712,15 +724,12 @@ class TestActionTransformerMapStmtMethods:
         compile(body, "<test>", "exec")
 
     def test_remove_does_not_clobber_set_semantics(self):
-        """Set.remove(x) must NOT emit pop(x, None) — that is Map-only semantics.
+        """Set.remove and Map.remove both emit _mdf_remove — runtime dispatches correctly.
 
-        KNOWN FAILING: method_call_stmt dispatches 'remove' purely by name,
-        so any receiver.remove(x) now emits pop(x, None) regardless of type.
-        See issues/remove-method-collision.md
+        Fixes COMP-001: previously both emitted pop(x, None) which is wrong for Set/List.
         """
         from compiler.transformer import transform_action
         result = transform_action("my_set.remove(x);", "test.yaml", 0)
-        # Set.remove is valid Python — it should fall through, not become pop().
-        assert "my_set.remove(x)" in result, (
-            f"Set.remove(x) should emit my_set.remove(x), got: {result!r}"
+        assert "_mdf_remove(my_set, x)" in result, (
+            f"remove should emit _mdf_remove(...), got: {result!r}"
         )
