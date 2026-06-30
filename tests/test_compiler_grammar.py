@@ -204,3 +204,46 @@ def test_regression_guard_expressions(src):
     """Guard expressions (comparison operators) still parse after gap fixes."""
     from pycca.grammar import GUARD_PARSER
     GUARD_PARSER.parse(src)
+
+
+# ---------------------------------------------------------------------------
+# Generic constructors: List<T>(), Set<T>(), Map<K,V>()
+# ---------------------------------------------------------------------------
+
+def test_generic_constructor_map_parses():
+    """Map<String,Integer>() parses as an expression in a typed var decl."""
+    from pycca.grammar import STATEMENT_PARSER
+    STATEMENT_PARSER.parse("Map<String,Integer> m = Map<String,Integer>();")
+
+
+def test_generic_constructor_list_parses():
+    """List<Floor>() parses as an expression in a typed var decl."""
+    from pycca.grammar import STATEMENT_PARSER
+    STATEMENT_PARSER.parse("List<Floor> floors = List<Floor>();")
+
+
+def test_generic_constructor_set_parses():
+    """Set<Valve>() parses as an expression in a typed var decl."""
+    from pycca.grammar import STATEMENT_PARSER
+    STATEMENT_PARSER.parse("Set<Valve> valves = Set<Valve>();")
+
+
+def test_generic_constructor_map_emits_dict():
+    """Map<K,V>() compiles to {} in emitted Python."""
+    from compiler.transformer import transform_action
+    result = transform_action("Map<String,Integer> m = Map<String,Integer>();", "test.yaml", 0)
+    assert "{}" in result
+
+
+def test_generic_constructor_list_emits_list():
+    """List<T>() compiles to [] in emitted Python."""
+    from compiler.transformer import transform_action
+    result = transform_action("List<Floor> floors = List<Floor>();", "test.yaml", 0)
+    assert "[]" in result
+
+
+def test_generic_constructor_set_emits_set():
+    """Set<T>() compiles to set() in emitted Python."""
+    from compiler.transformer import transform_action
+    result = transform_action("Set<Valve> valves = Set<Valve>();", "test.yaml", 0)
+    assert "set()" in result

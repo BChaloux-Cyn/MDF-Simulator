@@ -1657,3 +1657,224 @@ bridges: []
     result = validation.validate_domain("Hydraulics")
     type_issues = [i for i in result if "unknown type" in i["issue"].lower()]
     assert type_issues == [], f"Optional<Pump> should be valid, got: {type_issues}"
+
+
+# ---------------------------------------------------------------------------
+# _split_generic_params unit tests
+# ---------------------------------------------------------------------------
+
+def test_split_generic_params_simple():
+    """Two plain names split correctly."""
+    from tools.validation import _split_generic_params
+    assert _split_generic_params("String, Integer") == ["String", "Integer"]
+
+
+def test_split_generic_params_no_spaces():
+    """No-space form splits correctly."""
+    from tools.validation import _split_generic_params
+    assert _split_generic_params("String,Integer") == ["String", "Integer"]
+
+
+def test_split_generic_params_nested_second():
+    """Nested generic as second param is kept intact."""
+    from tools.validation import _split_generic_params
+    assert _split_generic_params("String, List<Floor>") == ["String", "List<Floor>"]
+
+
+def test_split_generic_params_nested_both():
+    """Nested generics in both positions are kept intact."""
+    from tools.validation import _split_generic_params
+    assert _split_generic_params("Map<A,B>, List<C>") == ["Map<A,B>", "List<C>"]
+
+
+def test_split_generic_params_single():
+    """Single param (no comma) returns a one-element list."""
+    from tools.validation import _split_generic_params
+    assert _split_generic_params("String") == ["String"]
+
+
+# ---------------------------------------------------------------------------
+# _is_valid_type — Map<K,V> support
+# ---------------------------------------------------------------------------
+
+def test_map_primitive_primitive_valid(tmp_path, monkeypatch):
+    """Map<String, Integer> is valid — both params are scalar primitives."""
+    monkeypatch.chdir(tmp_path)
+    class_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: Pump
+    stereotype: active
+    attributes:
+      - name: pump_id
+        type: UniqueID
+        identifier: 1
+    methods:
+      - name: get_index
+        visibility: public
+        scope: instance
+        return: Map<String, Integer>
+associations: []
+bridges: []
+"""
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(class_yaml)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    type_issues = [i for i in result if "unknown type" in i["issue"].lower()]
+    assert type_issues == [], f"Map<String, Integer> should be valid, got: {type_issues}"
+
+
+def test_map_primitive_class_valid(tmp_path, monkeypatch):
+    """Map<String, Valve> is valid when Valve exists as a class."""
+    monkeypatch.chdir(tmp_path)
+    class_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: Pump
+    stereotype: active
+    attributes:
+      - name: pump_id
+        type: UniqueID
+        identifier: 1
+    methods:
+      - name: get_valve_map
+        visibility: public
+        scope: instance
+        return: Map<String, Valve>
+  - name: Valve
+    stereotype: entity
+    attributes:
+      - name: valve_id
+        type: UniqueID
+        identifier: 1
+associations: []
+bridges: []
+"""
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(class_yaml)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    type_issues = [i for i in result if "unknown type" in i["issue"].lower()]
+    assert type_issues == [], f"Map<String, Valve> should be valid, got: {type_issues}"
+
+
+def test_map_invalid_key_type(tmp_path, monkeypatch):
+    """Map<BadType, Integer> is invalid when BadType is not defined."""
+    monkeypatch.chdir(tmp_path)
+    class_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: Pump
+    stereotype: active
+    attributes:
+      - name: pump_id
+        type: UniqueID
+        identifier: 1
+    methods:
+      - name: bad_map
+        visibility: public
+        scope: instance
+        return: Map<BadType, Integer>
+associations: []
+bridges: []
+"""
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(class_yaml)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    type_issues = [i for i in result if "unknown" in i["issue"].lower()]
+    assert len(type_issues) >= 1, f"Map<BadType, Integer> should be invalid, got: {result}"
+
+
+def test_map_invalid_value_type(tmp_path, monkeypatch):
+    """Map<String, BadType> is invalid when BadType is not defined."""
+    monkeypatch.chdir(tmp_path)
+    class_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: Pump
+    stereotype: active
+    attributes:
+      - name: pump_id
+        type: UniqueID
+        identifier: 1
+    methods:
+      - name: bad_map
+        visibility: public
+        scope: instance
+        return: Map<String, BadType>
+associations: []
+bridges: []
+"""
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(class_yaml)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    type_issues = [i for i in result if "unknown" in i["issue"].lower()]
+    assert len(type_issues) >= 1, f"Map<String, BadType> should be invalid, got: {result}"
+
+
+def test_map_wrong_param_count(tmp_path, monkeypatch):
+    """Map<String> (one param) is invalid — Map requires exactly two."""
+    monkeypatch.chdir(tmp_path)
+    class_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: Pump
+    stereotype: active
+    attributes:
+      - name: pump_id
+        type: UniqueID
+        identifier: 1
+    methods:
+      - name: bad_map
+        visibility: public
+        scope: instance
+        return: Map<String>
+associations: []
+bridges: []
+"""
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(class_yaml)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    type_issues = [i for i in result if "unknown" in i["issue"].lower()]
+    assert len(type_issues) >= 1, f"Map<String> should be invalid, got: {result}"
+
+
+def test_map_as_attribute_type(tmp_path, monkeypatch):
+    """Map<String, Integer> is valid as a class attribute type."""
+    monkeypatch.chdir(tmp_path)
+    class_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+classes:
+  - name: Pump
+    stereotype: active
+    attributes:
+      - name: pump_id
+        type: UniqueID
+        identifier: 1
+      - name: settings
+        type: Map<String, Integer>
+associations: []
+bridges: []
+"""
+    model_dir = _make_model_dir(tmp_path)
+    (model_dir / "class-diagram.yaml").write_text(class_yaml)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    type_issues = [i for i in result if "unknown type" in i["issue"].lower()]
+    assert type_issues == [], f"Map<String, Integer> attribute should be valid, got: {type_issues}"

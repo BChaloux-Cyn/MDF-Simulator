@@ -152,7 +152,33 @@ def _load_domain_types(domain_path: Path) -> frozenset[str]:
 
 _BUILTIN_TYPES = frozenset({"Timestamp", "Duration"})
 _GENERIC_WRAPPERS = frozenset({"Set", "List", "Optional"})
-_MAP_WRAPPERS = frozenset({"Map"})
+_TWO_PARAM_WRAPPERS = frozenset({"Map"})
+
+
+def _split_generic_params(inner: str) -> list[str]:
+    """Split a comma-separated generic parameter string respecting bracket depth.
+
+    Examples:
+        "String, Integer"       -> ["String", "Integer"]
+        "String, List<Floor>"   -> ["String", "List<Floor>"]
+        "Map<A,B>, List<C>"     -> ["Map<A,B>", "List<C>"]
+    """
+    depth, current, result = 0, [], []
+    for c in inner:
+        if c == "<":
+            depth += 1
+            current.append(c)
+        elif c == ">":
+            depth -= 1
+            current.append(c)
+        elif c == "," and depth == 0:
+            result.append("".join(current).strip())
+            current = []
+        else:
+            current.append(c)
+    if current:
+        result.append("".join(current).strip())
+    return result
 
 
 def _is_valid_type(
@@ -171,9 +197,8 @@ def _is_valid_type(
         inner = type_str[type_str.index("<") + 1 : -1]
         if wrapper in _GENERIC_WRAPPERS:
             return _is_valid_type(inner, domain_types, class_names)
-        # Map<K, V> — two comma-separated type params
-        if wrapper in _MAP_WRAPPERS:
-            parts = [p.strip() for p in inner.split(",", 1)]
+        if wrapper in _TWO_PARAM_WRAPPERS:
+            parts = _split_generic_params(inner)
             return len(parts) == 2 and all(
                 _is_valid_type(p, domain_types, class_names) for p in parts
             )

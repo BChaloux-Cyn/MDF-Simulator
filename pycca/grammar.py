@@ -57,7 +57,8 @@ PYCCA_GRAMMAR = r"""
 
     // --- Standalone method call statement ---
     // var.method(args);
-    method_call_stmt: NAME "." NAME "(" arglist? ")" ";"
+    method_call_stmt: NAME "." NAME "(" ")" ";"
+                   | NAME "." NAME "(" expr ("," expr)* ")" ";"
 
     // --- Return ---
     // return expr;
@@ -217,6 +218,7 @@ PYCCA_GRAMMAR = r"""
     // atom: traversal_chain and dotted_name must appear before plain name to ensure longer match
     atom: NUMBER -> number
         | ESCAPED_STRING -> string
+        | GENERIC_TYPE "(" ")" -> generic_constructor
         | access_chain
         | traversal_chain -> direct_traversal
         | NAME "." NAME -> dotted_name

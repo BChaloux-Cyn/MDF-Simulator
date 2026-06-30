@@ -112,19 +112,21 @@ class ActionTransformer(Transformer):
     def typed_var_decl(self, children: list[Any]) -> str:
         # type_expr NAME "=" expr ";"
         # children: [type_str, NAME token, expr_str]
-        _type_str = children[0]  # noqa: F841 — type hints not emitted in body
+        from compiler.type_utils import mdf_type_to_python
+        py_type = mdf_type_to_python(_tok(children[0]))
         var = _tok(children[1])
         expr = children[2]
-        return f"{var} = {expr}"
+        return f"{var}: {py_type} = {expr}"
 
     # ------------------------------------------------------------------
     # Type expression rules (used in typed_var_decl and lambda return type)
     # ------------------------------------------------------------------
 
     def generic_type(self, children: list[Any]) -> str:
-        base = _tok(children[0])
-        args = ", ".join(_tok(c) for c in children[1:])
-        return f"{base}[{args}]"
+        # GENERIC_TYPE is a single terminal token containing the full MDF type string
+        # (e.g. "Map<String,Integer>"). Return it raw so typed_var_decl can pass it
+        # to mdf_type_to_python for conversion to the correct Python annotation.
+        return _tok(children[0])
 
     def fn_type(self, children: list[Any]) -> str:
         parts = [_tok(c) for c in children]
@@ -240,6 +242,18 @@ class ActionTransformer(Transformer):
             return f"int({children[1]})"
         return f"{fn}({args_str})"
 
+    def generic_constructor(self, children: list[Any]) -> str:
+        # GENERIC_TYPE "(" ")" — e.g. Map<K,V>(), List<T>(), Set<T>()
+        type_token = _tok(children[0])
+        base = type_token[: type_token.index("<")]
+        if base == "List":
+            return "[]"
+        if base == "Set":
+            return "set()"
+        if base == "Map":
+            return "{}"
+        return "{}"
+
     def cardinality_expr(self, children: list[Any]) -> str:
         # Deprecated; translate to .size()
         var = _tok(children[0])
@@ -264,6 +278,15 @@ class ActionTransformer(Transformer):
             return f"(len({obj}) == 0 if {obj} is not None else True)"
         if method == "peek_front":
             return f"({obj}[0] if {obj} else None)"
+        # Map<K,V> expression methods
+        if method == "contains_key":
+            return f"({args} in {obj})"
+        if method == "size":
+            return f"len({obj})"
+        if method == "keys":
+            return f"set({obj}.keys())"
+        if method == "values":
+            return f"list({obj}.values())"
         if obj == "self":
             return f'self_dict.{method}({args})'
         return f"{obj}.{method}({args})"
@@ -288,6 +311,15 @@ class ActionTransformer(Transformer):
             # sort(comparator) — comparator is (a, b)->bool; translate to sort key
             # We treat the lambda as a key extractor (lhs of comparison)
             return f"sorted({chain} or [], key=lambda _x: ({args})(_x, _x))"
+        # Map<K,V> expression methods
+        if method == "contains_key":
+            return f"({args} in {chain})"
+        if method == "size":
+            return f"len({chain})"
+        if method == "keys":
+            return f"set({chain}.keys())"
+        if method == "values":
+            return f"list({chain}.values())"
         return f"{chain}.{method}({args})"
 
     def chained_attr_access(self, children: list[Any]) -> str:
@@ -667,10 +699,18 @@ class ActionTransformer(Transformer):
     # ------------------------------------------------------------------
 
     def method_call_stmt(self, children: list[Any]) -> str:
-        # NAME "." NAME "(" arglist? ")" ";"
+        # NAME "." NAME "(" expr ("," expr)* ")" ";" | NAME "." NAME "(" ")" ";"
         obj = _tok(children[0])
         method = _tok(children[1])
         args = ", ".join(str(c) for c in children[2:])
+        # Map<K,V> mutating methods
+        if method == "put":
+            # put(key, value) → obj[key] = value
+            key = str(children[2])
+            val = str(children[3])
+            return f"{obj}[{key}] = {val}"
+        if method == "remove":
+            return f"_mdf_remove({obj}, {args})"
         if obj == "self":
             return f'self_dict.{method}({args})'
         return f"{obj}.{method}({args})"

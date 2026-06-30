@@ -252,7 +252,7 @@ def test_generate_class_module_action_signature():
     """Action function signature matches D-10."""
     src = generate_class_module(_minimal_class_manifest(), {}, STATEMENT_PARSER)
     # At least one action function for states with entry actions
-    assert 'def action_On_entry(ctx: "SimulationContext", self_dict: dict, params: dict) -> None:' in src
+    assert 'def action_On_entry(ctx: "SimulationContext", self_dict: "LightDict", params: dict) -> None:' in src
 
 
 def test_generate_class_module_d05_comment():

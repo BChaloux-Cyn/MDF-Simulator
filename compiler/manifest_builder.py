@@ -203,6 +203,15 @@ def build_class_manifest(
         entry_actions = {}
         senescent_states = []
 
+    # Collect event parameter signatures from transitions.
+    # CanonicalTransition.params is already formatted as "name: Type, ..."
+    # by yaml_to_canonical_state. Unique event names only; first occurrence wins.
+    events: dict[str, str | None] = {}
+    if sd is not None:
+        for trans in sd.transitions:
+            if trans.event and trans.event not in events:
+                events[trans.event] = trans.params
+
     return {
         "name": entry.name,
         "is_abstract": is_abstract,
@@ -215,6 +224,7 @@ def build_class_manifest(
         "transition_table": transition_table,
         "supertype": None,   # filled in by build_domain_manifest post-walk
         "subtypes": [],      # filled in by build_domain_manifest post-walk
+        "events": dict(sorted(events.items())),
     }
 
 

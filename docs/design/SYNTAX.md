@@ -75,6 +75,7 @@ are also valid wherever a type is expected.
 | `List<T>` | Ordered, allows duplicates, mutable in-place |
 | `Set<T>` | Unordered, enforces uniqueness, mutable in-place |
 | `Optional<T>` | Zero or one value |
+| `Map<K,V>` | Key-value store; K and V may be any valid type |
 
 Container types are first-class — they can be declared as local
 variables and as class attributes. They are **not** allowed as event
@@ -94,7 +95,46 @@ or bitwise equality for struct/value types.
 **Set-to-List conversion:** Via `.sort(lambda)`, which produces an
 ordered list.
 
-### 1.3 Function Types
+### 1.3 Map<K,V> Methods
+
+**Construction:**
+```
+Map<String, Integer> my_map = Map<String, Integer>();
+```
+
+**Lookup:**
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `get(key: K)` | `Optional<V>` | Value at `key`, or absent if not found |
+| `contains_key(key: K)` | `Boolean` | True if `key` is present |
+
+**Mutation:**
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `put(key: K, value: V)` | — | Insert or overwrite entry at `key` |
+| `remove(key: K)` | — | Remove entry at `key`; no-op if absent |
+
+**Projection:**
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `keys()` | `Set<K>` | All keys |
+| `values()` | `List<V>` | All values, in unspecified order |
+
+**Common:**
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `size()` | `Integer` | Number of entries |
+| `is_empty()` | `Boolean` | True if no entries |
+
+Map is **not directly iterable**. Use `.keys()` or `.values()` with a for-each loop:
+```
+for (String key : my_map.keys()) {
+    Optional<Integer> val = my_map.get(key);
+    // ...
+}
+```
+
+### 1.4 Function Types
 
 Lambda expressions can be stored in typed variables:
 
@@ -1171,7 +1211,7 @@ The current `pycca/grammar.py` parser supports a **subset** of this syntax.
 - Dotted name expressions (`var.attr`, `self.attr`, `rcvd_evt.param`)
 
 **Not yet implemented:**
-- Container types (`List<T>`, `Set<T>`, `Optional<T>`)
+- Container types (`List<T>`, `Set<T>`, `Optional<T>`, `Map<K,V>`)
 - Lambda expressions (`[captures] |params| -> ReturnType { body }`)
 - Container method calls (`.filter()`, `.sort()`, `.map()`, etc.)
 - For-each loops (`for (Type var : collection) { ... }`)
@@ -1182,3 +1222,7 @@ The current `pycca/grammar.py` parser supports a **subset** of this syntax.
 - Cancel statement (`cancel ... from ... to ...`)
 - Arithmetic expressions (`a + b`, `a * b`)
 - `else if` chains
+
+**Map<K,V> parsing note:** `Map<K,V>` type syntax and the constructor
+`Map<K,V>()` are parsed by the grammar, but method calls (`.get()`,
+`.put()`, `.keys()`, etc.) require compiler transforms added in Phase 5.

@@ -27,6 +27,7 @@ import black
 
 from compiler.error import CompileError, CompilationFailed
 from compiler.transformer import transform_action, transform_guard
+from compiler.type_utils import mdf_type_to_python
 
 if TYPE_CHECKING:
     from engine.manifest import ClassManifest, DomainManifest
@@ -87,15 +88,81 @@ def _render_typedef(name: str, base: str) -> str:
     return f'{name} = NewType("{name}", {base})'
 
 
+def _parse_event_params(params_str: str) -> dict[str, str]:
+    """Parse 'name: Type, ...' into {name: type_str} (D-07: sorted)."""
+    result: dict[str, str] = {}
+    for part in params_str.split(","):
+        name, _, type_str = part.strip().partition(":")
+        if name and type_str:
+            result[name.strip()] = type_str.strip()
+    return dict(sorted(result.items()))
+
+
+def _render_class_typeddict(cls_name: str, attributes: dict) -> str:
+    """Render a TypedDict for a domain class (for self_dict typing)."""
+    lines = [f"class {cls_name}Dict(TypedDict):"]
+    lines.append("    __class_name__: str")
+    lines.append("    __instance_key__: str")
+    for attr_name, attr_info in sorted(attributes.items()):
+        if isinstance(attr_info, dict):
+            attr_type = attr_info.get("type", "object")
+            py_type = mdf_type_to_python(attr_type)
+            lines.append(f"    {attr_name}: {py_type}")
+    return "\n".join(lines)
+
+
+def _render_event_typeddict(event_name: str, params_str: str) -> str:
+    """Render a TypedDict for a parameterised event (for params typing)."""
+    params = _parse_event_params(params_str)
+    lines = [f"class {event_name}Params(TypedDict):"]
+    for param_name, param_type in params.items():
+        py_type = mdf_type_to_python(param_type)
+        lines.append(f"    {param_name}: {py_type}")
+    return "\n".join(lines)
+
+
+def _state_params_type(
+    state: str,
+    transition_table: dict,
+    events: dict[str, str | None],
+) -> str:
+    """Return the params TypedDict name for a state's entry action.
+
+    Uses the specific event TypedDict when exactly one event triggers
+    this state and that event has params; otherwise falls back to 'dict'.
+    """
+    triggers: set[str] = set()
+    for (_, event), entries in transition_table.items():
+        for entry in entries:
+            if entry.get("next_state") == state and event:
+                triggers.add(event)
+    if len(triggers) == 1:
+        event_name = next(iter(triggers))
+        if events.get(event_name):
+            return f"{event_name}Params"
+    return "dict"
+
+
+def _guard_params_type(event: str, events: dict[str, str | None]) -> str:
+    """Return the params TypedDict name for a guard on the given event."""
+    if events.get(event):
+        return f"{event}Params"
+    return "dict"
+
+
 # ---------------------------------------------------------------------------
 # Action / guard function rendering
 # ---------------------------------------------------------------------------
 
-def _render_action_fn(fn_name: str, body_src: str, source_file: str, source_line: int) -> str:
-    """Render a D-10 action function.
-
-    Signature: def action_<name>(ctx: "SimulationContext", self_dict: dict, params: dict) -> None:
-    """
+def _render_action_fn(
+    fn_name: str,
+    body_src: str,
+    source_file: str,
+    source_line: int,
+    cls_name: str,
+    params_type: str = "dict",
+) -> str:
+    """Render a D-10 action function with typed self_dict and params."""
     comment = f"# from {source_file}:{source_line}"
     if body_src and body_src.strip():
         # transform_action already returns "# from ...\n<body>" — strip its comment
@@ -106,18 +173,25 @@ def _render_action_fn(fn_name: str, body_src: str, source_file: str, source_line
         body = "pass"
 
     indented = textwrap.indent(body.strip() or "pass", "    ")
+    params_annotation = f'"{params_type}"' if params_type != "dict" else "dict"
     return (
         f"{comment}\n"
-        f'def {fn_name}(ctx: "SimulationContext", self_dict: dict, params: dict) -> None:\n'
+        f'def {fn_name}(ctx: "SimulationContext", '
+        f'self_dict: "{cls_name}Dict", '
+        f'params: {params_annotation}) -> None:\n'
         f"{indented}\n"
     )
 
 
-def _render_guard_fn(fn_name: str, expr_src: str, source_file: str, source_line: int) -> str:
-    """Render a D-10 guard function.
-
-    Signature: def guard_<name>(self_dict: dict, params: dict) -> bool:
-    """
+def _render_guard_fn(
+    fn_name: str,
+    expr_src: str,
+    source_file: str,
+    source_line: int,
+    cls_name: str,
+    params_type: str = "dict",
+) -> str:
+    """Render a D-10 guard function with typed self_dict and params."""
     comment = f"# from {source_file}:{source_line}"
     if expr_src and expr_src.strip():
         lines = expr_src.split("\n", 1)
@@ -125,9 +199,11 @@ def _render_guard_fn(fn_name: str, expr_src: str, source_file: str, source_line:
     else:
         expr = "True"
 
+    params_annotation = f'"{params_type}"' if params_type != "dict" else "dict"
     return (
         f"{comment}\n"
-        f"def {fn_name}(self_dict: dict, params: dict) -> bool:\n"
+        f'def {fn_name}(self_dict: "{cls_name}Dict", '
+        f'params: {params_annotation}) -> bool:\n'
         f"    return {expr.strip()}\n"
     )
 
@@ -201,6 +277,7 @@ def generate_class_module(
     entry_actions: dict[str, str | None] = class_manifest.get("entry_actions", {})
     transition_table: dict = class_manifest.get("transition_table", {})
     attributes: dict = class_manifest.get("attributes", {})
+    events: dict[str, str | None] = class_manifest.get("events", {})
 
     # ------------------------------------------------------------------
     # Emit all domain types in every class module — enum members may be
@@ -252,7 +329,8 @@ def generate_class_module(
         else:
             transformed = ""
 
-        block = _render_action_fn(fn_name, transformed, source_file, 0)
+        action_params_type = _state_params_type(state_name, transition_table, events)
+        block = _render_action_fn(fn_name, transformed, source_file, 0, cls_name, action_params_type)
         action_fn_bodies.append(block)
 
     # Map each transition to the DESTINATION state's entry action function.
@@ -292,7 +370,8 @@ def generate_class_module(
                         stacklevel=2,
                     )
                     transformed = ""
-                block = _render_guard_fn(fn_name, transformed, source_file, 0)
+                guard_params_type = _guard_params_type(event, events)
+                block = _render_guard_fn(fn_name, transformed, source_file, 0, cls_name, guard_params_type)
                 guard_fn_bodies.append(block)
 
     # ------------------------------------------------------------------
@@ -306,11 +385,16 @@ def generate_class_module(
     parts.append("from __future__ import annotations")
     parts.append("")
     parts.append("import enum")
-    parts.append("from typing import TYPE_CHECKING, NewType")
+    parts.append("from typing import TYPE_CHECKING, NewType, TypedDict")
     parts.append("")
     parts.append("if TYPE_CHECKING:")
     parts.append('    from engine.ctx import SimulationContext')
     parts.append("")
+    needs_remove_import = any("_mdf_remove(" in body for body in action_fn_bodies) or \
+                          any("_mdf_remove(" in body for body in guard_fn_bodies)
+    if needs_remove_import:
+        parts.append("from mdf.runtime import _mdf_remove")
+        parts.append("")
 
     # Enum classes
     if enum_blocks:
@@ -321,6 +405,17 @@ def generate_class_module(
     if typedef_lines:
         parts.extend(typedef_lines)
         parts.append("")
+
+    # Class TypedDict
+    parts.append(_render_class_typeddict(cls_name, attributes))
+    parts.append("")
+
+    # Event TypedDicts (only for events that have params, sorted by name)
+    for event_name in sorted(events.keys()):
+        params_str = events[event_name]
+        if params_str:
+            parts.append(_render_event_typeddict(event_name, params_str))
+            parts.append("")
 
     # Action functions
     if action_fn_bodies:

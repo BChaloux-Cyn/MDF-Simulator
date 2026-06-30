@@ -395,10 +395,10 @@ class TestActionTransformerVarAssignment:
         assert "self_dict" not in result
 
     def test_typed_var_decl_int(self):
-        """int x = 5; → x = 5 (type annotation discarded in body)."""
+        """int x = 5; → x: int = 5 (annotation emitted)."""
         from compiler.transformer import transform_action
         result = transform_action("int x = 5;", "test.yaml", 0)
-        assert "x = 5" in result
+        assert "x: int = 5" in result
 
     def test_typed_var_decl_result_is_valid_python(self):
         """typed_var_decl emits syntactically valid Python."""
@@ -406,6 +406,18 @@ class TestActionTransformerVarAssignment:
         result = transform_action("int x = 5;", "test.yaml", 0)
         body = "\n".join(line for line in result.splitlines() if not line.startswith("#"))
         compile(body, "<test>", "exec")
+
+    def test_typed_var_decl_emits_annotation(self):
+        """typed_var_decl emits 'var: PythonType = expr'."""
+        from compiler.transformer import transform_action
+        result = transform_action("Integer count = 0;", "test.yaml", 0)
+        assert "count: int = 0" in result
+
+    def test_typed_var_decl_map_emits_dict_annotation(self):
+        """typed_var_decl Map<String,Integer> emits 'var: dict[str, int] = expr'."""
+        from compiler.transformer import transform_action
+        result = transform_action("Map<String,Integer> my_map = Map<String,Integer>();", "test.yaml", 0)
+        assert "my_map: dict[str, int] = {}" in result
 
 
 class TestActionTransformerExpressions:
@@ -593,4 +605,131 @@ class TestActionTransformerSelectExpr:
         from compiler.transformer import transform_action
         result = transform_action("Car c = select any from instances of Car;", "test.yaml", 0)
         assert 'ctx.select_any("Car")' in result
-        assert "c = " in result
+        assert "c: Car = " in result
+
+
+class TestActionTransformerMapExprMethods:
+    """Map<K,V> expression-context method transforms."""
+
+    # --- method_call (receiver is a plain NAME) ---
+
+    def test_contains_key_method_call(self):
+        """my_map.contains_key(k) → (k in my_map)."""
+        from compiler.transformer import transform_action
+        result = transform_action("Boolean found = my_map.contains_key(k);", "test.yaml", 0)
+        assert "(k in my_map)" in result
+
+    def test_size_method_call(self):
+        """my_map.size() → len(my_map)."""
+        from compiler.transformer import transform_action
+        result = transform_action("Integer n = my_map.size();", "test.yaml", 0)
+        assert "len(my_map)" in result
+
+    def test_keys_method_call(self):
+        """my_map.keys() → set(my_map.keys())."""
+        from compiler.transformer import transform_action
+        result = transform_action("Set<String> ks = my_map.keys();", "test.yaml", 0)
+        assert "set(my_map.keys())" in result
+
+    def test_values_method_call(self):
+        """my_map.values() → list(my_map.values())."""
+        from compiler.transformer import transform_action
+        result = transform_action("List<Integer> vs = my_map.values();", "test.yaml", 0)
+        assert "list(my_map.values())" in result
+
+    def test_get_method_call(self):
+        """my_map.get(k) passes through to Python dict.get()."""
+        from compiler.transformer import transform_action
+        result = transform_action("Optional<Integer> v = my_map.get(k);", "test.yaml", 0)
+        assert "my_map.get(k)" in result
+
+    def test_is_empty_method_call(self):
+        """my_map.is_empty() → (len(my_map) == 0 if my_map is not None else True)."""
+        from compiler.transformer import transform_action
+        result = transform_action("Boolean empty = my_map.is_empty();", "test.yaml", 0)
+        assert "len(my_map) == 0" in result
+
+    # --- chained_method_call (receiver is itself an access_chain) ---
+
+    def test_contains_key_chained(self):
+        """door.get_map().contains_key(k) → (k in door.get_map())."""
+        from compiler.transformer import transform_action
+        result = transform_action(
+            "Boolean found = door.get_map().contains_key(k);", "test.yaml", 0
+        )
+        assert "(k in " in result
+
+    def test_size_chained(self):
+        """door.get_map().size() → len(door.get_map())."""
+        from compiler.transformer import transform_action
+        result = transform_action(
+            "Integer n = door.get_map().size();", "test.yaml", 0
+        )
+        assert "len(" in result
+
+    def test_keys_chained(self):
+        """door.get_map().keys() → set(door.get_map().keys())."""
+        from compiler.transformer import transform_action
+        result = transform_action(
+            "Set<String> ks = door.get_map().keys();", "test.yaml", 0
+        )
+        assert "set(" in result
+        assert ".keys())" in result
+
+    def test_values_chained(self):
+        """door.get_map().values() → list(door.get_map().values())."""
+        from compiler.transformer import transform_action
+        result = transform_action(
+            "List<Integer> vs = door.get_map().values();", "test.yaml", 0
+        )
+        assert "list(" in result
+        assert ".values())" in result
+
+    def test_get_chained(self):
+        """door.get_map().get(k) passes through."""
+        from compiler.transformer import transform_action
+        result = transform_action(
+            "Optional<Integer> v = door.get_map().get(k);", "test.yaml", 0
+        )
+        assert ".get(k)" in result
+
+
+class TestActionTransformerMapStmtMethods:
+    """Map<K,V> statement-context method transforms (put, remove)."""
+
+    def test_put_emits_assignment(self):
+        """my_map.put(key, value); → my_map[key] = value."""
+        from compiler.transformer import transform_action
+        result = transform_action("my_map.put(key, value);", "test.yaml", 0)
+        assert "my_map[key] = value" in result
+
+    def test_remove_emits_pop(self):
+        """remove statement now emits _mdf_remove dispatch helper."""
+        from compiler.transformer import transform_action
+        result = transform_action("my_map.remove(key);", "test.yaml", 0)
+        assert "_mdf_remove(my_map, key)" in result
+
+    def test_put_emits_valid_python(self):
+        """put statement emits syntactically valid Python."""
+        from compiler.transformer import transform_action
+        result = transform_action("my_map.put(key, value);", "test.yaml", 0)
+        body = "\n".join(line for line in result.splitlines() if not line.startswith("#"))
+        compile(body, "<test>", "exec")
+
+    def test_remove_emits_valid_python(self):
+        """remove statement emits syntactically valid Python."""
+        from compiler.transformer import transform_action
+        result = transform_action("my_map.remove(key);", "test.yaml", 0)
+        body = "\n".join(line for line in result.splitlines() if not line.startswith("#"))
+        compile(body, "<test>", "exec")
+
+    def test_remove_does_not_clobber_set_semantics(self):
+        """Set.remove and Map.remove both emit _mdf_remove — runtime dispatches correctly.
+
+        Fixes COMP-001: previously both emitted pop(x, None) which is wrong for Set/List.
+        """
+        from compiler.transformer import transform_action
+        result = transform_action("my_set.remove(x);", "test.yaml", 0)
+        assert "_mdf_remove(my_set, x)" in result, (
+            f"remove should emit _mdf_remove(...), got: {result!r}"
+        )
