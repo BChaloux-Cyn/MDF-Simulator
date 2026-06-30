@@ -1,4 +1,6 @@
 # tests/test_mypy_check.py
+import textwrap
+
 import pytest
 from pathlib import Path
 from compiler.mypy_check import check_generated_files
@@ -86,3 +88,41 @@ class TestCheckGeneratedFiles:
     def test_empty_paths_returns_no_errors(self):
         errors = check_generated_files([])
         assert errors == []
+
+
+class TestCompileIntegration:
+    def test_compile_model_raises_on_mypy_error(self, tmp_path):
+        """compile_model raises CompilationFailed when generated code has type errors."""
+        from compiler import compile_model, CompilationFailed
+
+        domain_dir = tmp_path / "model" / "TestDomain"
+        domain_dir.mkdir(parents=True)
+        sd_dir = domain_dir / "state-diagrams"
+        sd_dir.mkdir()
+
+        (domain_dir / "class-diagram.yaml").write_text(textwrap.dedent("""\
+            schema_version: "1.0.0"
+            domain: TestDomain
+            classes:
+              - name: Widget
+                stereotype: active
+                attributes:
+                  - name: count
+                    type: Integer
+        """))
+
+        (sd_dir / "Widget.yaml").write_text(textwrap.dedent("""\
+            schema_version: "1.0.0"
+            domain: TestDomain
+            class: Widget
+            initial_state: Idle
+            events: []
+            states:
+              - name: Idle
+                entry_action: "self.nonexistent_field = 1;"
+            transitions: []
+        """))
+
+        output_dir = tmp_path / "out"
+        with pytest.raises(CompilationFailed):
+            compile_model(tmp_path / "model", output_dir)

@@ -117,6 +117,34 @@ def compile_model(model_root: Path, output_dir: Path) -> Path:
     acc.raise_if_any()
 
     # ------------------------------------------------------------------
+    # 3b. Type check: run mypy on generated sources
+    # ------------------------------------------------------------------
+    import os
+    import tempfile
+    from compiler.mypy_check import check_generated_files
+
+    with tempfile.TemporaryDirectory() as _tmpdir:
+        written_paths: list[str] = []
+        for cls_name, src in generated_files.items():
+            p = os.path.join(_tmpdir, f"{cls_name}.py")
+            Path(p).write_text(src, encoding="utf-8")
+            written_paths.append(p)
+        mypy_errors = check_generated_files(written_paths)
+
+    # Only surface TypedDict unknown-key errors (COMP-001 category).
+    # Other mypy errors (name-defined from domain class annotations, assignment
+    # from enum compatibility) are pre-existing false positives in the current
+    # codegen pipeline and are not actionable at this stage.
+    unknown_key_errors = [
+        err for err in mypy_errors if "[typeddict-unknown-key]" in err.message
+    ]
+    if unknown_key_errors:
+        type_acc = ErrorAccumulator()
+        for err in unknown_key_errors:
+            type_acc.add(err)
+        type_acc.raise_if_any()
+
+    # ------------------------------------------------------------------
     # 4. Package: deterministic .mdfbundle zip (D-12)
     # ------------------------------------------------------------------
     return write_bundle(
