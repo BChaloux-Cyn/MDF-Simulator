@@ -18,6 +18,8 @@ Version constants (committed strategy per Plan 04):
 """
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 
 from compiler.error import CompileError, CompilationFailed, ErrorAccumulator
@@ -119,8 +121,6 @@ def compile_model(model_root: Path, output_dir: Path) -> Path:
     # ------------------------------------------------------------------
     # 3b. Type check: run mypy on generated sources
     # ------------------------------------------------------------------
-    import os
-    import tempfile
     from compiler.mypy_check import check_generated_files
 
     with tempfile.TemporaryDirectory() as _tmpdir:

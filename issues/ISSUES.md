@@ -52,4 +52,6 @@ When you identify a bug, modeling error, schema gap, or missing test:
 |----|-------|-----------|--------|
 | [ELV-001](elevator-001-subtype-relvar-inheritance.md) | Subtype inherits supertype referential attributes | Schema / engine | Open |
 | [ENG-001](engine-execution-trace-improvements.md) | Engine execution trace improvements | engine (scheduler, microstep, simulation) | Open |
-| [COMP-001](remove-method-collision.md) | method_call_stmt remove dispatches Map semantics to all container types | Compiler / action language | Open |
+| [COMP-001](solved/remove-method-collision-SOLVED.md) | method_call_stmt remove dispatches Map semantics to all container types | Compiler / action language | **Solved** |
+| [CODEGEN-001](codegen-001-name-defined-in-generated-code.md) | Generated code uses domain class names without imports ([name-defined]) | Compiler / codegen | Open |
+| [CODEGEN-002](codegen-002-enum-assignment-type-mismatch.md) | Generated code has enum/typedef assignment type mismatches ([assignment]) | Compiler / codegen | Open |
