@@ -697,19 +697,16 @@ class ActionTransformer(Transformer):
     # ------------------------------------------------------------------
 
     def method_call_stmt(self, children: list[Any]) -> str:
-        # NAME "." NAME "(" arglist? ")" ";"
+        # NAME "." NAME "(" expr ("," expr)* ")" ";" | NAME "." NAME "(" ")" ";"
         obj = _tok(children[0])
         method = _tok(children[1])
         args = ", ".join(str(c) for c in children[2:])
         # Map<K,V> mutating methods
         if method == "put":
             # put(key, value) → obj[key] = value
-            # Split args to extract key and value (args is "key, value" as a string)
-            arg_list = [a.strip() for a in args.split(",")]
-            if len(arg_list) >= 2:
-                key = arg_list[0]
-                val = arg_list[1]
-                return f"{obj}[{key}] = {val}"
+            key = str(children[2])
+            val = str(children[3])
+            return f"{obj}[{key}] = {val}"
         if method == "remove":
             # remove(key) → obj.pop(key, None) — silent if key absent
             return f"{obj}.pop({args}, None)"

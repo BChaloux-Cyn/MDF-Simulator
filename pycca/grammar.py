@@ -57,7 +57,8 @@ PYCCA_GRAMMAR = r"""
 
     // --- Standalone method call statement ---
     // var.method(args);
-    method_call_stmt: NAME "." NAME "(" arglist? ")" ";"
+    method_call_stmt: NAME "." NAME "(" ")" ";"
+                   | NAME "." NAME "(" expr ("," expr)* ")" ";"
 
     // --- Return ---
     // return expr;
