@@ -390,8 +390,11 @@ def generate_class_module(
     parts.append("if TYPE_CHECKING:")
     parts.append('    from engine.ctx import SimulationContext')
     parts.append("")
-    parts.append("from mdf.runtime import _mdf_remove")
-    parts.append("")
+    needs_remove_import = any("_mdf_remove(" in body for body in action_fn_bodies) or \
+                          any("_mdf_remove(" in body for body in guard_fn_bodies)
+    if needs_remove_import:
+        parts.append("from mdf.runtime import _mdf_remove")
+        parts.append("")
 
     # Enum classes
     if enum_blocks:

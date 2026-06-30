@@ -8,7 +8,7 @@ from mypy import api as mypy_api
 
 from compiler.error import CompileError
 
-_MYPY_ERROR_RE = re.compile(r"^(.+?):(\d+): error: (.+)$")
+_MYPY_ERROR_RE = re.compile(r"^(.+?):(\d+)(?::\d+)?: error: (.+)$")
 _SOURCE_COMMENT_RE = re.compile(r"^# from (.+?):(\d+)\s*$")
 
 

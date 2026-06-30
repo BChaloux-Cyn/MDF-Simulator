@@ -139,10 +139,19 @@ class TestGuardSignature:
 
 
 class TestRuntimeImport:
-    def test_mdf_remove_imported(self):
-        manifest = _make_manifest()
+    def test_mdf_remove_imported_when_action_uses_it(self):
+        manifest = _make_manifest(
+            entry_actions={"Active": "my_map.remove(k);"},
+            transition_table={("Idle", "Go"): [{"next_state": "Active", "action_fn": None, "guard_fn": None}]},
+            events={"Go": None},
+        )
         src = generate_class_module(manifest, {}, None)
         assert "from mdf.runtime import _mdf_remove" in src
+
+    def test_mdf_remove_not_imported_when_unused(self):
+        manifest = _make_manifest()
+        src = generate_class_module(manifest, {}, None)
+        assert "from mdf.runtime import _mdf_remove" not in src
 
 
 class TestTypedDictImport:
