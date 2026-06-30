@@ -680,3 +680,33 @@ class TestActionTransformerMapExprMethods:
             "Optional<Integer> v = door.get_map().get(k);", "test.yaml", 0
         )
         assert ".get(k)" in result
+
+
+class TestActionTransformerMapStmtMethods:
+    """Map<K,V> statement-context method transforms (put, remove)."""
+
+    def test_put_emits_assignment(self):
+        """my_map.put(key, value); → my_map[key] = value."""
+        from compiler.transformer import transform_action
+        result = transform_action("my_map.put(key, value);", "test.yaml", 0)
+        assert "my_map[key] = value" in result
+
+    def test_remove_emits_pop(self):
+        """my_map.remove(key); → my_map.pop(key, None)."""
+        from compiler.transformer import transform_action
+        result = transform_action("my_map.remove(key);", "test.yaml", 0)
+        assert "my_map.pop(key, None)" in result
+
+    def test_put_emits_valid_python(self):
+        """put statement emits syntactically valid Python."""
+        from compiler.transformer import transform_action
+        result = transform_action("my_map.put(key, value);", "test.yaml", 0)
+        body = "\n".join(line for line in result.splitlines() if not line.startswith("#"))
+        compile(body, "<test>", "exec")
+
+    def test_remove_emits_valid_python(self):
+        """remove statement emits syntactically valid Python."""
+        from compiler.transformer import transform_action
+        result = transform_action("my_map.remove(key);", "test.yaml", 0)
+        body = "\n".join(line for line in result.splitlines() if not line.startswith("#"))
+        compile(body, "<test>", "exec")
