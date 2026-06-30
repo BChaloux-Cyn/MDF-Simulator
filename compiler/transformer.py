@@ -276,6 +276,15 @@ class ActionTransformer(Transformer):
             return f"(len({obj}) == 0 if {obj} is not None else True)"
         if method == "peek_front":
             return f"({obj}[0] if {obj} else None)"
+        # Map<K,V> expression methods
+        if method == "contains_key":
+            return f"({args} in {obj})"
+        if method == "size":
+            return f"len({obj})"
+        if method == "keys":
+            return f"set({obj}.keys())"
+        if method == "values":
+            return f"list({obj}.values())"
         if obj == "self":
             return f'self_dict.{method}({args})'
         return f"{obj}.{method}({args})"
@@ -300,6 +309,15 @@ class ActionTransformer(Transformer):
             # sort(comparator) — comparator is (a, b)->bool; translate to sort key
             # We treat the lambda as a key extractor (lhs of comparison)
             return f"sorted({chain} or [], key=lambda _x: ({args})(_x, _x))"
+        # Map<K,V> expression methods
+        if method == "contains_key":
+            return f"({args} in {chain})"
+        if method == "size":
+            return f"len({chain})"
+        if method == "keys":
+            return f"set({chain}.keys())"
+        if method == "values":
+            return f"list({chain}.values())"
         return f"{chain}.{method}({args})"
 
     def chained_attr_access(self, children: list[Any]) -> str:

@@ -594,3 +594,89 @@ class TestActionTransformerSelectExpr:
         result = transform_action("Car c = select any from instances of Car;", "test.yaml", 0)
         assert 'ctx.select_any("Car")' in result
         assert "c = " in result
+
+
+class TestActionTransformerMapExprMethods:
+    """Map<K,V> expression-context method transforms."""
+
+    # --- method_call (receiver is a plain NAME) ---
+
+    def test_contains_key_method_call(self):
+        """my_map.contains_key(k) → (k in my_map)."""
+        from compiler.transformer import transform_action
+        result = transform_action("Boolean found = my_map.contains_key(k);", "test.yaml", 0)
+        assert "(k in my_map)" in result
+
+    def test_size_method_call(self):
+        """my_map.size() → len(my_map)."""
+        from compiler.transformer import transform_action
+        result = transform_action("Integer n = my_map.size();", "test.yaml", 0)
+        assert "len(my_map)" in result
+
+    def test_keys_method_call(self):
+        """my_map.keys() → set(my_map.keys())."""
+        from compiler.transformer import transform_action
+        result = transform_action("Set<String> ks = my_map.keys();", "test.yaml", 0)
+        assert "set(my_map.keys())" in result
+
+    def test_values_method_call(self):
+        """my_map.values() → list(my_map.values())."""
+        from compiler.transformer import transform_action
+        result = transform_action("List<Integer> vs = my_map.values();", "test.yaml", 0)
+        assert "list(my_map.values())" in result
+
+    def test_get_method_call(self):
+        """my_map.get(k) passes through to Python dict.get()."""
+        from compiler.transformer import transform_action
+        result = transform_action("Optional<Integer> v = my_map.get(k);", "test.yaml", 0)
+        assert "my_map.get(k)" in result
+
+    def test_is_empty_method_call(self):
+        """my_map.is_empty() → (len(my_map) == 0 if my_map is not None else True)."""
+        from compiler.transformer import transform_action
+        result = transform_action("Boolean empty = my_map.is_empty();", "test.yaml", 0)
+        assert "len(my_map) == 0" in result
+
+    # --- chained_method_call (receiver is itself an access_chain) ---
+
+    def test_contains_key_chained(self):
+        """door.get_map().contains_key(k) → (k in door.get_map())."""
+        from compiler.transformer import transform_action
+        result = transform_action(
+            "Boolean found = door.get_map().contains_key(k);", "test.yaml", 0
+        )
+        assert "(k in " in result
+
+    def test_size_chained(self):
+        """door.get_map().size() → len(door.get_map())."""
+        from compiler.transformer import transform_action
+        result = transform_action(
+            "Integer n = door.get_map().size();", "test.yaml", 0
+        )
+        assert "len(" in result
+
+    def test_keys_chained(self):
+        """door.get_map().keys() → set(door.get_map().keys())."""
+        from compiler.transformer import transform_action
+        result = transform_action(
+            "Set<String> ks = door.get_map().keys();", "test.yaml", 0
+        )
+        assert "set(" in result
+        assert ".keys())" in result
+
+    def test_values_chained(self):
+        """door.get_map().values() → list(door.get_map().values())."""
+        from compiler.transformer import transform_action
+        result = transform_action(
+            "List<Integer> vs = door.get_map().values();", "test.yaml", 0
+        )
+        assert "list(" in result
+        assert ".values())" in result
+
+    def test_get_chained(self):
+        """door.get_map().get(k) passes through."""
+        from compiler.transformer import transform_action
+        result = transform_action(
+            "Optional<Integer> v = door.get_map().get(k);", "test.yaml", 0
+        )
+        assert ".get(k)" in result
