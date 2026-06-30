@@ -1,0 +1,48 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-30T15:55:23Z",
+  "phase": null,
+  "phase_name": "brainstorming/spec — type-aware transformer",
+  "phase_dir": null,
+  "plan": null,
+  "task": null,
+  "total_tasks": 6,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Explore project context", "status": "done"},
+    {"id": 2, "name": "Ask clarifying questions", "status": "done"},
+    {"id": 3, "name": "Propose 2-3 approaches", "status": "done"},
+    {"id": 4, "name": "Present design sections and get approval", "status": "done"},
+    {"id": 5, "name": "Write spec to docs/superpowers/specs/", "status": "done"},
+    {"id": 6, "name": "Spec self-review and user review gate", "status": "done"}
+  ],
+  "remaining_tasks": [
+    {"id": 7, "name": "User reviews spec file", "status": "pending_user"},
+    {"id": 8, "name": "Invoke writing-plans skill to create implementation plan", "status": "not_started"}
+  ],
+  "blockers": [],
+  "human_actions_pending": [
+    {
+      "action": "Review docs/superpowers/specs/2026-06-30-type-aware-transformer-design.md",
+      "context": "Brainstorming skill requires user approval of written spec before writing-plans is invoked",
+      "blocking": true
+    }
+  ],
+  "decisions": [
+    {"decision": "MDFType structured type over raw strings", "rationale": "Enables type parameter extraction for argument checking and return type resolution"},
+    {"decision": "SymbolScope in compiler/symbol_table.py (Option 2)", "rationale": "Independently testable, clean seam for Phase C schema injection"},
+    {"decision": "TypedExpr wrapper (Option B) over parallel stack", "rationale": "Stack discipline is fragile; wrapper is self-documenting and testable"},
+    {"decision": "Hard errors (TypeMismatch/UnresolvedType) not warnings", "rationale": "User specified hard errors; well-formed models have all types defined"},
+    {"decision": "transform_action kwargs for Phase C context (Option A)", "rationale": "None defaults preserve backward compat; single entry point"},
+    {"decision": "All phases ship together", "rationale": "User plans sequential implementation and single release"},
+    {"decision": "Struct field checking in Phase C", "rationale": "DomainContext already has attribute_type; dotted_name has both pieces"},
+    {"decision": "Argument type checking in Phase E", "rationale": "Requires TypedExpr on arguments to know their types"}
+  ],
+  "uncommitted_files": [
+    "docs/superpowers/specs/2026-06-30-type-aware-transformer-design.md",
+    ".planning/HANDOFF.json",
+    ".planning/.continue-here.md"
+  ],
+  "next_action": "User reviews spec at docs/superpowers/specs/2026-06-30-type-aware-transformer-design.md, then invoke writing-plans skill",
+  "context_notes": "Brainstorming session complete. Spec covers Phases A-E: SymbolScope+MDFType+TypeMismatch+UnresolvedType (A-B), DomainContext+struct field checking (C), Optional narrowing separate spec (D), TypedExpr+return types+argument type checking (E). Old draft at docs/design/SPEC-type-aware-transformer.md was deleted."
+}
