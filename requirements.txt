@@ -2,27 +2,67 @@
 #    uv pip compile requirements.in -o requirements.txt
 annotated-types==0.7.0
     # via pydantic
+anyio==4.14.1
+    # via
+    #   httpx
+    #   mcp
+    #   sse-starlette
+    #   starlette
 ast-serialize==0.5.0
     # via mypy
+attrs==26.1.0
+    # via
+    #   jsonschema
+    #   referencing
 black==26.5.1
     # via -r requirements.in
+certifi==2026.6.17
+    # via
+    #   httpcore
+    #   httpx
+cffi==2.0.0
+    # via cryptography
 click==8.3.1
-    # via black
+    # via
+    #   black
+    #   uvicorn
 colorama==0.4.6
     # via
     #   click
     #   pytest
+cryptography==49.0.0
+    # via pyjwt
 defusedxml==0.7.1
     # via -r requirements.in
+h11==0.16.0
+    # via
+    #   httpcore
+    #   uvicorn
+httpcore==1.0.9
+    # via httpx
+httpx==0.28.1
+    # via mcp
+httpx-sse==0.4.3
+    # via mcp
+idna==3.18
+    # via
+    #   anyio
+    #   httpx
 igraph==1.0.0
     # via -r requirements.in
 iniconfig==2.3.0
     # via pytest
+jsonschema==4.26.0
+    # via mcp
+jsonschema-specifications==2025.9.1
+    # via jsonschema
 lark==1.3.1
     # via -r requirements.in
 librt==0.12.0
     # via mypy
 lxml==6.0.2
+    # via -r requirements.in
+mcp==1.28.1
     # via -r requirements.in
 mypy==2.1.0
     # via -r requirements.in
@@ -44,29 +84,64 @@ platformdirs==4.10.0
     # via black
 pluggy==1.6.0
     # via pytest
+pycparser==3.0
+    # via cffi
 pydantic==2.12.5
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   mcp
+    #   pydantic-settings
 pydantic-core==2.41.5
     # via pydantic
+pydantic-settings==2.14.2
+    # via mcp
 pygments==2.20.0
     # via pytest
+pyjwt==2.13.0
+    # via mcp
 pytest==9.1.1
     # via -r requirements.in
+python-dotenv==1.2.2
+    # via pydantic-settings
+python-multipart==0.0.32
+    # via mcp
 pytokens==0.4.1
     # via black
+pywin32==312
+    # via mcp
 pyyaml==6.0.3
     # via -r requirements.in
+referencing==0.37.0
+    # via
+    #   jsonschema
+    #   jsonschema-specifications
+rpds-py==2026.6.3
+    # via
+    #   jsonschema
+    #   referencing
 ruamel-yaml==0.19.1
     # via -r requirements.in
+sse-starlette==3.4.5
+    # via mcp
+starlette==1.3.1
+    # via
+    #   mcp
+    #   sse-starlette
 texttable==1.7.0
     # via igraph
 typing-extensions==4.15.0
     # via
+    #   mcp
     #   mypy
     #   pydantic
     #   pydantic-core
     #   typing-inspection
 typing-inspection==0.4.2
-    # via pydantic
+    # via
+    #   mcp
+    #   pydantic
+    #   pydantic-settings
+uvicorn==0.49.0
+    # via mcp
 z3-solver==4.16.0.0
     # via -r requirements.in
