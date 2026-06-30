@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 _PRIMITIVES: dict[str, str] = {
+    "Boolean": "bool",
     "Integer": "int",
     "Real": "float",
     "String": "str",
-    "Boolean": "bool",
 }
 
 
