@@ -152,6 +152,7 @@ def _load_domain_types(domain_path: Path) -> frozenset[str]:
 
 _BUILTIN_TYPES = frozenset({"Timestamp", "Duration"})
 _GENERIC_WRAPPERS = frozenset({"Set", "List", "Optional"})
+_MAP_WRAPPERS = frozenset({"Map"})
 
 
 def _is_valid_type(
@@ -170,6 +171,12 @@ def _is_valid_type(
         inner = type_str[type_str.index("<") + 1 : -1]
         if wrapper in _GENERIC_WRAPPERS:
             return _is_valid_type(inner, domain_types, class_names)
+        # Map<K, V> — two comma-separated type params
+        if wrapper in _MAP_WRAPPERS:
+            parts = [p.strip() for p in inner.split(",", 1)]
+            return len(parts) == 2 and all(
+                _is_valid_type(p, domain_types, class_names) for p in parts
+            )
     return False
 
 
