@@ -104,3 +104,37 @@ def test_direct_traversal_does_not_break_comparison():
     from pycca.grammar import STATEMENT_PARSER
     tree = STATEMENT_PARSER.parse("Boolean ok = a > b;")
     assert tree is not None
+
+
+# --- PARSE-001: attribute-access chains longer than 2 segments ---
+
+def test_guard_dotted_chain_three_segments():
+    from pycca.grammar import GUARD_PARSER
+    GUARD_PARSER.parse("rcvd_evt.action.action_type == Confirm")
+
+
+def test_guard_dotted_chain_four_segments():
+    from pycca.grammar import GUARD_PARSER
+    GUARD_PARSER.parse("a.b.c.d == 1")
+
+
+def test_guard_dotted_chain_then_method_call():
+    from pycca.grammar import GUARD_PARSER
+    GUARD_PARSER.parse("self.current_step_index < self.steps.size()")
+
+
+def test_statement_dotted_chain_three_segments():
+    from pycca.grammar import STATEMENT_PARSER
+    STATEMENT_PARSER.parse("self.reason = rcvd_evt.action.detail;")
+
+
+def test_dotted_chain_two_segments_still_parses():
+    """Regression: existing 2-segment dotted_name (self.attr, rcvd_evt.field) unaffected."""
+    from pycca.grammar import GUARD_PARSER
+    GUARD_PARSER.parse("rcvd_evt.action")
+
+
+def test_method_call_chain_still_parses():
+    """Regression: chained method/attribute access (a.b().c().d) unaffected by dotted_name recursion."""
+    from pycca.grammar import STATEMENT_PARSER
+    STATEMENT_PARSER.parse("self.x = a.b().c().d;")

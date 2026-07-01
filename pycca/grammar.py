@@ -207,21 +207,35 @@ PYCCA_GRAMMAR = r"""
     lambda_param: NAME ":" NAME
     PIPE: "|"
 
+    // Pure attribute-access chain of arbitrary depth (a.b, a.b.c, a.b.c.d, ...).
+    // Recurses on itself rather than access_chain, since access_chain requires a
+    // method call to bootstrap the chain (PARSE-001).
+    dotted_name: NAME "." NAME
+               | dotted_name "." NAME
+
     // --- Chained method/attribute access ---
     // NAME.method(args)                    -> method_call
+    // dotted_name.method(args)             -> method_call (attr chain of any depth, then a call)
     // access_chain.method(args)            -> chained_method_call
     // access_chain.attr                    -> chained_attr_access
+    // The two method_call alternatives partition cleanly on segment count (exactly
+    // 2 vs 3+ before the call) — no ambiguity between them.
     access_chain: NAME "." NAME "(" arglist? ")"               -> method_call
+                | dotted_name "." NAME "(" arglist? ")"         -> method_call
                 | access_chain "." NAME "(" arglist? ")"        -> chained_method_call
                 | access_chain "." NAME                         -> chained_attr_access
 
     // atom: traversal_chain and dotted_name must appear before plain name to ensure longer match
-    atom: NUMBER -> number
+    // "?" prefix inlines single-child productions (access_chain, dotted_name,
+    // lambda_expr, select_expr, parenthesized expr) so they aren't wrapped in an
+    // extra "atom" tree node — matches the pre-PARSE-001 shape where dotted_name
+    // was an atom alias, which tools/validation.py's tree-walkers depend on.
+    ?atom: NUMBER -> number
         | ESCAPED_STRING -> string
         | GENERIC_TYPE "(" ")" -> generic_constructor
         | access_chain
         | traversal_chain -> direct_traversal
-        | NAME "." NAME -> dotted_name
+        | dotted_name
         | NAME "(" arglist? ")" -> func_call
         | NAME -> name
         | "(" expr ")"

@@ -207,6 +207,26 @@ class TestGuardTransformer:
         assert 'self_dict["x"]' in result
         assert 'self_dict["y"]' in result
 
+    def test_guard_nested_dotted_name_chain(self):
+        """PARSE-001: rcvd_evt.action.action_type == 1 -> params["action"]["action_type"] == 1."""
+        from compiler.transformer import transform_guard
+        result = transform_guard("rcvd_evt.action.action_type == 1", "test.yaml", 1)
+        assert 'params["action"]["action_type"] == 1' in result
+
+
+class TestActionTransformerNestedDottedName:
+    def test_nested_dotted_name_codegen(self):
+        """PARSE-001: self.reason = rcvd_evt.action.detail; -> nested dict indexing."""
+        from compiler.transformer import transform_action
+        result = transform_action("self.reason = rcvd_evt.action.detail;", "test.yaml", 0)
+        assert 'self_dict["reason"] = params["action"]["detail"]' in result
+
+    def test_dotted_chain_then_size_call(self):
+        """PARSE-001: self.steps.size() (dotted chain, then a call) -> len(self_dict["steps"])."""
+        from compiler.transformer import transform_action
+        result = transform_action("self.x = self.steps.size();", "test.yaml", 0)
+        assert 'len(self_dict["steps"])' in result
+
 
 class TestTier3UnsupportedStubs:
     def test_while_stmt_raises_compile_error(self):

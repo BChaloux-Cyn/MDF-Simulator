@@ -55,3 +55,4 @@ When you identify a bug, modeling error, schema gap, or missing test:
 | [COMP-001](solved/remove-method-collision-SOLVED.md) | method_call_stmt remove dispatches Map semantics to all container types | Compiler / action language | **Solved** |
 | [CODEGEN-001](codegen-001-name-defined-in-generated-code.md) | Generated code uses domain class names without imports ([name-defined]) | Compiler / codegen | Open |
 | [CODEGEN-002](codegen-002-enum-assignment-type-mismatch.md) | Generated code has enum/typedef assignment type mismatches ([assignment]) | Compiler / codegen | Open |
+| [PARSE-001](solved/parse-001-dotted-name-chain-depth-SOLVED.md) | pycca grammar cannot parse attribute-access chains longer than 2 segments | pycca parser | **Solved** |

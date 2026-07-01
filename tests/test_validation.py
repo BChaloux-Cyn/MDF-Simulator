@@ -621,6 +621,44 @@ transitions:
     assert guard_issues == [], f"Expected no guard completeness issues, got: {guard_issues}"
 
 
+def test_guard_dotted_rcvd_evt_var_still_analyzed(tmp_path, monkeypatch):
+    """PARSE-001 regression: rcvd_evt.<param> dotted_name guards must still be recognized
+    by the Z3 completeness checker (guards rcvd_evt.mode == Manual/Auto omit Locked)."""
+    monkeypatch.chdir(tmp_path)
+    state_yaml = """\
+schema_version: "1.0.0"
+domain: Hydraulics
+class: Valve
+initial_state: Idle
+events:
+  - name: Mode_changed
+    params:
+      - name: mode
+        type: ValveMode
+states:
+  - name: Idle
+  - name: Manual
+  - name: Auto
+  - name: Locked
+transitions:
+  - from: Idle
+    to: Manual
+    event: Mode_changed
+    guard: "rcvd_evt.mode == Manual"
+  - from: Idle
+    to: Auto
+    event: Mode_changed
+    guard: "rcvd_evt.mode == Auto"
+"""
+    _write_guard_model(tmp_path, state_yaml, ENUM_TYPES_YAML)
+    from tools import validation
+    importlib.reload(validation)
+    result = validation.validate_domain("Hydraulics")
+    guard_issues = [i for i in result if "incomplete" in i["issue"].lower()]
+    assert len(guard_issues) >= 1, f"Expected incomplete-guard error for missing Locked case, got: {result}"
+    assert "Locked" in guard_issues[0]["issue"]
+
+
 def test_guard_multiple_unguarded_same_event(tmp_path, monkeypatch):
     """Two unguarded transitions from the same state on the same event returns severity='error'."""
     monkeypatch.chdir(tmp_path)
